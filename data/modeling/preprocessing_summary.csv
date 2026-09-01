@@ -1,0 +1,86 @@
+FEATURE,TIPO_ORIGINAL,NULOS,IMPUTACION,TRANSFORMACION,ENCODING,ESCALAMIENTO,INCLUIDA
+NUM_TITULACIONES,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_TIT_BACHILLERATO,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_TIT_CUARTO_NIVEL,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_TIT_TERCER_NIVEL,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_CAPACITACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+SUMA_DURACION_CAPACITACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_CAPACITACIONES_APROBACION,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_CAPACITACIONES_VIRTUAL,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_CAPACITACIONES_PRESENCIAL,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_CERTIFICACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+SUMA_DURACION_CERTIFICACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PONENCIAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+SUMA_DURACION_PONENCIAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_CURSOS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_PERIODOS_DOCENCIA,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+TOTAL_HORAS_DOCENCIA,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+TOTAL_ESTUDIANTES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+PROMEDIO_ESTUDIANTES_POR_CURSO,float64,54.13,0,ninguna,ninguno (numerica),StandardScaler,True
+NUM_ACTIVIDADES_POLITECNICAS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_ACTIVIDADES_T1,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_ACTIVIDADES_T2,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_ACTIVIDADES_T3,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+TOTAL_HORAS_POLITECNICAS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_EXPERIENCIAS_EXTERNAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_EXPERIENCIAS_ACADEMICAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_EXPERIENCIAS_ADMINISTRATIVAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_EXPERIENCIAS_POR_CLASIFICAR,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_EXPERIENCIAS_ROL_PROFESOR,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_IDIOMAS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_IDIOMAS_NO_NATIVOS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_IDIOMAS_CON_NIVELMCER,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_EVALUACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+PROMEDIO_HETEROEVALUACION,float64,50.43,mediana,ninguna,ninguno (numerica),StandardScaler,True
+TOTAL_REGISTRADOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+TOTAL_EVALUADOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+COBERTURA_EVALUACION,float64,50.43,0,ninguna,ninguno (numerica),StandardScaler,True
+NUM_RECONOCIMIENTOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_TIPOS_RECONOCIMIENTO_DISTINTOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_GRADO_DIRIGIDOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROGRAMAS_TITULACION_DISTINTOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_INVESTIGACION,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_ACTIVOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_FINALIZADOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_COMO_DIRECTOR,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_COMO_CODIRECTOR,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_COMO_PARTICIPANTE,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_VINCULACION,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_VINCULACION_TUTOR,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_VINCULACION_DIRECTOR_PROYECTO,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_VINCULACION_DIRECTOR_PROGRAMA,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES_INDEXADAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES_REVISION_PARES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES_Q1,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES_Q2,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
+N_REGISTROS_HISTORIAL,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+N_CONTRATOS_TOTAL,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
+N_CARGOS_DISTINTOS,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
+CARGO_ACTUAL,object,0.23,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+CARGO_MAS_FRECUENTE,object,0.23,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+MULTIPLES_CARGOS_MISMO_ANIO,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
+N_UNIDADES_DISTINTAS,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
+UNIDAD_ACTUAL_NOMBRE,object,0.23,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+N_FACULTADES_DISTINTAS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+PASO_POR_RECTORADO,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
+N_REGIMENES_DISTINTOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+REGIMEN_INICIAL_DESC,object,24.27,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+REGIMEN_ACTUAL_DESC,object,0.23,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+TIPOEMPLEADO_ACTUAL_DESC,object,0.23,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+ES_DOCENTE_ADMIN_MIXTO,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
+ANIOS_EXPERIENCIA_DOCENTE,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
+ANIOS_EXPERIENCIA_ADMINISTRATIVO,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
+DEDICACION_DOCENTE_ACTUAL,object,24.9,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+DEDICACION_DOCENTE_MAS_FRECUENTE,object,24.9,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+N_DEDICACIONES_DOCENTE_DISTINTAS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+PROPORCION_CONTRATOS_FINALIZADOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+VIGENTE_ACTUALMENTE,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
+ANTIGUEDAD_EFECTIVA_ANIOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+ANTIGUEDAD_CALENDARIO_ANIOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
+N_REINGRESOS,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
+NIVEL_ACADEMICO_MAXIMO,object,0.0,sin nulos,ninguna,ordinal explicito,StandardScaler,True
+PROPORCION_CAPACITACIONES_APROBADAS,float64,8.9,0,ninguna,ninguno (numerica),StandardScaler,True
+HORAS_PROMEDIO_POR_ACTIVIDAD_POLITECNICA,float64,31.72,0,ninguna,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES_POR_ANIO,float64,13.74,0,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_INVESTIGACION_POR_ANIO,float64,13.74,0,log1p,ninguno (numerica),StandardScaler,True

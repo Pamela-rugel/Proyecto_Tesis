@@ -7,3 +7,7 @@ context/
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+.venv/
+
+presentacion/
