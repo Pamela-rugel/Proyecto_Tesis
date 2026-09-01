@@ -1,7 +1,14 @@
 #Ignorar carpeta data
 data/processed/
 data/raw/
-data/features/
+
+# Ignora el contenido de la carpeta features
+data/features/*
+
+# Excepción: no ignorar este archivo específico
+!data/features/feature_dictionary.csv
+
+f
 context/
 
 # Python bytecode cache

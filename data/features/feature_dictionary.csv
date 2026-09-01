@@ -1,0 +1,87 @@
+FEATURE,SOURCE,TYPE,DESCRIPTION,RATIONALE
+IDPERSONA,identificacion,identificador,Identificador unico de persona.,Llave de union con el resto de tablas del proyecto.
+NUM_TITULACIONES,formacion_academica,numerica,Num titulaciones.,Describe el nivel y volumen de titulaciones academicas obtenidas.
+NUM_TIT_BACHILLERATO,formacion_academica,numerica,Num tit bachillerato.,Describe el nivel y volumen de titulaciones academicas obtenidas.
+NUM_TIT_CUARTO_NIVEL,formacion_academica,numerica,Num tit cuarto nivel.,Describe el nivel y volumen de titulaciones academicas obtenidas.
+NUM_TIT_TERCER_NIVEL,formacion_academica,numerica,Num tit tercer nivel.,Describe el nivel y volumen de titulaciones academicas obtenidas.
+NUM_CAPACITACIONES,capacitacion,numerica,Num capacitaciones.,"Describe volumen, duracion y aprobacion de capacitaciones recibidas."
+SUMA_DURACION_CAPACITACIONES,capacitacion,numerica,Suma duracion capacitaciones.,"Describe volumen, duracion y aprobacion de capacitaciones recibidas."
+NUM_CAPACITACIONES_APROBACION,capacitacion,numerica,Num capacitaciones aprobacion.,"Describe volumen, duracion y aprobacion de capacitaciones recibidas."
+NUM_CAPACITACIONES_VIRTUAL,capacitacion,numerica,Num capacitaciones virtual.,"Describe volumen, duracion y aprobacion de capacitaciones recibidas."
+NUM_CAPACITACIONES_PRESENCIAL,capacitacion,numerica,Num capacitaciones presencial.,"Describe volumen, duracion y aprobacion de capacitaciones recibidas."
+NUM_CERTIFICACIONES,certificaciones,numerica,Num certificaciones.,Describe volumen y duracion de certificaciones obtenidas.
+SUMA_DURACION_CERTIFICACIONES,certificaciones,numerica,Suma duracion certificaciones.,Describe volumen y duracion de certificaciones obtenidas.
+NUM_PONENCIAS,ponencias,numerica,Num ponencias.,Describe participacion como ponente en eventos academicos.
+SUMA_DURACION_PONENCIAS,ponencias,numerica,Suma duracion ponencias.,Describe participacion como ponente en eventos academicos.
+NUM_CURSOS,docencia,numerica,Num cursos.,Describe volumen y alcance de la actividad de docencia.
+NUM_PERIODOS_DOCENCIA,docencia,numerica,Num periodos docencia.,Describe volumen y alcance de la actividad de docencia.
+TOTAL_HORAS_DOCENCIA,docencia,numerica,Total horas docencia.,Describe volumen y alcance de la actividad de docencia.
+TOTAL_ESTUDIANTES,docencia,numerica,Total estudiantes.,Describe volumen y alcance de la actividad de docencia.
+PROMEDIO_ESTUDIANTES_POR_CURSO,docencia,numerica,Promedio estudiantes por curso.,Describe volumen y alcance de la actividad de docencia.
+NUM_ACTIVIDADES_POLITECNICAS,carga_politecnica,numerica,Num actividades politecnicas.,"Describe volumen, distribucion por termino e intensidad de la carga politecnica."
+NUM_ACTIVIDADES_T1,carga_politecnica,numerica,Num actividades t1.,"Describe volumen, distribucion por termino e intensidad de la carga politecnica."
+NUM_ACTIVIDADES_T2,carga_politecnica,numerica,Num actividades t2.,"Describe volumen, distribucion por termino e intensidad de la carga politecnica."
+NUM_ACTIVIDADES_T3,carga_politecnica,numerica,Num actividades t3.,"Describe volumen, distribucion por termino e intensidad de la carga politecnica."
+TOTAL_HORAS_POLITECNICAS,carga_politecnica,numerica,Total horas politecnicas.,"Describe volumen, distribucion por termino e intensidad de la carga politecnica."
+NUM_EXPERIENCIAS_EXTERNAS,experiencia_externa,numerica,Num experiencias externas.,"Describe experiencia laboral externa reportada, por tipo."
+NUM_EXPERIENCIAS_ACADEMICAS,experiencia_externa,numerica,Num experiencias academicas.,"Describe experiencia laboral externa reportada, por tipo."
+NUM_EXPERIENCIAS_ADMINISTRATIVAS,experiencia_externa,numerica,Num experiencias administrativas.,"Describe experiencia laboral externa reportada, por tipo."
+NUM_EXPERIENCIAS_POR_CLASIFICAR,experiencia_externa,numerica,Num experiencias por clasificar.,"Describe experiencia laboral externa reportada, por tipo."
+NUM_EXPERIENCIAS_ROL_PROFESOR,experiencia_externa,numerica,Num experiencias rol profesor.,"Describe experiencia laboral externa reportada, por tipo."
+NUM_IDIOMAS,idiomas,numerica,Num idiomas.,Describe el numero de idiomas registrados y su cobertura de nivel MCER.
+NUM_IDIOMAS_NO_NATIVOS,idiomas,numerica,Num idiomas no nativos.,Describe el numero de idiomas registrados y su cobertura de nivel MCER.
+NUM_IDIOMAS_CON_NIVELMCER,idiomas,numerica,Num idiomas con nivelmcer.,Describe el numero de idiomas registrados y su cobertura de nivel MCER.
+NUM_EVALUACIONES,evaluacion_docente,numerica,Num evaluaciones.,Describe resultados y cobertura de la heteroevaluacion docente.
+PROMEDIO_HETEROEVALUACION,evaluacion_docente,numerica,Promedio heteroevaluacion.,Describe resultados y cobertura de la heteroevaluacion docente.
+TOTAL_REGISTRADOS,evaluacion_docente,numerica,Total registrados.,Describe resultados y cobertura de la heteroevaluacion docente.
+TOTAL_EVALUADOS,evaluacion_docente,numerica,Total evaluados.,Describe resultados y cobertura de la heteroevaluacion docente.
+COBERTURA_EVALUACION,evaluacion_docente,numerica,Cobertura evaluacion.,Describe resultados y cobertura de la heteroevaluacion docente.
+NUM_RECONOCIMIENTOS,reconocimientos,numerica,Num reconocimientos.,Describe menciones y reconocimientos institucionales recibidos.
+NUM_TIPOS_RECONOCIMIENTO_DISTINTOS,reconocimientos,numerica,Num tipos reconocimiento distintos.,Describe menciones y reconocimientos institucionales recibidos.
+NUM_PROYECTOS_GRADO_DIRIGIDOS,proyectos_grado,numerica,Num proyectos grado dirigidos.,Describe direccion de trabajos de titulacion de estudiantes.
+NUM_PROGRAMAS_TITULACION_DISTINTOS,proyectos_grado,numerica,Num programas titulacion distintos.,Describe direccion de trabajos de titulacion de estudiantes.
+NUM_PROYECTOS_INVESTIGACION,investigacion,numerica,Num proyectos investigacion.,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
+NUM_PROYECTOS_ACTIVOS,investigacion,numerica,Num proyectos activos.,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
+NUM_PROYECTOS_FINALIZADOS,investigacion,numerica,Num proyectos finalizados.,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
+NUM_PROYECTOS_COMO_DIRECTOR,investigacion,numerica,Num proyectos como director.,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
+NUM_PROYECTOS_COMO_CODIRECTOR,investigacion,numerica,Num proyectos como codirector.,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
+NUM_PROYECTOS_COMO_PARTICIPANTE,investigacion,numerica,Num proyectos como participante.,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
+NUM_PROYECTOS_VINCULACION,vinculacion,numerica,Num proyectos vinculacion.,Describe volumen y rol de participacion en proyectos de vinculacion.
+NUM_VINCULACION_TUTOR,vinculacion,numerica,Num vinculacion tutor.,Describe volumen y rol de participacion en proyectos de vinculacion.
+NUM_VINCULACION_DIRECTOR_PROYECTO,vinculacion,numerica,Num vinculacion director proyecto.,Describe volumen y rol de participacion en proyectos de vinculacion.
+NUM_VINCULACION_DIRECTOR_PROGRAMA,vinculacion,numerica,Num vinculacion director programa.,Describe volumen y rol de participacion en proyectos de vinculacion.
+NUM_PUBLICACIONES,publicaciones,numerica,Num publicaciones.,"Describe volumen y calidad (indexacion, revision por pares, cuartil) de publicaciones."
+NUM_PUBLICACIONES_INDEXADAS,publicaciones,numerica,Num publicaciones indexadas.,"Describe volumen y calidad (indexacion, revision por pares, cuartil) de publicaciones."
+NUM_PUBLICACIONES_REVISION_PARES,publicaciones,numerica,Num publicaciones revision pares.,"Describe volumen y calidad (indexacion, revision por pares, cuartil) de publicaciones."
+NUM_PUBLICACIONES_Q1,publicaciones,numerica,Num publicaciones q1.,"Describe volumen y calidad (indexacion, revision por pares, cuartil) de publicaciones."
+NUM_PUBLICACIONES_Q2,publicaciones,numerica,Num publicaciones q2.,"Describe volumen y calidad (indexacion, revision por pares, cuartil) de publicaciones."
+N_REGISTROS_HISTORIAL,trayectoria_laboral,numerica,N registros historial.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_CONTRATOS_TOTAL,trayectoria_laboral,numerica,N contratos total.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_CARGOS_DISTINTOS,trayectoria_laboral,numerica,N cargos distintos.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+CARGO_ACTUAL,trayectoria_laboral,categorica,Cargo actual.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+CARGO_MAS_FRECUENTE,trayectoria_laboral,categorica,Cargo mas frecuente.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+MULTIPLES_CARGOS_MISMO_ANIO,trayectoria_laboral,booleana,Multiples cargos mismo anio.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_UNIDADES_DISTINTAS,trayectoria_laboral,numerica,N unidades distintas.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+UNIDAD_ACTUAL_NOMBRE,trayectoria_laboral,categorica,Unidad actual nombre.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_FACULTADES_DISTINTAS,trayectoria_laboral,numerica,N facultades distintas.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+PASO_POR_RECTORADO,trayectoria_laboral,booleana,Paso por rectorado.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_REGIMENES_DISTINTOS,trayectoria_laboral,numerica,N regimenes distintos.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+REGIMEN_INICIAL_DESC,trayectoria_laboral,categorica,Regimen inicial desc.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+REGIMEN_ACTUAL_DESC,trayectoria_laboral,categorica,Regimen actual desc.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+TIPOEMPLEADO_ACTUAL_DESC,trayectoria_laboral,categorica,Tipoempleado actual desc.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+ES_DOCENTE_ADMIN_MIXTO,trayectoria_laboral,booleana,Es docente admin mixto.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+ANIOS_EXPERIENCIA_DOCENTE,trayectoria_laboral,numerica,Anios experiencia docente.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+ANIOS_EXPERIENCIA_ADMINISTRATIVO,trayectoria_laboral,numerica,Anios experiencia administrativo.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+DEDICACION_DOCENTE_ACTUAL,trayectoria_laboral,categorica,Dedicacion docente actual.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+DEDICACION_DOCENTE_MAS_FRECUENTE,trayectoria_laboral,categorica,Dedicacion docente mas frecuente.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_DEDICACIONES_DOCENTE_DISTINTAS,trayectoria_laboral,numerica,N dedicaciones docente distintas.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+PROPORCION_CONTRATOS_FINALIZADOS,trayectoria_laboral,numerica,Proporcion contratos finalizados.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+VIGENTE_ACTUALMENTE,trayectoria_laboral,booleana,Vigente actualmente.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+ANTIGUEDAD_EFECTIVA_ANIOS,trayectoria_laboral,numerica,Antiguedad efectiva anios.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+ANTIGUEDAD_CALENDARIO_ANIOS,trayectoria_laboral,numerica,Antiguedad calendario anios.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+N_REINGRESOS,trayectoria_laboral,numerica,N reingresos.,"Describe la trayectoria laboral institucional (historial_laboral_features.csv), ya procesada previamente."
+NIVEL_ACADEMICO_MAXIMO,formacion_academica,categorica_ordinal,"Nivel academico mas alto alcanzado, derivado de NUM_TIT_* (jerarquia: sin_registro < primaria < bachillerato < tercer_nivel < cuarto_nivel).",Describe el nivel y volumen de titulaciones academicas obtenidas.
+PROPORCION_CAPACITACIONES_APROBADAS,capacitacion,numerica,Proporcion de capacitaciones aprobadas sobre el total tomado (NaN si NUM_CAPACITACIONES=0).,"Describe volumen, duracion y aprobacion de capacitaciones recibidas."
+HORAS_PROMEDIO_POR_ACTIVIDAD_POLITECNICA,carga_politecnica,numerica,Horas promedio por actividad de carga politecnica (NaN si no hay actividades).,"Describe volumen, distribucion por termino e intensidad de la carga politecnica."
+NUM_PUBLICACIONES_POR_ANIO,publicaciones,numerica,Tasa de publicaciones por anio de antiguedad efectiva (NaN si ANTIGUEDAD_EFECTIVA_ANIOS < 1).,"Describe volumen y calidad (indexacion, revision por pares, cuartil) de publicaciones."
+NUM_PROYECTOS_INVESTIGACION_POR_ANIO,investigacion,numerica,Tasa de proyectos de investigacion por anio de antiguedad efectiva (NaN si ANTIGUEDAD_EFECTIVA_ANIOS < 1).,"Describe volumen, estado y rol de participacion en proyectos de investigacion."
