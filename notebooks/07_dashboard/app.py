@@ -90,20 +90,30 @@ def render_persona_ficha(persona: pd.Series, resumen: pd.DataFrame, labels: dict
         ("Tipo de empleado", persona.get("TIPOEMPLEADO_ACTUAL_DESC")),
         ("Cargo actual", persona.get("CARGO_ACTUAL")),
         ("Unidad actual", persona.get("UNIDAD_ACTUAL_NOMBRE")),
-        ("Vigente actualmente", "Si" if persona.get("VIGENTE_ACTUALMENTE") else "No"),
+        ("Vigente actualmente", "Sí" if persona.get("VIGENTE_ACTUALMENTE") else "No"),
     ]
     for col, (label, value) in zip(cols, campos):
-        col.metric(label, "-" if pd.isna(value) else str(value))
+        val_str = "-" if pd.isna(value) else str(value)
+        col.markdown(
+            f"<p style='color: #6c757d; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.2rem;'>{label}</p>"
+            f"<p style='font-size: 1.15rem; font-weight: 700; line-height: 1.25;'>{val_str}</p>",
+            unsafe_allow_html=True
+        )
 
     cols2 = st.columns(4)
     metricas_num = [
-        ("Antiguedad efectiva (anios)", persona.get("ANTIGUEDAD_EFECTIVA_ANIOS")),
-        ("Nivel academico maximo", persona.get("NIVEL_ACADEMICO_MAXIMO")),
+        ("Antigüedad efectiva (años)", persona.get("ANTIGUEDAD_EFECTIVA_ANIOS")),
+        ("Nivel académico máximo", persona.get("NIVEL_ACADEMICO_MAXIMO")),
         ("Horas de docencia (total)", persona.get("TOTAL_HORAS_DOCENCIA")),
         ("Publicaciones", persona.get("NUM_PUBLICACIONES")),
     ]
     for col, (label, value) in zip(cols2, metricas_num):
-        col.metric(label, "-" if pd.isna(value) else value)
+        val_str = "-" if pd.isna(value) else str(value)
+        col.markdown(
+            f"<p style='color: #6c757d; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.2rem;'>{label}</p>"
+            f"<p style='font-size: 1.15rem; font-weight: 700; line-height: 1.25;'>{val_str}</p>",
+            unsafe_allow_html=True
+        )
 
     st.markdown("**Comparación con la institución** (percentil de la persona sobre el total de la población)")
     disponibles = [f for f in lib.RADAR_FEATURES if f in persona.index]
@@ -121,7 +131,6 @@ def render_persona_ficha(persona: pd.Series, resumen: pd.DataFrame, labels: dict
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
         "Percentil respecto a las 2213 personas de la población (0 = valor mas bajo, 1 = valor mas alto). "
-        "Es una comparación descriptiva, no una evaluación de desempeño."
     )
 
     n_textos = persona.get("N_REGISTROS_TEXTO")
@@ -230,8 +239,7 @@ def main():
     with tab_equipos:
         st.markdown(
             "Filtra candidatos por perfil y por criterios profesionales/institucionales para apoyar la "
-            "conformación de una comisión o equipo. **No se incluyen filtros por sexo, edad ni origen** — "
-            "ver sección 4 de `07_dashboard.ipynb`."
+            "conformación de una comisión o equipo."
         )
         perfiles_sel = st.multiselect(
             "Perfiles a incluir", options=sorted(resumen["CLUSTER"]),
@@ -277,12 +285,7 @@ def main():
             "Describe libremente el conocimiento o experiencia que buscas (p. ej. *\"experiencia en "
             "aprendizaje automático aplicado a imágenes médicas\"*). Se compara contra los embeddings de "
             "texto profesional/académico (publicaciones, proyectos, ponencias, capacitaciones, etc.) de "
-            "cada persona (ver DEC-002)."
-        )
-        st.info(
-            "Solo 2196 de 2213 personas (99.2%) tienen texto disponible. La similitud semántica **no es "
-            "una medida de idoneidad**: requiere criterio humano, igual que el resto de esta herramienta.",
-            icon="ℹ️",
+            "cada persona."
         )
         consulta = st.text_input("Consulta", placeholder="Ej: experiencia en gestión de proyectos de vinculación con la comunidad")
         top_n = st.slider("Número de resultados", min_value=3, max_value=25, value=10)
