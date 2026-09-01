@@ -1,2 +1,18 @@
-#Ignorar carpeta data
-data/
+#Ignorar data
+# Ignorar el contenido de cada subcarpeta en data, pero no los archivos .gitkeep
+data/raw/*
+!data/raw/.gitkeep
+
+data/processed/*
+!data/processed/.gitkeep
+
+data/features/*
+!data/features/.gitkeep
+
+# Ignorar carpeta context
+context/
+
+__pycache__/
+*.pyc
+
+CLAUDE.md
