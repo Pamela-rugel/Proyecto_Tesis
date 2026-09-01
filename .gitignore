@@ -1,6 +1,7 @@
 #Ignorar carpeta data
 data/processed/
 data/raw/
+data/features/
 context/
 
 # Python bytecode cache
