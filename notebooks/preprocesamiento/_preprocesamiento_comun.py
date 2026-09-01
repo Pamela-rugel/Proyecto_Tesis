@@ -162,6 +162,63 @@ def guardar_procesado(df: pd.DataFrame, nombre_salida: str) -> Path:
     print(f"Guardado: {ruta} ({df.shape[0]} filas x {df.shape[1]} columnas)")
     return ruta
 
+# --- Mapeo booleano para variables binarias institucionales (S/N) --------------
+MAPEO_BOOLEANO = {
+    "S": 1,
+    "SI": 1,
+    "1": 1,
+    "N": 0,
+    "NO": 0,
+    "0": 0,
+}
+
+
+def convertir_sn_a_binario( df: pd.DataFrame, columnas: list[str] | None = None, rellenar_nulos_con_cero: bool = True) -> pd.DataFrame:
+    """Convierte columnas binarias con valores 'S'/'N' (o 'SI'/'NO') a enteros (1/0).
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame de entrada.
+    columnas : list[str] | None, optional
+        Lista de nombres de columnas a transformar. Si es None, busca 
+        automaticamente columnas que contengan unicamente patrones 'S', 'N' o nulos.
+    rellenar_nulos_con_cero : bool, default True
+        Si es True, los valores nulos o no reconocidos se imputan como 0. 
+        Si es False, se conservan como NA usando el tipo Int64.
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame con las columnas convertidas a 1 y 0.
+    """
+    df = df.copy()
+    
+    # Si no se pasan columnas explicitas, inferir columnas tipo S/N
+    if columnas is None:
+        columnas = []
+        for c in df.columns:
+            valores_unicos = set(df[c].dropna().astype(str).str.strip().str.upper().unique())
+            if valores_unicos and valores_unicos.issubset({"S", "N", "SI", "NO", "1", "0"}):
+                columnas.append(c)
+
+    columnas_transformadas = []
+    for c in columnas:
+        if c in df.columns:
+            serie_limpia = df[c].astype(str).str.strip().str.upper()
+            serie_mapeada = serie_limpia.map(MAPEO_BOOLEANO)
+            
+            if rellenar_nulos_con_cero:
+                df[c] = serie_mapeada.fillna(0).astype("int64")
+            else:
+                df[c] = serie_mapeada.astype("Int64")
+                
+            columnas_transformadas.append(c)
+
+    if columnas_transformadas:
+        print(f"Columnas S/N convertidas a binario (1/0): {columnas_transformadas}")
+        
+    return df
 
 # --- Diccionario de codigos para experenciaexterna.csv -----------------------
 # Fuente: data/raw/diccionarioexperienciaexterna.txt
