@@ -132,12 +132,17 @@ def castear_enteros(df: pd.DataFrame, columnas) -> pd.DataFrame:
 
 def decodificar_experiencia_externa(df: pd.DataFrame) -> pd.DataFrame:
     """Agrega columnas descriptivas para los codigos de experenciaexterna.csv
-    usando data/raw/diccionarioexperienciaexterna.txt."""
+    usando data/raw/diccionarioexperienciaexterna.txt.
+
+    Nota: ROLACADEMICO trae el codigo de 2 letras (PR/FA/PA/AY); la columna
+    ROLACADEMICOEXPERIENCIA ya viene con el texto completo en el CSV de origen,
+    por lo que no requiere decodificacion.
+    """
     df = df.copy()
     if "CATEXPERIENCIA" in df.columns:
         df["CATEXPERIENCIA_DESC"] = df["CATEXPERIENCIA"].map(CATEGORIA_EXPERIENCIA)
-    if "ROLACADEMICOEXPERIENCIA" in df.columns:
-        df["ROLACADEMICOEXPERIENCIA_DESC"] = df["ROLACADEMICOEXPERIENCIA"].map(ROL_ACADEMICO_EXPERIENCIA)
+    if "ROLACADEMICO" in df.columns:
+        df["ROLACADEMICO_DESC"] = df["ROLACADEMICO"].map(ROL_ACADEMICO_EXPERIENCIA)
     return df
 
 
@@ -234,3 +239,59 @@ ROL_ACADEMICO_EXPERIENCIA = {
     "PA": "PERSONAL DE APOYO",
     "AY": "AYUDANTE",
 }
+
+
+# --- Graficos exploratorios ---------------------------------------------------
+COLOR_PRINCIPAL = "#3b7dd8"
+
+
+def grafico_barras(serie: pd.Series, titulo: str = "", top: int = 15,
+                    horizontal: bool = True, ax=None):
+    """Grafica el conteo de valores mas frecuentes de una columna categorica."""
+    import matplotlib.pyplot as plt
+
+    conteo = serie.dropna().astype(str).str.strip()
+    conteo = conteo[conteo != ""].value_counts().head(top)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, max(3, 0.35 * len(conteo))))
+    if horizontal:
+        conteo.sort_values().plot(kind="barh", ax=ax, color=COLOR_PRINCIPAL)
+    else:
+        conteo.plot(kind="bar", ax=ax, color=COLOR_PRINCIPAL)
+    ax.set_title(titulo)
+    plt.tight_layout()
+    return ax
+
+
+def grafico_histograma(serie: pd.Series, titulo: str = "", bins: int = 30,
+                        recorte_percentil: float | None = 0.99, ax=None):
+    """Grafica la distribucion de una columna numerica (recorta la cola larga
+    de valores extremos solo para visualizar, sin alterar los datos)."""
+    import matplotlib.pyplot as plt
+
+    datos = pd.to_numeric(serie, errors="coerce").dropna()
+    if recorte_percentil is not None and len(datos):
+        limite = datos.quantile(recorte_percentil)
+        datos = datos[datos <= limite]
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 4))
+    ax.hist(datos, bins=bins, color=COLOR_PRINCIPAL, edgecolor="white")
+    ax.set_title(titulo)
+    plt.tight_layout()
+    return ax
+
+
+def grafico_por_anio(serie_fecha: pd.Series, titulo: str = "", ax=None):
+    """Grafica el numero de registros por año a partir de una columna de fecha."""
+    import matplotlib.pyplot as plt
+
+    anios = pd.to_datetime(serie_fecha, errors="coerce").dt.year.dropna().astype(int)
+    conteo = anios.value_counts().sort_index()
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 4))
+    conteo.plot(kind="bar", ax=ax, color=COLOR_PRINCIPAL)
+    ax.set_title(titulo)
+    ax.set_xlabel("Año")
+    ax.set_ylabel("N.º de registros")
+    plt.tight_layout()
+    return ax
