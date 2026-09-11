@@ -1,0 +1,18 @@
+export const METRICAS_CLAVE_COLUMNS = [
+  { key: "IDPERSONA", label: "IDPERSONA" },
+  { key: "TIPOEMPLEADO_ACTUAL_DESC", label: "Tipo de empleado" },
+  { key: "CARGO_ACTUAL", label: "Cargo actual" },
+  { key: "UNIDAD_ACTUAL_NOMBRE", label: "Unidad actual" },
+  { key: "VIGENTE_MOSTRAR", label: "Vigente" },
+  { key: "NIVEL_ACADEMICO_MAXIMO", label: "Nivel académico máx." },
+  { key: "ANTIGUEDAD_EFECTIVA_ANIOS", label: "Antigüedad (años)" },
+  { key: "NUM_PERIODOS_DOCENCIA", label: "Periodos docencia" },
+  { key: "TOTAL_HORAS_DOCENCIA", label: "Horas docencia" },
+  { key: "NUM_PUBLICACIONES", label: "Publicaciones" },
+  { key: "NUM_PROYECTOS_INVESTIGACION", label: "Proy. investigación" },
+  { key: "NUM_PROYECTOS_VINCULACION", label: "Proy. vinculación" },
+  { key: "ANIOS_EXPERIENCIA_ADMINISTRATIVO", label: "Años exp. admin." },
+  { key: "NUM_CAPACITACIONES", label: "Capacitaciones" },
+  { key: "NUM_IDIOMAS", label: "Idiomas" },
+  { key: "NUM_RECONOCIMIENTOS", label: "Reconocimientos" },
+];

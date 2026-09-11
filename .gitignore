@@ -18,3 +18,9 @@ __pycache__/
 .venv/
 
 presentacion/
+
+# Dashboard React (backend FastAPI + frontend Vite)
+dashboard_react/frontend/node_modules/
+dashboard_react/frontend/dist/
+dashboard_react/frontend/.env
+dashboard_react/backend/__pycache__/

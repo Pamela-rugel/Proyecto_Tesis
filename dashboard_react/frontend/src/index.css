@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background-color: #F7F9FB;
+  color: #1A1F2B;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #C7D0DB;
+  border-radius: 999px;
+}

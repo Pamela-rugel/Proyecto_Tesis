@@ -12,15 +12,15 @@ NUM_CERTIFICACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScale
 SUMA_DURACION_CERTIFICACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_PONENCIAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 SUMA_DURACION_PONENCIAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
-NUM_CURSOS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_CURSOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_PERIODOS_DOCENCIA,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
-TOTAL_HORAS_DOCENCIA,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+TOTAL_HORAS_DOCENCIA,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 TOTAL_ESTUDIANTES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
-PROMEDIO_ESTUDIANTES_POR_CURSO,float64,54.13,0,ninguna,ninguno (numerica),StandardScaler,True
+PROMEDIO_ESTUDIANTES_POR_CURSO,float64,66.64,0,ninguna,ninguno (numerica),StandardScaler,True
 NUM_ACTIVIDADES_POLITECNICAS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
 NUM_ACTIVIDADES_T1,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
 NUM_ACTIVIDADES_T2,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
-NUM_ACTIVIDADES_T3,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
+NUM_ACTIVIDADES_T3,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 TOTAL_HORAS_POLITECNICAS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
 NUM_EXPERIENCIAS_EXTERNAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_EXPERIENCIAS_ACADEMICAS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
@@ -31,10 +31,10 @@ NUM_IDIOMAS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
 NUM_IDIOMAS_NO_NATIVOS,float64,0.0,sin nulos,ninguna,ninguno (numerica),StandardScaler,True
 NUM_IDIOMAS_CON_NIVELMCER,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_EVALUACIONES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
-PROMEDIO_HETEROEVALUACION,float64,50.43,mediana,ninguna,ninguno (numerica),StandardScaler,True
+PROMEDIO_HETEROEVALUACION,float64,61.47,mediana,ninguna,ninguno (numerica),StandardScaler,True
 TOTAL_REGISTRADOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 TOTAL_EVALUADOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
-COBERTURA_EVALUACION,float64,50.43,0,ninguna,ninguno (numerica),StandardScaler,True
+COBERTURA_EVALUACION,float64,61.47,0,ninguna,ninguno (numerica),StandardScaler,True
 NUM_RECONOCIMIENTOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_TIPOS_RECONOCIMIENTO_DISTINTOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_PROYECTOS_GRADO_DIRIGIDOS,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
@@ -54,33 +54,63 @@ NUM_PUBLICACIONES_INDEXADAS,float64,0.0,sin nulos,log1p,ninguno (numerica),Stand
 NUM_PUBLICACIONES_REVISION_PARES,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_PUBLICACIONES_Q1,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
 NUM_PUBLICACIONES_Q2,float64,0.0,sin nulos,log1p,ninguno (numerica),StandardScaler,True
-N_REGISTROS_HISTORIAL,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-N_CONTRATOS_TOTAL,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
-N_CARGOS_DISTINTOS,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
-CARGO_ACTUAL,object,0.23,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
-CARGO_MAS_FRECUENTE,object,0.23,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
-MULTIPLES_CARGOS_MISMO_ANIO,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
-N_UNIDADES_DISTINTAS,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
-UNIDAD_ACTUAL_NOMBRE,object,0.23,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
-N_FACULTADES_DISTINTAS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-PASO_POR_RECTORADO,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
-N_REGIMENES_DISTINTOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-REGIMEN_INICIAL_DESC,object,24.27,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
-REGIMEN_ACTUAL_DESC,object,0.23,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
-TIPOEMPLEADO_ACTUAL_DESC,object,0.23,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
-ES_DOCENTE_ADMIN_MIXTO,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
-ANIOS_EXPERIENCIA_DOCENTE,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
-ANIOS_EXPERIENCIA_ADMINISTRATIVO,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
-DEDICACION_DOCENTE_ACTUAL,object,24.9,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
-DEDICACION_DOCENTE_MAS_FRECUENTE,object,24.9,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
-N_DEDICACIONES_DOCENTE_DISTINTAS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-PROPORCION_CONTRATOS_FINALIZADOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-VIGENTE_ACTUALMENTE,object,0.23,moda,ninguna,binaria 0/1,ninguno (0/1),True
-ANTIGUEDAD_EFECTIVA_ANIOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-ANTIGUEDAD_CALENDARIO_ANIOS,float64,0.23,mediana,ninguna,ninguno (numerica),StandardScaler,True
-N_REINGRESOS,float64,0.23,mediana,log1p,ninguno (numerica),StandardScaler,True
-NIVEL_ACADEMICO_MAXIMO,object,0.0,sin nulos,ninguna,ordinal explicito,StandardScaler,True
-PROPORCION_CAPACITACIONES_APROBADAS,float64,8.9,0,ninguna,ninguno (numerica),StandardScaler,True
-HORAS_PROMEDIO_POR_ACTIVIDAD_POLITECNICA,float64,31.72,0,ninguna,ninguno (numerica),StandardScaler,True
-NUM_PUBLICACIONES_POR_ANIO,float64,13.74,0,log1p,ninguno (numerica),StandardScaler,True
-NUM_PROYECTOS_INVESTIGACION_POR_ANIO,float64,13.74,0,log1p,ninguno (numerica),StandardScaler,True
+N_REGISTROS_HISTORIAL,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+N_CONTRATOS_TOTAL,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+N_CARGOS_DISTINTOS,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+CARGO_ACTUAL,str,0.16,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+CARGO_MAS_FRECUENTE,str,0.16,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+MULTIPLES_CARGOS_MISMO_ANIO,object,0.16,moda,ninguna,binaria 0/1,ninguno (0/1),True
+N_UNIDADES_DISTINTAS,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+UNIDAD_ACTUAL_NOMBRE,str,0.16,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+N_FACULTADES_DISTINTAS,float64,0.16,mediana,ninguna,ninguno (numerica),StandardScaler,True
+PASO_POR_RECTORADO,object,0.16,moda,ninguna,binaria 0/1,ninguno (0/1),True
+N_REGIMENES_DISTINTOS,float64,0.16,mediana,ninguna,ninguno (numerica),StandardScaler,True
+REGIMEN_INICIAL_DESC,str,17.68,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+REGIMEN_ACTUAL_DESC,str,0.16,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+TIPOEMPLEADO_ACTUAL_DESC,str,0.16,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ES_DOCENTE_ADMIN_MIXTO,object,0.16,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ANIOS_EXPERIENCIA_DOCENTE,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+ANIOS_EXPERIENCIA_ADMINISTRATIVO,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+DEDICACION_DOCENTE_ACTUAL,str,35.59,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+DEDICACION_DOCENTE_MAS_FRECUENTE,str,35.59,DESCONOCIDO,ninguna,one_hot,ninguno (dummy 0/1),True
+N_DEDICACIONES_DOCENTE_DISTINTAS,float64,0.16,mediana,ninguna,ninguno (numerica),StandardScaler,True
+PROPORCION_CONTRATOS_FINALIZADOS,float64,0.16,mediana,ninguna,ninguno (numerica),StandardScaler,True
+VIGENTE_ACTUALMENTE,object,0.16,moda,ninguna,binaria 0/1,ninguno (0/1),True
+ANTIGUEDAD_EFECTIVA_ANIOS,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+ANTIGUEDAD_CALENDARIO_ANIOS,float64,0.16,mediana,ninguna,ninguno (numerica),StandardScaler,True
+N_REINGRESOS,float64,0.16,mediana,log1p,ninguno (numerica),StandardScaler,True
+NIVEL_ACADEMICO_MAXIMO,str,0.0,sin nulos,ninguna,ordinal explicito,StandardScaler,True
+PROPORCION_CAPACITACIONES_APROBADAS,float64,17.59,0,ninguna,ninguno (numerica),StandardScaler,True
+HORAS_PROMEDIO_POR_ACTIVIDAD_POLITECNICA,float64,47.79,0,log1p,ninguno (numerica),StandardScaler,True
+NUM_PUBLICACIONES_POR_ANIO,float64,29.05,0,log1p,ninguno (numerica),StandardScaler,True
+NUM_PROYECTOS_INVESTIGACION_POR_ANIO,float64,29.05,0,log1p,ninguno (numerica),StandardScaler,True
+N_TRAMOS_ROL,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_CATEGORIAS_ROL_DISTINTAS,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CATEGORIA_CARGO_ACTUAL,str,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TIPOEMPLEADO_CATEGORIA_ACTUAL,str,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CARGO_ACTUAL_ESTRUCTURAL,str,22.5,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+UNIDAD_ACTUAL_ESTRUCTURAL,str,22.5,"DESCONOCIDO (documentada, no aplicada a la matriz)",ninguna,ninguno (excluida por alta cardinalidad),ninguno,False
+VIGENTE_TRAMO_ESTRUCTURAL,object,22.5,moda,ninguna,binaria 0/1,ninguno (0/1),True
+ANIOS_EN_CATEGORIA_ACTUAL,float64,22.5,mediana,log1p,ninguno (numerica),StandardScaler,True
+CATEGORIA_CARGO_PRIMERA,str,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ES_TRAYECTORIA_ESTABLE,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_TRANSICIONES_ROL,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_TRANSICIONES_AA_A_DD,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_TRANSICIONES_DD_A_AA,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TUVO_TRANSICION_AA_A_DD,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TUVO_TRANSICION_DD_A_AA,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ANIOS_DESDE_ULTIMA_TRANSICION,float64,73.02,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_ROLES_ADICIONALES_SIMULTANEOS_DISTINTOS,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CATEGORIA_ROL_ADICIONAL_MAS_RECIENTE,str,86.35,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TUVO_ROL_ADICIONAL_SIMULTANEO,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TUVO_FUNCION_ADICIONAL,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_FUNCIONES_ADICIONALES,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_CATEGORIAS_FUNCION_ADICIONAL_DISTINTAS,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TUVO_SUBROGACION,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+N_SUBROGACIONES,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TUVO_FUNCION_NO_COINCIDENTE_CON_CONTRATO,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CATEGORIA_FUNCION_ADICIONAL_MAS_RECIENTE,str,79.91,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CARGO_PUNTUAL_VIGENTE,str,95.9,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+UNIDAD_PUNTUAL_VIGENTE,str,95.9,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CATEGORIA_PUNTUAL_VIGENTE,str,95.9,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+TIPOEMPLEADO_PUNTUAL_VIGENTE,str,95.9,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
