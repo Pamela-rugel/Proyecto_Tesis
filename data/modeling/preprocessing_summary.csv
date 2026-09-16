@@ -94,15 +94,23 @@ VIGENTE_TRAMO_ESTRUCTURAL,object,22.5,moda,ninguna,binaria 0/1,ninguno (0/1),Tru
 ANIOS_EN_CATEGORIA_ACTUAL,float64,22.5,mediana,log1p,ninguno (numerica),StandardScaler,True
 CATEGORIA_CARGO_PRIMERA,str,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 ES_TRAYECTORIA_ESTABLE,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ES_MIXTO,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CARGOS_ACTUALES_MIXTO,str,99.47,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CATEGORIAS_ACTUALES_MIXTO,str,99.47,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+DURACION_MEDIANA_TRAMO_ANIOS,float64,22.5,mediana,log1p,ninguno (numerica),StandardScaler,True
+TURBULENCIA_TRAMOS,float64,56.18,mediana,log1p,ninguno (numerica),StandardScaler,True
+ENTROPIA_CATEGORIA_CARGO,float64,22.5,mediana,ninguna,ninguno (numerica),StandardScaler,True
+PROPORCION_ANIOS_ADMINISTRATIVO,float64,22.57,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 N_TRANSICIONES_ROL,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 N_TRANSICIONES_AA_A_DD,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 N_TRANSICIONES_DD_A_AA,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 TUVO_TRANSICION_AA_A_DD,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 TUVO_TRANSICION_DD_A_AA,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
-ANIOS_DESDE_ULTIMA_TRANSICION,float64,73.02,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ANIOS_DESDE_ULTIMA_TRANSICION,float64,69.8,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 N_ROLES_ADICIONALES_SIMULTANEOS_DISTINTOS,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
-CATEGORIA_ROL_ADICIONAL_MAS_RECIENTE,str,86.35,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+CATEGORIA_ROL_ADICIONAL_MAS_RECIENTE,str,96.46,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 TUVO_ROL_ADICIONAL_SIMULTANEO,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
+ANIOS_EN_UNIDAD_ACTUAL,float64,22.5,mediana,ninguna,ninguno (numerica),StandardScaler,True
 TUVO_FUNCION_ADICIONAL,object,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 N_FUNCIONES_ADICIONALES,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False
 N_CATEGORIAS_FUNCION_ADICIONAL_DISTINTAS,float64,22.5,ninguna (se conserva tal cual),ninguna,"ninguno (excluida por circularidad de trayectoria, DEC-013)",ninguno,False

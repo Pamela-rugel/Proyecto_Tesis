@@ -19,6 +19,8 @@ __pycache__/
 
 presentacion/
 
+logs_rerun
+
 # Dashboard React (backend FastAPI + frontend Vite)
 dashboard_react/frontend/node_modules/
 dashboard_react/frontend/dist/

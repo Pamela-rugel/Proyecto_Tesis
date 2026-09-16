@@ -143,6 +143,14 @@ PERFIL_COLORES = {
     12: "#8AB17D",  # tecnico operativo/mantenimiento
 }
 
+# Color fijo para personas "Mixto" (2+ cargos estructurales vigentes en paralelo, ver
+# ES_MIXTO en construir_features_trayectoria, correccion 2026-09-15, caso IDPERSONA 3519) -
+# violeta, no usado en PERFIL_COLORES (paletas calida/administrativa vs fria/docente), para
+# que se distinga a simple vista de las 13 categorias reales. Usado por el mapa de puntos
+# del dashboard React (dashboard_react/backend/main.py); el dashboard Streamlit no muestra
+# esta categoria por ahora.
+COLOR_MIXTO = "#7B2CBF"
+
 # Subconjunto curado de `dataset_personas_features.csv` para tarjetas de
 # persona / comparaciones rapidas (evita saturar la UI con las 85 columnas).
 METRICAS_CLAVE = [
@@ -161,6 +169,12 @@ METRICAS_CLAVE = [
     "NUM_CAPACITACIONES",
     "NUM_IDIOMAS",
     "NUM_RECONOCIMIENTOS",
+    # Movilidad de carrera (DEC-027): visibles en la tabla de resultados/CSV de "Formar
+    # equipos" para que el filtro de estabilidad (max_turbulencia/min_duracion_mediana en
+    # /api/equipos) sea verificable a simple vista, no solo un criterio ciego.
+    "DURACION_MEDIANA_TRAMO_ANIOS",
+    "TURBULENCIA_TRAMOS",
+    "ANIOS_EN_UNIDAD_ACTUAL",
 ]
 
 # Variables numericas usadas para el grafico radar / comparacion de perfil

@@ -218,7 +218,7 @@ def _texto_evento_agrupado(tipo_evento: str, grupo: pd.DataFrame) -> str:
     return f"Adicionalmente {verbo} un {desc.lower()} en ESPOL, en {n} periodos{cuando}."
 
 
-def _seccion_trayectoria(eventos: pd.DataFrame) -> pd.Series:
+def _seccion_trayectoria(eventos: pd.DataFrame, diversidad_trayectoria: pd.DataFrame | None = None) -> pd.Series:
     """`eventos` = salida de `pc.construir_eventos_trayectoria` (ya cargada por el
     llamador). Construye una narrativa cronologica por persona conservando la relacion
     temporal real entre eventos (no se inventan secuencias si faltan fechas: un evento sin
@@ -232,8 +232,64 @@ def _seccion_trayectoria(eventos: pd.DataFrame) -> pd.Series:
     una sola frase con el conteo y el rango de fechas (correctamente "actualidad" si la mas
     reciente sigue vigente, DEC-020), en vez de repetirse una por una - conserva toda la
     informacion (nada se descarta), solo la hace mas compacta para que no domine el
-    documento de las personas con historiales de designacion/contratacion muy densos."""
+    documento de las personas con historiales de designacion/contratacion muy densos.
+
+    `diversidad_trayectoria` (opcional, feature engineering de movilidad de carrera, ver
+    DECISION_LOG.md): DataFrame con columnas `IDPERSONA`, `ENTROPIA_CATEGORIA_CARGO`,
+    `N_CATEGORIAS_ROL_DISTINTAS`, `TURBULENCIA_TRAMOS`, `DURACION_MEDIANA_TRAMO_ANIOS` (de
+    `features_trayectoria_persona.csv`). Cuando se pasa, se agregan hasta dos oraciones
+    condicionales al final de la seccion, cada una independiente de la otra (una persona
+    puede tener ambas, ninguna, o solo una):
+
+    - **Diversidad** (entropia en el TERCIL SUPERIOR de la poblacion, calculado una sola
+      vez sobre este parametro, no re-computado por persona): la mayoria de personas tiene
+      entropia 0 (una sola categoria de cargo en toda su carrera, ya bien narrada por las
+      oraciones de cargo/fecha existentes), y agregarles una oracion boilerplate de
+      "diversidad" no aportaria señal real a la busqueda semantica.
+    - **Estabilidad** (correccion 2026-09-16, caso de uso real: busqueda de "director de
+      talento humano" pidiendo explicitamente "sin rotacion de 2-3 meses, cierta
+      estabilidad en varios lugares" - el embedding NO puede aplicar un umbral numerico
+      exacto como "2-3 meses no vale", eso vive en el filtro estructurado de /api/equipos,
+      pero SI puede mejorar el ranking semantico narrando el patron en texto): requiere
+      AMBAS condiciones a la vez, `TURBULENCIA_TRAMOS` en el TERCIL INFERIOR (poca
+      rotacion/pocos cambios erraticos) Y `DURACION_MEDIANA_TRAMO_ANIOS` en el TERCIL
+      SUPERIOR (permanencia larga tipica por cargo) de la poblacion con datos validos -
+      exigir ambas evita narrar "estable" a alguien con un unico tramo corto reciente
+      (turbulencia NA, tratada como no evaluable para esta oracion, no como "estable por
+      defecto"). Personas sin al menos 2 tramos no tienen `TURBULENCIA_TRAMOS` (NA real,
+      ver DEC-027) y por eso nunca reciben esta oracion — no hay suficiente historial para
+      afirmar un patron de estabilidad, sea cual sea la duracion de su unico tramo."""
     eventos = eventos.dropna(subset=["FECHA_INICIO"]).sort_values(["IDPERSONA", "FECHA_INICIO"])
+
+    umbral_entropia_alta = None
+    umbral_turbulencia_baja = None
+    umbral_duracion_alta = None
+    metricas_por_persona: dict[int, tuple] = {}
+    if diversidad_trayectoria is not None and len(diversidad_trayectoria):
+        positivas = diversidad_trayectoria.loc[
+            diversidad_trayectoria["ENTROPIA_CATEGORIA_CARGO"] > 0, "ENTROPIA_CATEGORIA_CARGO"
+        ]
+        if len(positivas):
+            umbral_entropia_alta = positivas.quantile(2 / 3)
+
+        if "TURBULENCIA_TRAMOS" in diversidad_trayectoria.columns:
+            turbulencias_validas = diversidad_trayectoria["TURBULENCIA_TRAMOS"].dropna()
+            if len(turbulencias_validas):
+                umbral_turbulencia_baja = turbulencias_validas.quantile(1 / 3)
+        if "DURACION_MEDIANA_TRAMO_ANIOS" in diversidad_trayectoria.columns:
+            duraciones_validas = diversidad_trayectoria["DURACION_MEDIANA_TRAMO_ANIOS"].dropna()
+            if len(duraciones_validas):
+                umbral_duracion_alta = duraciones_validas.quantile(2 / 3)
+
+        cols_extra = [c for c in ("TURBULENCIA_TRAMOS", "DURACION_MEDIANA_TRAMO_ANIOS") if c in diversidad_trayectoria.columns]
+        metricas_por_persona = {
+            row.IDPERSONA: (
+                row.ENTROPIA_CATEGORIA_CARGO, row.N_CATEGORIAS_ROL_DISTINTAS,
+                getattr(row, "TURBULENCIA_TRAMOS", pd.NA) if "TURBULENCIA_TRAMOS" in cols_extra else pd.NA,
+                getattr(row, "DURACION_MEDIANA_TRAMO_ANIOS", pd.NA) if "DURACION_MEDIANA_TRAMO_ANIOS" in cols_extra else pd.NA,
+            )
+            for row in diversidad_trayectoria.itertuples(index=False)
+        }
 
     resultado: dict[int, str] = {}
     for idp, grupo in eventos.groupby("IDPERSONA", sort=False):
@@ -250,7 +306,28 @@ def _seccion_trayectoria(eventos: pd.DataFrame) -> pd.Series:
 
         if items:
             items.sort(key=lambda t: t[0])
-            resultado[idp] = " ".join(texto for _, texto in items)
+            texto_trayectoria = " ".join(texto for _, texto in items)
+
+            if idp in metricas_por_persona:
+                entropia, n_categorias, turbulencia, duracion_mediana = metricas_por_persona[idp]
+
+                if umbral_entropia_alta is not None and pd.notna(entropia) and entropia >= umbral_entropia_alta:
+                    texto_trayectoria += (
+                        f" Su trayectoria en ESPOL muestra una alta diversidad de roles, "
+                        f"con paso por {int(n_categorias)} categorías distintas de cargo."
+                    )
+
+                if (
+                    umbral_turbulencia_baja is not None and umbral_duracion_alta is not None
+                    and pd.notna(turbulencia) and pd.notna(duracion_mediana)
+                    and turbulencia <= umbral_turbulencia_baja and duracion_mediana >= umbral_duracion_alta
+                ):
+                    texto_trayectoria += (
+                        " Su trayectoria en ESPOL muestra alta estabilidad, con permanencia "
+                        "prolongada en sus cargos y baja rotación entre posiciones."
+                    )
+
+            resultado[idp] = texto_trayectoria
 
     return pd.Series(resultado, name="TRAYECTORIA")
 
@@ -450,7 +527,11 @@ ETIQUETAS_SECCION = {
 PRESUPUESTO_PALABRAS = 380
 
 
-def construir_documentos_semanticos(poblacion: set[int], eventos_trayectoria: pd.DataFrame) -> pd.DataFrame:
+def construir_documentos_semanticos(
+    poblacion: set[int],
+    eventos_trayectoria: pd.DataFrame,
+    diversidad_trayectoria: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Construye el documento semantico por persona (ver DEC-014): una fila por IDPERSONA
     con el texto completo (`DOCUMENTO_TEXTO`) listo para embeber, mas metadata estructurada
     (`SECCIONES_INCLUIDAS`, `SECCIONES_RECORTADAS`, `N_CARACTERES`, `N_PALABRAS`) que NO
@@ -463,9 +544,12 @@ def construir_documentos_semanticos(poblacion: set[int], eventos_trayectoria: pd
     `SECCIONES_ORDEN`, de atras hacia adelante) hasta que quepa - afecta solo al ~20% de la
     poblacion con historiales mas extensos, y siempre recorta lo menos distintivo primero
     (reconocimientos/idiomas/capacitación), nunca la trayectoria ni la formación.
+
+    `diversidad_trayectoria` (opcional): pasado tal cual a `_seccion_trayectoria` (ver su
+    docstring) para narrar diversidad de rol solo en el tercil superior de entropia.
     """
     secciones = {
-        "TRAYECTORIA": _seccion_trayectoria(eventos_trayectoria),
+        "TRAYECTORIA": _seccion_trayectoria(eventos_trayectoria, diversidad_trayectoria),
         "FORMACION": _seccion_formacion(poblacion),
         "DOCENCIA": _seccion_docencia(poblacion),
         "INVESTIGACION": _seccion_investigacion(poblacion),

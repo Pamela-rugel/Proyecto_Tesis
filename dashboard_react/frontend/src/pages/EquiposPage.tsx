@@ -17,6 +17,8 @@ export default function EquiposPage() {
   const [nivelSel, setNivelSel] = useState<string[]>([]);
   const [minPub, setMinPub] = useState(0);
   const [minExpAdmin, setMinExpAdmin] = useState(0);
+  const [maxTurbulencia, setMaxTurbulencia] = useState(0);
+  const [minDuracionMediana, setMinDuracionMediana] = useState(0);
   const [perfilesInit, setPerfilesInit] = useState(false);
 
   if (!perfilesInit && perfiles.length > 0) {
@@ -25,7 +27,7 @@ export default function EquiposPage() {
   }
 
   const equiposQuery = useQuery({
-    queryKey: ["equipos", perfilesSel, vigencia, tipoSel, nivelSel, minPub, minExpAdmin],
+    queryKey: ["equipos", perfilesSel, vigencia, tipoSel, nivelSel, minPub, minExpAdmin, maxTurbulencia, minDuracionMediana],
     queryFn: () =>
       getEquipos({
         perfiles: perfilesSel,
@@ -34,6 +36,8 @@ export default function EquiposPage() {
         nivel: nivelSel,
         minPublicaciones: minPub,
         minExpAdmin,
+        maxTurbulencia,
+        minDuracionMediana,
       }),
     enabled: perfilesInit,
   });
@@ -158,6 +162,48 @@ export default function EquiposPage() {
               onChange={(e) => setMinExpAdmin(Number(e.target.value))}
               className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
             />
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            Estabilidad de carrera (opcional)
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">
+                Rotación máxima permitida (0 = sin límite)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={maxTurbulencia}
+                onChange={(e) => setMaxTurbulencia(Number(e.target.value))}
+                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Valores bajos (cerca de 0) = pocos cambios de cargo cortos/erráticos. Personas con
+                un solo cargo en toda su carrera cuentan como rotación 0.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">
+                Mínimo de años de permanencia típica por cargo
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={minDuracionMediana}
+                onChange={(e) => setMinDuracionMediana(Number(e.target.value))}
+                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Duración mediana de sus cargos en ESPOL — filtra directamente cargos cortos (ej. 2-3
+                meses) al exigir un mínimo, sin depender del texto de búsqueda.
+              </p>
+            </div>
           </div>
         </div>
       </div>

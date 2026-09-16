@@ -50,6 +50,20 @@ def cluster_color(cluster: int) -> str:
     return lib.PERFIL_COLORES.get(int(cluster), CLUSTER_COLORS_FALLBACK[int(cluster) % len(CLUSTER_COLORS_FALLBACK)])
 
 
+def color_por_texto(texto: str) -> str:
+    """Color determinístico (mismo texto -> siempre el mismo color) para el modo "cargo
+    real" del mapa (~239 valores distintos de CARGO_ACTUAL, demasiados para una paleta
+    fija como PERFIL_COLORES). Usa un hash estable del texto para elegir un hue en HSL
+    (en vez de un color RGB directo del hash, que tiende a verse sucio/repetido) -
+    saturación y luminosidad fijas para que todos los colores tengan contraste similar."""
+    import colorsys
+    import hashlib
+    h = int(hashlib.md5(texto.encode("utf-8")).hexdigest(), 16)
+    hue = (h % 360) / 360.0
+    r, g, b = colorsys.hls_to_rgb(hue, 0.45, 0.55)
+    return "#{:02X}{:02X}{:02X}".format(int(r * 255), int(g * 255), int(b * 255))
+
+
 def df_to_records(df: pd.DataFrame) -> list[dict]:
     return df.replace({np.nan: None}).to_dict(orient="records")
 
@@ -200,27 +214,58 @@ def perfil_detalle(cluster_id: int):
 
 
 @app.get("/api/mapa")
-def mapa(tipo: str = Query("Todos"), perfiles: str = Query("")):
+def mapa(tipo: str = Query("Todos"), perfiles: str = Query(""), modo: str = Query("rama")):
     personas = get_personas()
     pca_df = get_pca().merge(
         personas[["IDPERSONA", "CLUSTER", "PERFIL_NOMBRE", "TIPOEMPLEADO_ACTUAL_DESC",
-                  "VIGENTE_MOSTRAR", "CARGO_ACTUAL"]],
+                  "VIGENTE_MOSTRAR", "CARGO_ACTUAL", "ES_MIXTO", "CARGOS_ACTUALES_MIXTO",
+                  "CATEGORIAS_ACTUALES_MIXTO"]],
         on="IDPERSONA", how="inner",
     )
     pca_df = pca_df[pca_df["CLUSTER"] != -1]
+    pca_df["ES_MIXTO"] = pca_df["ES_MIXTO"].fillna(False)
+
     if tipo == "Solo Administrativo":
-        pca_df = pca_df[pca_df["TIPOEMPLEADO_ACTUAL_DESC"] == "ADMINISTRATIVO"]
+        pca_df = pca_df[(pca_df["TIPOEMPLEADO_ACTUAL_DESC"] == "ADMINISTRATIVO") & (~pca_df["ES_MIXTO"])]
     elif tipo == "Solo Docente":
-        pca_df = pca_df[pca_df["TIPOEMPLEADO_ACTUAL_DESC"] == "DOCENTE"]
+        pca_df = pca_df[(pca_df["TIPOEMPLEADO_ACTUAL_DESC"] == "DOCENTE") & (~pca_df["ES_MIXTO"])]
+    elif tipo == "Solo Mixto":
+        pca_df = pca_df[pca_df["ES_MIXTO"]]
+
     if perfiles:
         ids_perfiles = {int(p) for p in perfiles.split(",") if p}
-        pca_df = pca_df[pca_df["CLUSTER"].isin(ids_perfiles)]
+        if modo == "cargo":
+            # Modo "por cargo": un filtro de perfil especifico tambien incluye a las
+            # personas Mixto que tengan ese cargo entre sus roles vigentes concurrentes
+            # (decision confirmada por el usuario) - CATEGORIAS_ACTUALES_MIXTO trae los
+            # codigos CATEGORIA_CARGO reales, no el nombre de presentacion, asi que se
+            # compara contra SUBGRUPO (la categoria cruda de cluster_perfiles_resumen).
+            categorias_por_cluster = dict(zip(get_resumen()["CLUSTER"], get_resumen()["SUBGRUPO"]))
+            categorias_filtro = {categorias_por_cluster[c] for c in ids_perfiles if c in categorias_por_cluster}
+            mixto_con_ese_cargo = pca_df["ES_MIXTO"] & pca_df["CATEGORIAS_ACTUALES_MIXTO"].fillna("").apply(
+                lambda s: any(cat in s.split(";") for cat in categorias_filtro)
+            )
+            pca_df = pca_df[pca_df["CLUSTER"].isin(ids_perfiles) | mixto_con_ese_cargo]
+        else:
+            pca_df = pca_df[pca_df["CLUSTER"].isin(ids_perfiles)]
 
     pca_df = pca_df.sort_values("CLUSTER")
     puntos = df_to_records(pca_df)
     for p in puntos:
-        p["COLOR"] = cluster_color(p["CLUSTER"])
-    return {"total_modelo": int(len(personas)), "n_mostrados": len(puntos), "puntos": puntos}
+        if p["ES_MIXTO"]:
+            p["COLOR"] = lib.COLOR_MIXTO
+            p["GRUPO_COLOR"] = "MIXTO"
+        elif modo == "rama":
+            p["COLOR"] = "#457B9D" if p["TIPOEMPLEADO_ACTUAL_DESC"] == "DOCENTE" else "#E76F51"
+            p["GRUPO_COLOR"] = p["TIPOEMPLEADO_ACTUAL_DESC"]
+        elif modo == "cargo_real":
+            cargo = p["CARGO_ACTUAL"] or "SIN CARGO"
+            p["COLOR"] = color_por_texto(cargo)
+            p["GRUPO_COLOR"] = cargo
+        else:
+            p["COLOR"] = cluster_color(p["CLUSTER"])
+            p["GRUPO_COLOR"] = str(p["CLUSTER"])
+    return {"total_modelo": int(len(personas)), "n_mostrados": len(puntos), "puntos": puntos, "modo": modo}
 
 
 @app.get("/api/personas")
@@ -319,6 +364,8 @@ def equipos(
     nivel: str = Query(""),
     min_publicaciones: int = Query(0),
     min_exp_admin: float = Query(0.0),
+    max_turbulencia: float = Query(0.0),
+    min_duracion_mediana: float = Query(0.0),
 ):
     personas = get_personas()
     resultado = personas
@@ -339,6 +386,14 @@ def equipos(
         resultado = resultado[resultado["NUM_PUBLICACIONES"].fillna(0) >= min_publicaciones]
     if min_exp_admin:
         resultado = resultado[resultado["ANIOS_EXPERIENCIA_ADMINISTRATIVO"].fillna(0) >= min_exp_admin]
+    if max_turbulencia:
+        # TURBULENCIA_TRAMOS es NA real para personas con un solo tramo (ver DEC-027) - no
+        # hay rotacion que medir con un unico tramo, asi que por definicion son personas
+        # MUY estables y no deben excluirse por tener el dato nulo (fillna con 0, el minimo
+        # posible de turbulencia, no con un valor alto que las descartaria injustamente).
+        resultado = resultado[resultado["TURBULENCIA_TRAMOS"].fillna(0) <= max_turbulencia]
+    if min_duracion_mediana:
+        resultado = resultado[resultado["DURACION_MEDIANA_TRAMO_ANIOS"].fillna(0) >= min_duracion_mediana]
 
     cols_out = ["IDPERSONA"] + [c for c in lib.METRICAS_CLAVE if c in resultado.columns]
     return {
@@ -354,6 +409,7 @@ def equipos(
 class BusquedaSemantica(BaseModel):
     consulta: str
     top_n: int = 10
+    vigencia: str = "Cualquiera"
 
 
 @app.post("/api/buscar")
@@ -365,27 +421,39 @@ def buscar(body: BusquedaSemantica):
     modelo = get_text_model()
     q = modelo.encode([f"query: {body.consulta}"], normalize_embeddings=True)[0]
     sims = matrix @ q
-    top_idx = np.argsort(-sims)[: body.top_n]
+    orden = np.argsort(-sims)
 
     personas = get_personas()
     documentos = get_documento_semantico().set_index("IDPERSONA")["DOCUMENTO_TEXTO"]
 
     resultados = []
-    for rango, idx in enumerate(top_idx, start=1):
+    rango = 0
+    for idx in orden:
         idp = int(ids[idx])
         fila = personas[personas["IDPERSONA"] == idp]
         if fila.empty:
             continue
         p = fila.iloc[0]
+        vigente = bool(p.get("VIGENTE_MOSTRAR")) if pd.notna(p.get("VIGENTE_MOSTRAR")) else False
+
+        if body.vigencia == "Solo vigentes" and not vigente:
+            continue
+        if body.vigencia == "Solo no vigentes" and vigente:
+            continue
+
+        rango += 1
         resultados.append({
             "rango": rango,
             "id_persona": idp,
             "cluster": None if pd.isna(p.get("CLUSTER")) else int(p.get("CLUSTER")),
             "perfil_nombre": p.get("PERFIL_NOMBRE") if pd.notna(p.get("PERFIL_NOMBRE")) else None,
+            "vigente": vigente,
             "tipo_empleado": p.get("TIPOEMPLEADO_ACTUAL_DESC") if pd.notna(p.get("TIPOEMPLEADO_ACTUAL_DESC")) else None,
             "cargo_actual": p.get("CARGO_ACTUAL") if pd.notna(p.get("CARGO_ACTUAL")) else None,
             "evidencia": _mejor_evidencia(body.consulta, documentos.get(idp, "")),
         })
+        if rango >= body.top_n:
+            break
 
     return {"consulta": body.consulta, "resultados": resultados}
 

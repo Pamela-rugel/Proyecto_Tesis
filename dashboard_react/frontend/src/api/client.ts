@@ -22,9 +22,13 @@ export async function getPerfilDetalle(clusterId: number): Promise<PerfilDetalle
   return data;
 }
 
-export async function getMapa(tipo: string, perfiles: number[]): Promise<MapaResponse> {
+export async function getMapa(
+  tipo: string,
+  perfiles: number[],
+  modo: "rama" | "cargo" | "cargo_real" = "rama",
+): Promise<MapaResponse> {
   const { data } = await api.get<MapaResponse>("/api/mapa", {
-    params: { tipo, perfiles: perfiles.join(",") },
+    params: { tipo, perfiles: perfiles.join(","), modo },
   });
   return data;
 }
@@ -46,6 +50,8 @@ export interface EquiposFiltros {
   nivel: string[];
   minPublicaciones: number;
   minExpAdmin: number;
+  maxTurbulencia: number;
+  minDuracionMediana: number;
 }
 
 export async function getEquipos(filtros: EquiposFiltros): Promise<EquiposResponse> {
@@ -57,12 +63,18 @@ export async function getEquipos(filtros: EquiposFiltros): Promise<EquiposRespon
       nivel: filtros.nivel.join(","),
       min_publicaciones: filtros.minPublicaciones,
       min_exp_admin: filtros.minExpAdmin,
+      max_turbulencia: filtros.maxTurbulencia,
+      min_duracion_mediana: filtros.minDuracionMediana,
     },
   });
   return data;
 }
 
-export async function buscarSemantica(consulta: string, topN: number): Promise<BusquedaResponse> {
-  const { data } = await api.post<BusquedaResponse>("/api/buscar", { consulta, top_n: topN });
+export async function buscarSemantica(
+  consulta: string,
+  topN: number,
+  vigencia: string = "Cualquiera",
+): Promise<BusquedaResponse> {
+  const { data } = await api.post<BusquedaResponse>("/api/buscar", { consulta, top_n: topN, vigencia });
   return data;
 }

@@ -813,13 +813,24 @@ def construir_tramos_rol(df: pd.DataFrame) -> pd.DataFrame:
 
     tramos = []
     for id_persona, grupo in trabajo.groupby("IDPERSONA", sort=False):
-        actual = None
+        # abiertos_por_categoria: tramo mas reciente EN CONSTRUCCION por CATEGORIA_CARGO
+        # (no un unico "actual" global) - necesario porque dos categorias distintas pueden
+        # alternar en la linea cronologica cuando hay contratos simultaneos de categoria
+        # distinta (caso real 2026-09-15, IDPERSONA 3519: un contrato "Director de Talento
+        # Humano" y uno "Profesor Titular" iniciando el mismo dia, intercalados en el orden
+        # por fecha). Con un unico `actual` global, el tramo docente de 10 años se cortaba
+        # y reiniciaba en la fecha del contrato administrativo intercalado, perdiendo toda
+        # su antiguedad real - bug preexistente, nunca visible antes porque
+        # resolver_roles_simultaneos siempre retiraba uno de los dos tramos por ser mas
+        # corto, sin importar si era o no una subrogacion real.
+        abiertos_por_categoria: dict[str, dict] = {}
         for _, fila in grupo.iterrows():
             inicio, fin = fila["FECHAINICIOCONTRATO"], fila["_FECHAFIN_EFECTIVA"]
             categoria = fila["CATEGORIA_CARGO"]
             estado_abierto = bool(fila["_ESTADO_ABIERTO"])
+            actual = abiertos_por_categoria.get(categoria)
 
-            if actual is not None and actual["CATEGORIA_CARGO"] == categoria:
+            if actual is not None:
                 fin_actual_cmp = pd.Timestamp.max if pd.isna(actual["TRAMO_FIN"]) else actual["TRAMO_FIN"]
                 continua = fin_actual_cmp >= inicio or (
                     not pd.isna(actual["TRAMO_FIN"])
@@ -863,7 +874,7 @@ def construir_tramos_rol(df: pd.DataFrame) -> pd.DataFrame:
 
             if actual is not None:
                 tramos.append(actual)
-            actual = {
+            abiertos_por_categoria[categoria] = {
                 "IDPERSONA": id_persona,
                 "TIPOEMPLEADO_DESC": fila["TIPOEMPLEADO_DESC"],
                 "CATEGORIA_CARGO": categoria,
@@ -875,11 +886,97 @@ def construir_tramos_rol(df: pd.DataFrame) -> pd.DataFrame:
                 "UNIDAD_TRAMO": fila["NOMBRE_UNIDAD"] if tiene_unidad else pd.NA,
                 "NIVELDOCENCIA_TRAMO": fila["NIVELDOCENCIA"] if tiene_nivel_docencia else pd.NA,
             }
-        if actual is not None:
-            tramos.append(actual)
+        tramos.extend(abiertos_por_categoria.values())
 
     columnas = ["IDPERSONA", "TIPOEMPLEADO_DESC", "CATEGORIA_CARGO", "TRAMO_INICIO", "TRAMO_FIN",
                 "N_CONTRATOS", "CARGO_TRAMO", "UNIDAD_TRAMO", "NIVELDOCENCIA_TRAMO"]
+    if not tramos:
+        return pd.DataFrame(columns=columnas)
+    resultado = pd.DataFrame(tramos)
+    return resultado[columnas].reset_index(drop=True)
+
+
+def construir_tramos_unidad(df: pd.DataFrame) -> pd.DataFrame:
+    """Colapsa contratos consecutivos de `NOMBRE_UNIDAD` identica (dentro de la misma
+    persona) en "tramos de unidad" — mismo algoritmo exacto que `construir_tramos_rol`
+    (misma tolerancia de corte de mes, misma proteccion de vigencia por `ESTADOCONTRATO`
+    abierto, mismo rastreo en paralelo por clave para no cortar un tramo largo cuando se
+    intercala una unidad distinta en la linea cronologica), pero agrupando/comparando
+    continuidad por `NOMBRE_UNIDAD` en vez de `CATEGORIA_CARGO`. Excluye el mismo universo
+    de contratos que `construir_tramos_rol` (SIN_DATO, SIN_TIPOEMPLEADO,
+    ES_RUIDO_CALIDAD_DATOS, CATEGORIAS_PUNTUALES) para que un "tramo de unidad" solo tenga
+    sentido sobre el mismo conjunto de contratos estructurales.
+
+    Correccion 2026-09-XX (ver DECISION_LOG.md, feature engineering de movilidad de
+    carrera): existe para calcular `ANIOS_EN_UNIDAD_ACTUAL` — tenure en la dependencia
+    actual, distinto de `ANIOS_EN_CATEGORIA_ACTUAL` (tenure en la categoria de cargo
+    actual) y de `ANTIGUEDAD_EFECTIVA_ANIOS` (tenure organizacional total). La literatura
+    de RRHH distingue estas tres capas de tenure como fenomenos parcialmente
+    independientes (alguien puede tener antiguedad organizacional larga pero tenure de
+    unidad corta si fue transferido recientemente, o viceversa).
+
+    Sin `NOMBRE_UNIDAD` en `df` (columna opcional, agregada en la integracion), devuelve
+    un DataFrame vacio con las columnas esperadas — no falla.
+
+    Devuelve una fila por tramo de unidad: IDPERSONA, TRAMO_INICIO, TRAMO_FIN (NaT si
+    vigente), N_CONTRATOS, UNIDAD_TRAMO (el nombre real de la unidad de ese tramo).
+    """
+    columnas = ["IDPERSONA", "TRAMO_INICIO", "TRAMO_FIN", "N_CONTRATOS", "UNIDAD_TRAMO"]
+    if "NOMBRE_UNIDAD" not in df.columns:
+        return pd.DataFrame(columns=columnas)
+
+    trabajo = df[
+        (df["CATEGORIA_CARGO"] != "SIN_DATO")
+        & (df["CATEGORIA_CARGO"] != "SIN_TIPOEMPLEADO")
+        & (~df["ES_RUIDO_CALIDAD_DATOS"])
+        & (~df["CATEGORIA_CARGO"].isin(CATEGORIAS_PUNTUALES))
+        & df["NOMBRE_UNIDAD"].notna()
+    ].copy()
+    trabajo["_FECHAFIN_EFECTIVA"] = calcular_fecha_fin_efectiva(trabajo)
+    trabajo["_ESTADO_ABIERTO"] = _es_estado_abierto(trabajo)
+    trabajo = trabajo.dropna(subset=["IDPERSONA", "FECHAINICIOCONTRATO"])
+    trabajo = trabajo.sort_values(["IDPERSONA", "FECHAINICIOCONTRATO"], kind="stable")
+
+    tramos = []
+    for id_persona, grupo in trabajo.groupby("IDPERSONA", sort=False):
+        abiertos_por_unidad: dict[str, dict] = {}
+        for _, fila in grupo.iterrows():
+            inicio, fin = fila["FECHAINICIOCONTRATO"], fila["_FECHAFIN_EFECTIVA"]
+            unidad = fila["NOMBRE_UNIDAD"]
+            estado_abierto = bool(fila["_ESTADO_ABIERTO"])
+            actual = abiertos_por_unidad.get(unidad)
+
+            if actual is not None:
+                fin_actual_cmp = pd.Timestamp.max if pd.isna(actual["TRAMO_FIN"]) else actual["TRAMO_FIN"]
+                continua = fin_actual_cmp >= inicio or (
+                    not pd.isna(actual["TRAMO_FIN"])
+                    and _continuacion_por_corte_de_mes(actual["TRAMO_FIN"], inicio)
+                )
+                if continua:
+                    if actual["_vigente_por_estado_abierto"] and pd.isna(actual["TRAMO_FIN"]):
+                        pass
+                    elif pd.isna(fin):
+                        actual["TRAMO_FIN"] = fin
+                        actual["_vigente_por_estado_abierto"] = estado_abierto
+                    elif not pd.isna(actual["TRAMO_FIN"]):
+                        actual["TRAMO_FIN"] = max(actual["TRAMO_FIN"], fin)
+                    else:
+                        actual["TRAMO_FIN"] = fin
+                    actual["N_CONTRATOS"] += 1
+                    continue
+
+            if actual is not None:
+                tramos.append(actual)
+            abiertos_por_unidad[unidad] = {
+                "IDPERSONA": id_persona,
+                "TRAMO_INICIO": inicio,
+                "TRAMO_FIN": fin,
+                "_vigente_por_estado_abierto": estado_abierto and pd.isna(fin),
+                "N_CONTRATOS": 1,
+                "UNIDAD_TRAMO": unidad,
+            }
+        tramos.extend(abiertos_por_unidad.values())
+
     if not tramos:
         return pd.DataFrame(columns=columnas)
     resultado = pd.DataFrame(tramos)
@@ -938,11 +1035,12 @@ def construir_contrato_puntual_vigente(df: pd.DataFrame) -> pd.DataFrame:
     return resultado.reset_index(drop=True)
 
 
-def _encontrar_par_solapado(activos: list[dict]):
+def _encontrar_par_solapado(activos: list[dict], subrogaciones_persona: list[tuple] | None):
     """Busca dos tramos activos de distinta `CATEGORIA_CARGO` cuyo rango de fechas se
-    solape. Devuelve (indice_corto, indice_largo) del primer par encontrado (el "corto"
-    es el de menor duracion, candidato a retirarse de la linea principal), o None si no
-    hay ningun solapamiento pendiente."""
+    solape Y donde el tramo mas corto este respaldado por una subrogacion real registrada
+    en `registro_autoridades` en esas mismas fechas (ver `resolver_roles_simultaneos`).
+    Devuelve (indice_corto, indice_largo) del primer par encontrado, o None si no hay
+    ningun solapamiento pendiente que corresponda a una subrogacion real."""
     for i in range(len(activos)):
         for j in range(len(activos)):
             if i == j:
@@ -951,12 +1049,42 @@ def _encontrar_par_solapado(activos: list[dict]):
             if a["CATEGORIA_CARGO"] == b["CATEGORIA_CARGO"]:
                 continue
             if max(a["TRAMO_INICIO"], b["TRAMO_INICIO"]) <= min(a["_FIN_CMP"], b["_FIN_CMP"]):
-                if a["_DUR"] <= b["_DUR"]:
+                if a["_DUR"] <= b["_DUR"] and _es_subrogacion_en_fechas(
+                    subrogaciones_persona, a["TRAMO_INICIO"], a["_FIN_CMP"]
+                ):
                     return i, j
     return None
 
 
-def resolver_roles_simultaneos(tramos_rol: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _es_subrogacion_en_fechas(subrogaciones_persona, inicio, fin_cmp) -> bool:
+    """True si el tramo corto (`TRAMO_INICIO=inicio`) coincide con el INICIO de alguna
+    subrogacion registrada de la persona (lista de tuplas `(FECHA_DESDE, FECHA_HASTA)`,
+    `FECHA_HASTA` NaT = sigue vigente) — no basta con que las fechas se solapen en algun
+    punto: un tramo corto todavia vigente (`fin_cmp=INF`) se solaparia trivialmente con
+    CUALQUIER subrogacion posterior de la persona si solo se comparara el rango completo
+    (bug detectado 2026-09-15, caso IDPERSONA 3519: "Director de Talento Humano", vigente
+    desde 2025-06-09, se retiraba igual porque una subrogacion no relacionada de 2026-06-13
+    "se solapaba" con su rango abierto hasta el infinito). Se exige que `inicio` caiga
+    dentro de `[desde, hasta]` de la subrogacion (con tolerancia de unos dias por si el
+    tramo se fusiono con contratos cercanos) — es decir, que el tramo corto SEA esa
+    subrogacion, no que coincida por casualidad con otra designacion posterior no
+    relacionada. Sin lista de subrogaciones (`None`, uso sin `registro_autoridades`
+    disponible), se asume compatibilidad hacia atras: cualquier solapamiento retira el
+    tramo mas corto, igual que antes de esta verificacion."""
+    if subrogaciones_persona is None:
+        return True
+    INF = pd.Timestamp.max
+    tolerancia = pd.Timedelta(days=15)
+    for desde, hasta in subrogaciones_persona:
+        hasta_cmp = INF if pd.isna(hasta) else hasta
+        if (desde - tolerancia) <= inicio <= (hasta_cmp + tolerancia if hasta_cmp != INF else INF):
+            return True
+    return False
+
+
+def resolver_roles_simultaneos(
+    tramos_rol: pd.DataFrame, funciones_adicionales: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Separa, dentro de los tramos de una misma persona, los que se solapan en fecha con
     otro de distinta `CATEGORIA_CARGO` (ver DEC-011 en `context/DECISION_LOG.md`).
 
@@ -973,16 +1101,43 @@ def resolver_roles_simultaneos(tramos_rol: pd.DataFrame) -> tuple[pd.DataFrame, 
     interrupcion se vuelven a fusionar (misma tolerancia de `_continuacion_por_corte_de_mes`
     que usa `construir_tramos_rol`).
 
+    **Correccion 2026-09-15 (ver DECISION_LOG.md):** la regla anterior retiraba SIEMPRE el
+    tramo mas corto, sin distinguir un interinato de dias (el caso que motivo DEC-011,
+    p.ej. un encargo de despacho) de dos cargos estructurales reales y prolongados
+    ejercidos en paralelo (caso real: IDPERSONA 3519, Profesor Titular desde 2015 +
+    Director de Talento Humano desde 2025-06-09, ambos vigentes, ninguno subordinado al
+    otro). El usuario confirmo explicitamente que esa distincion NO es de duracion
+    (ej. un umbral de dias) sino de **si el tramo corto esta respaldado por una
+    subrogacion real** en `registro_autoridades.csv` (`ES_SUBROGACION`, `TIPOSIGLAS=='SR'`,
+    ver `procesar_registro_autoridades`): si lo esta, es una designacion temporal/delegada
+    y se retira igual que antes; si NO esta (es un nombramiento/contrato propio, como
+    "Director" sin `CARGOSUBROGADO`), ambos tramos se dejan en la linea principal como
+    cargos paralelos, sin jerarquia entre ellos.
+    Parametro opcional `funciones_adicionales`: salida de `procesar_registro_autoridades`
+    (columnas `IDPERSONA`, `FECHA_DESDE`, `FECHA_HASTA`, `ES_SUBROGACION`). Sin este
+    parametro (`None`), se mantiene el comportamiento anterior a esta correccion (cualquier
+    solapamiento retira el tramo mas corto) — solo por compatibilidad hacia atras, no debe
+    usarse asi en el pipeline real desde que existe este parametro.
+
     Devuelve `(tramos_resueltos, roles_adicionales_simultaneos)`. El primero reemplaza a
-    `tramos_rol` como insumo de `detectar_transiciones_rol`/`construir_features_trayectoria`.
-    El segundo es informativo — mismas columnas de `tramos_rol` mas
-    `CATEGORIA_CARGO_BASE_SIMULTANEA` (la categoria del tramo estructural con el que se
-    solapaba) — pensado para exponerse como atributo/afinidad (ver DEC-009), no como una
-    categoria nueva de agrupamiento.
+    `tramos_rol` como insumo de `detectar_transiciones_rol`/`construir_features_trayectoria`
+    — ahora puede tener mas de un tramo abierto simultaneamente para una misma persona
+    cuando corresponde a dos cargos paralelos reales. El segundo es informativo — mismas
+    columnas de `tramos_rol` mas `CATEGORIA_CARGO_BASE_SIMULTANEA` (la categoria del tramo
+    estructural con el que se solapaba) — pensado para exponerse como atributo/afinidad
+    (ver DEC-009), no como una categoria nueva de agrupamiento.
     """
     INF = pd.Timestamp.max
     columnas = ["IDPERSONA", "TIPOEMPLEADO_DESC", "CATEGORIA_CARGO", "TRAMO_INICIO", "TRAMO_FIN",
                 "N_CONTRATOS", "CARGO_TRAMO", "UNIDAD_TRAMO"]
+
+    subrogaciones_por_persona: dict | None = None
+    if funciones_adicionales is not None:
+        sub = funciones_adicionales[funciones_adicionales["ES_SUBROGACION"]]
+        subrogaciones_por_persona = {
+            id_persona: list(zip(grupo["FECHA_DESDE"], grupo["FECHA_HASTA"]))
+            for id_persona, grupo in sub.groupby("IDPERSONA", sort=False)
+        }
 
     tramos_principales = []
     roles_adicionales = []
@@ -993,10 +1148,14 @@ def resolver_roles_simultaneos(tramos_rol: pd.DataFrame) -> tuple[pd.DataFrame, 
             r["_FIN_CMP"] = INF if pd.isna(r["TRAMO_FIN"]) else r["TRAMO_FIN"]
             r["_DUR"] = (r["_FIN_CMP"] - r["TRAMO_INICIO"]).days
 
-        # 1) retirar solapamientos entre categorias distintas (el mas corto sale) hasta
-        #    que no quede ninguno.
+        subrogaciones_persona = (
+            subrogaciones_por_persona.get(id_persona, []) if subrogaciones_por_persona is not None else None
+        )
+
+        # 1) retirar solapamientos entre categorias distintas donde el tramo mas corto es
+        #    una subrogacion real (el mas corto sale) hasta que no quede ninguno.
         while len(activos) > 1:
-            par = _encontrar_par_solapado(activos)
+            par = _encontrar_par_solapado(activos, subrogaciones_persona)
             if par is None:
                 break
             i_corto, i_largo = par
@@ -1693,6 +1852,7 @@ def construir_features_trayectoria(
     tramos_rol: pd.DataFrame,
     transiciones_rol: pd.DataFrame,
     roles_adicionales_simultaneos: pd.DataFrame | None = None,
+    tramos_unidad: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Construye una tabla de features de trayectoria **por persona** (una fila por
     IDPERSONA) a partir de `construir_tramos_rol` y `detectar_transiciones_rol`, pensada
@@ -1753,6 +1913,76 @@ def construir_features_trayectoria(
       persona hace hoy, o si conviene mostrar en su lugar un contrato puntual vigente (ver
       `construir_contrato_puntual_vigente`) — sin que esto cambie `CLUSTER`/
       `CATEGORIA_CARGO_ACTUAL`, que siguen basados en el tramo estructural.
+    - ES_MIXTO, CARGOS_ACTUALES_MIXTO, CATEGORIAS_ACTUALES_MIXTO (correccion 2026-09-15, ver
+      DECISION_LOG.md, caso IDPERSONA 3519): cuando `resolver_roles_simultaneos` deja a una
+      persona con 2+ tramos vigentes (`TRAMO_FIN` nulo) de `CATEGORIA_CARGO` distinta -porque
+      ninguno es una subrogacion respaldada en `registro_autoridades`, son cargos estructurales
+      paralelos reales, p.ej. Profesor Titular + Director de Talento Humano-, `ES_MIXTO=True`
+      y `CARGOS_ACTUALES_MIXTO` lista el texto real de cada cargo (`CARGO_TRAMO`, orden por
+      antiguedad), `CATEGORIAS_ACTUALES_MIXTO` lista los codigos `CATEGORIA_CARGO`
+      correspondientes (separados por `;`, para filtrado programatico). Con menos de 2 tramos
+      vigentes de categoria distinta, `ES_MIXTO=False` y los otros dos quedan `NA`. Es
+      puramente informativo/atributo de presentacion (mismo principio que
+      `TUVO_ROL_ADICIONAL_SIMULTANEO`, DEC-011) — no cambia `CLUSTER`/`CATEGORIA_CARGO_ACTUAL`.
+      Ver criterio de desempate de `CATEGORIA_CARGO_ACTUAL` (nota siguiente).
+
+    **Desempate de `actual` con 2+ tramos vigentes en paralelo** (correccion 2026-09-15): antes
+    se tomaba `vigente.iloc[-1]` (el de `TRAMO_INICIO` mas tardio, por accidente de orden, no
+    por diseno) — para la persona 3519 eso elegia "Director de Talento Humano" (3 meses) sobre
+    "Profesor Titular" (10 años) como `CATEGORIA_CARGO_ACTUAL`/`CLUSTER`. Ahora domina el tramo
+    de **mayor antiguedad** (`TRAMO_INICIO` minimo) entre los vigentes, mismo criterio que
+    `resolver_roles_simultaneos`/DEC-011 ("domina el de mayor duracion"). El otro cargo paralelo
+    sigue expuesto completo via `ES_MIXTO`/`CARGOS_ACTUALES_MIXTO`, no se pierde informacion.
+
+    **Features de movilidad de carrera (feature engineering literatura-fundamentado, ver
+    DECISION_LOG.md — investigacion bibliografica dirigida sobre tenure/movilidad/diversidad
+    de trayectoria, no disenadas por intuicion):**
+    - ANIOS_EN_UNIDAD_ACTUAL: tenure en la unidad/dependencia actual (`tramos_unidad`,
+      parametro opcional). Tercera capa de tenure, distinta de `ANIOS_EN_CATEGORIA_ACTUAL`
+      (tenure de rol) y `ANTIGUEDAD_EFECTIVA_ANIOS` (tenure organizacional total) —
+      literatura de RRHH distingue estas capas como fenomenos parcialmente independientes
+      (alguien puede tener antiguedad organizacional larga pero tenure de unidad corta si
+      fue transferido recientemente). Mismo desempate que `ANIOS_EN_CATEGORIA_ACTUAL` si hay
+      2+ tramos de unidad vigentes en paralelo. `NA` si no se pasa `tramos_unidad` o la
+      persona no tiene ningun tramo de unidad (p.ej. `NOMBRE_UNIDAD` nunca poblado en su
+      historial).
+    - DURACION_MEDIANA_TRAMO_ANIOS: mediana (no promedio) de la duracion en años de TODOS
+      los tramos de rol de la persona (no solo el actual) — se prefiere la mediana sobre el
+      promedio por ser robusta al patron de "encargos cortos" (DEC-004, nombramientos de
+      autoridad de pocos dias que inflarian un promedio pero no una mediana). Fundamento:
+      Elzinga & Liefbroer (2007), duracion de "spells" como componente de la complejidad de
+      una secuencia de carrera.
+    - TURBULENCIA_TRAMOS: proxy de turbulencia de secuencia — coeficiente de variacion
+      (desviacion estandar / media) de la duracion de los tramos de rol. Solo definido con 2+
+      tramos (`NA` real para trayectorias de 1 tramo, no 0: no hay variabilidad que medir).
+      Distingue una trayectoria con pocos tramos largos y estables de una con muchos tramos
+      cortos y erraticos, aunque tengan el mismo `N_TRANSICIONES_ROL` — ataca directamente el
+      problema abierto de DEC-004 (contaminacion de "encargos cortos" en el conteo crudo de
+      transiciones) sin necesitar el umbral de duracion minima aun no decidido. Fundamento:
+      Elzinga & Liefbroer (2007) "turbulence"; Ritschard (2023), "Measuring the Nature of
+      Individual Sequences" (proxy simplificado — no la formula completa de TraMineR `seqST`,
+      que requeriria una libreria de analisis de secuencias no usada en este proyecto).
+    - ENTROPIA_CATEGORIA_CARGO: entropia de Shannon (`H = -Σ p_i log(p_i)`) de la
+      distribucion de `CATEGORIA_CARGO` por las que paso la persona, ponderada por **tiempo**
+      (no por conteo de tramos, para que muchos tramos cortos de "encargo" de la misma
+      categoria no pesen mas que un solo tramo largo). `H=0` exactamente para quienes tuvieron
+      una sola categoria (`ES_TRAYECTORIA_ESTABLE=True`, la mayoria) — es el valor correcto,
+      no un nulo. Mide diversidad/forma de la distribucion, nunca revela cual categoria
+      domina (dos personas con `H=0.9` pueden tener categorias dominantes completamente
+      distintas) — por eso se considera una magnitud, no una etiqueta de identidad, pese a
+      derivar de la misma tabla de tramos que `CATEGORIA_CARGO_ACTUAL`. Fundamento:
+      López-Ospina et al. (2026), "Measuring and Interpreting Diversity Within Workforce
+      Profiles of an Educational Organizational System Through Entropy" (Systems Research and
+      Behavioral Science, 43(2):507-520) — aplica exactamente esta tecnica a diversidad de
+      perfiles de personal en un departamento universitario.
+    - PROPORCION_ANIOS_ADMINISTRATIVO: fraccion del tiempo total en tramos que corresponde a
+      `TIPOEMPLEADO_DESC=ADMINISTRATIVO` (0 a 1). **Uso exclusivamente informativo/dashboard
+      — el usuario confirmo explicitamente que NO debe entrar a X_modelado.csv**: para la
+      mayoria de personas con trayectoria estable esta proporcion es exactamente 0 o 1, lo
+      que la vuelve, en la practica, una version disfrazada de la identidad de rama
+      (`TIPOEMPLEADO_CATEGORIA_ACTUAL`) para esa mayoria — el mismo riesgo de circularidad
+      que DEC-013 excluye explicitamente. Solo aporta señal genuina para la minoria con
+      `TUVO_TRANSICION_AA_A_DD`/`DD_A_AA=True`.
 
     Personas sin tramos de rol (p.ej. solo tuvieron contratos de categorias puntuales,
     ver `CATEGORIAS_PUNTUALES`) no aparecen en el resultado — se dejan sin features de
@@ -1768,12 +1998,55 @@ def construir_features_trayectoria(
     filas = []
     for id_persona, grupo in tramos.groupby("IDPERSONA", sort=False):
         vigente = grupo[grupo["_VIGENTE"]]
-        actual = vigente.iloc[-1] if len(vigente) else grupo.iloc[-1]
+        if len(vigente) > 1:
+            actual = vigente.loc[vigente["TRAMO_INICIO"].idxmin()]
+        elif len(vigente) == 1:
+            actual = vigente.iloc[0]
+        else:
+            actual = grupo.iloc[-1]
         primera = grupo.iloc[0]
         # max(..., 0): un tramo "POR EJECUTARSE" (calcular_fecha_fin_efectiva) puede
         # iniciar unos dias despues de "hoy" y quedar marcado vigente antes de empezar;
         # se trata como antiguedad 0 en la categoria, no como error.
         anios_actual = max((actual["_FIN_CMP"] - actual["TRAMO_INICIO"]).days / 365.25, 0)
+
+        categorias_vigentes = vigente["CATEGORIA_CARGO"].unique()
+        es_mixto = len(categorias_vigentes) > 1
+        cargos_mixto = pd.NA
+        categorias_mixto = pd.NA
+        if es_mixto:
+            ordenado = vigente.sort_values("TRAMO_INICIO")
+            cargos_mixto = "; ".join(ordenado["CARGO_TRAMO"].fillna(ordenado["CATEGORIA_CARGO"]))
+            categorias_mixto = ";".join(str(c) for c in categorias_vigentes)
+
+        # Features de movilidad de carrera (ver docstring): duraciones en años de TODOS los
+        # tramos de la persona (no solo el vigente), para mediana/turbulencia/entropia.
+        duraciones_anios = (grupo["_FIN_CMP"] - grupo["TRAMO_INICIO"]).dt.days / 365.25
+        duraciones_anios = duraciones_anios.clip(lower=0)
+        duracion_mediana = round(duraciones_anios.median(), 2)
+        if len(duraciones_anios) >= 2 and duraciones_anios.mean() > 0:
+            turbulencia = round(duraciones_anios.std() / duraciones_anios.mean(), 2)
+        else:
+            turbulencia = pd.NA
+
+        # Entropia de Shannon ponderada por TIEMPO (no por conteo de tramos), para que
+        # muchos tramos cortos de "encargo" de la misma categoria no pesen mas que un solo
+        # tramo largo (ver docstring, Lopez-Ospina et al. 2026).
+        duracion_total = duraciones_anios.sum()
+        if duracion_total > 0:
+            proporciones_categoria = (
+                grupo.assign(_DUR=duraciones_anios.values).groupby("CATEGORIA_CARGO")["_DUR"].sum() / duracion_total
+            )
+            probs = proporciones_categoria[proporciones_categoria > 0]
+            entropia = round(float(-(probs * np.log(probs)).sum()), 4)
+        else:
+            entropia = 0.0
+
+        if duracion_total > 0:
+            duracion_administrativo = duraciones_anios[grupo["TIPOEMPLEADO_DESC"].values == "ADMINISTRATIVO"].sum()
+            proporcion_administrativo = round(duracion_administrativo / duracion_total, 4)
+        else:
+            proporcion_administrativo = pd.NA
 
         filas.append({
             "IDPERSONA": id_persona,
@@ -1787,6 +2060,13 @@ def construir_features_trayectoria(
             "ANIOS_EN_CATEGORIA_ACTUAL": round(anios_actual, 2),
             "CATEGORIA_CARGO_PRIMERA": primera["CATEGORIA_CARGO"],
             "ES_TRAYECTORIA_ESTABLE": bool(grupo["CATEGORIA_CARGO"].nunique() <= 1),
+            "ES_MIXTO": bool(es_mixto),
+            "CARGOS_ACTUALES_MIXTO": cargos_mixto,
+            "CATEGORIAS_ACTUALES_MIXTO": categorias_mixto,
+            "DURACION_MEDIANA_TRAMO_ANIOS": duracion_mediana,
+            "TURBULENCIA_TRAMOS": turbulencia,
+            "ENTROPIA_CATEGORIA_CARGO": entropia,
+            "PROPORCION_ANIOS_ADMINISTRATIVO": proporcion_administrativo,
         })
     features = pd.DataFrame(filas)
 
@@ -1835,6 +2115,27 @@ def construir_features_trayectoria(
         features["TUVO_ROL_ADICIONAL_SIMULTANEO"] = False
         features["N_ROLES_ADICIONALES_SIMULTANEOS_DISTINTOS"] = 0
         features["CATEGORIA_ROL_ADICIONAL_MAS_RECIENTE"] = pd.NA
+
+    if tramos_unidad is not None and len(tramos_unidad):
+        tu = tramos_unidad.copy()
+        tu["_FIN_CMP"] = tu["TRAMO_FIN"].fillna(hoy)
+        tu["_VIGENTE"] = tu["TRAMO_FIN"].isna()
+        filas_unidad = []
+        for id_persona, grupo_u in tu.groupby("IDPERSONA", sort=False):
+            vigente_u = grupo_u[grupo_u["_VIGENTE"]]
+            if len(vigente_u) > 1:
+                # mismo desempate que ANIOS_EN_CATEGORIA_ACTUAL: mayor antiguedad domina
+                actual_u = vigente_u.loc[vigente_u["TRAMO_INICIO"].idxmin()]
+            elif len(vigente_u) == 1:
+                actual_u = vigente_u.iloc[0]
+            else:
+                actual_u = grupo_u.sort_values("TRAMO_INICIO").iloc[-1]
+            anios_unidad = max((actual_u["_FIN_CMP"] - actual_u["TRAMO_INICIO"]).days / 365.25, 0)
+            filas_unidad.append({"IDPERSONA": id_persona, "ANIOS_EN_UNIDAD_ACTUAL": round(anios_unidad, 2)})
+        resumen_unidad = pd.DataFrame(filas_unidad)
+        features = features.merge(resumen_unidad, on="IDPERSONA", how="left")
+    else:
+        features["ANIOS_EN_UNIDAD_ACTUAL"] = pd.NA
 
     return features
 

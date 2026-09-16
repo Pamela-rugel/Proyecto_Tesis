@@ -52,12 +52,16 @@ export interface MapaPunto {
   VIGENTE_MOSTRAR: boolean;
   CARGO_ACTUAL: string | null;
   COLOR: string;
+  GRUPO_COLOR: string;
+  ES_MIXTO: boolean;
+  CARGOS_ACTUALES_MIXTO: string | null;
 }
 
 export interface MapaResponse {
   total_modelo: number;
   n_mostrados: number;
   puntos: MapaPunto[];
+  modo: "rama" | "cargo" | "cargo_real";
 }
 
 export interface EventoTrayectoria {
@@ -103,6 +107,7 @@ export interface BusquedaResultado {
   id_persona: number;
   cluster: number | null;
   perfil_nombre: string | null;
+  vigente: boolean;
   tipo_empleado: string | null;
   cargo_actual: string | null;
   evidencia: string;

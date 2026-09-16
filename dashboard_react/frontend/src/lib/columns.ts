@@ -15,4 +15,7 @@ export const METRICAS_CLAVE_COLUMNS = [
   { key: "NUM_CAPACITACIONES", label: "Capacitaciones" },
   { key: "NUM_IDIOMAS", label: "Idiomas" },
   { key: "NUM_RECONOCIMIENTOS", label: "Reconocimientos" },
+  { key: "DURACION_MEDIANA_TRAMO_ANIOS", label: "Duración mediana por cargo (años)" },
+  { key: "TURBULENCIA_TRAMOS", label: "Rotación (turbulencia)" },
+  { key: "ANIOS_EN_UNIDAD_ACTUAL", label: "Años en unidad actual" },
 ];
