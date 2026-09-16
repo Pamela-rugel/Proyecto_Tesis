@@ -1,9 +1,9 @@
 import Plot from "react-plotly.js";
 import type { EventoTrayectoria } from "../api/types";
+import { paletaPorTextos } from "../lib/color";
 
 interface Props {
   eventos: EventoTrayectoria[];
-  colorTipoEvento: Record<string, string>;
   etiquetaTipoEvento: Record<string, string>;
 }
 
@@ -19,6 +19,7 @@ function formatMesAnio(iso: string): string {
 interface EventoPreparado {
   evento: EventoTrayectoria;
   lane: string;
+  tipoNormalizado: string;
   inicio: Date;
   finEfectiva: Date;
   detalle: string;
@@ -59,7 +60,7 @@ function asignarSubfilas(porLane: Map<string, EventoPreparado[]>): Map<EventoPre
   return subfila;
 }
 
-export default function TimelineTrayectoria({ eventos, colorTipoEvento, etiquetaTipoEvento }: Props) {
+export default function TimelineTrayectoria({ eventos, etiquetaTipoEvento }: Props) {
   if (eventos.length === 0) {
     return (
       <p className="text-sm text-slate-400">
@@ -86,9 +87,18 @@ export default function TimelineTrayectoria({ eventos, colorTipoEvento, etiqueta
     const rango = e.FECHA_INICIO
       ? `${formatMesAnio(e.FECHA_INICIO)} - ${e.ES_VIGENTE ? "actualidad" : e.FECHA_FIN ? formatMesAnio(e.FECHA_FIN) : ""}`
       : "";
+    // Grado y Posgrado se muestran como una sola fila "Cargo en ESPOL" (pedido explícito
+    // del usuario 2026-09-16: "creo que esta dificil separa cargos grado postgrado...
+    // quiero unificar cargo grado y cargo postgrado") - Función adicional/Subrogación
+    // siguen siendo filas propias, no se tocan.
+    const tipoNormalizado =
+      e.TIPO_EVENTO === "CARGO_ESPOL_GRADO" || e.TIPO_EVENTO === "CARGO_ESPOL_POSGRADO"
+        ? "CARGO_ESPOL"
+        : e.TIPO_EVENTO;
     return {
       evento: e,
-      lane: etiquetaTipoEvento[e.TIPO_EVENTO] ?? e.TIPO_EVENTO,
+      lane: etiquetaTipoEvento[tipoNormalizado] ?? tipoNormalizado,
+      tipoNormalizado,
       inicio,
       finEfectiva,
       detalle,
@@ -96,8 +106,22 @@ export default function TimelineTrayectoria({ eventos, colorTipoEvento, etiqueta
     };
   });
 
-  // Orden de lanes: primera aparicion por fecha de inicio (igual que Streamlit).
-  const ordenLanes = Array.from(new Set(preparados.map((p) => p.lane)));
+  // Orden visual de lanes (de arriba a abajo) por prioridad fija, no por primera aparición
+  // cronológica (pedido explícito del usuario 2026-09-16): Cargo en ESPOL, Función
+  // adicional, Subrogación, Experiencia externa.
+  function prioridadTipoEvento(tipo: string): number {
+    if (tipo === "CARGO_ESPOL") return 1;
+    if (tipo === "FUNCION_ADICIONAL") return 2;
+    if (tipo === "SUBROGACION") return 3;
+    return 4; // EXPERIENCIA_EXTERNA_ECUADOR / EXPERIENCIA_EXTERNA_EXTERIOR
+  }
+  const lanePorTipoNormalizado = new Map<string, string>();
+  for (const p of preparados) {
+    if (!lanePorTipoNormalizado.has(p.lane)) lanePorTipoNormalizado.set(p.lane, p.tipoNormalizado);
+  }
+  const ordenLanes = Array.from(new Set(preparados.map((p) => p.lane))).sort(
+    (a, b) => prioridadTipoEvento(lanePorTipoNormalizado.get(a) ?? "") - prioridadTipoEvento(lanePorTipoNormalizado.get(b) ?? "")
+  );
 
   const porLane = new Map<string, EventoPreparado[]>();
   for (const p of preparados) {
@@ -133,23 +157,34 @@ export default function TimelineTrayectoria({ eventos, colorTipoEvento, etiqueta
     (lane) => (offsetPorLane.get(lane) ?? 0) + ((altoPorLane.get(lane) ?? 1) - 1) / 2
   );
 
-  const tiposPresentes = Array.from(new Set(preparados.map((p) => p.evento.TIPO_EVENTO)));
-
-  const traces = tiposPresentes.map((tipo) => {
-    const itemsTipo = preparados.filter((p) => p.evento.TIPO_EVENTO === tipo);
-    return {
+  // Color por cargo real (DESCRIPCION), no por tipo de evento: el mismo cargo siempre
+  // tiene el mismo color, sin importar cuándo aparece en la línea de tiempo — así se ve
+  // de un vistazo si la persona volvió a un cargo que ya había tenido antes (pedido
+  // explícito del usuario 2026-09-16, "identificar cambios de cargo y antes lo tenia y
+  // luego volvio"). Paleta equiespaciada sobre los cargos DE ESTA PERSONA (no un hash
+  // independiente por texto) para garantizar separación mínima de tono entre cargos
+  // vecinos en la misma línea de tiempo — con un hash simple, dos cargos distintos podían
+  // caer en hues casi iguales y verse indistinguibles ("si están muy justo los colores no
+  // deben parecerse"). Sin leyenda (un color por cargo distinto sería una lista enorme);
+  // el nombre del cargo ya se ve en el eje Y (lane) y en el hover.
+  const paletaCargos = paletaPorTextos(preparados.map((p) => p.evento.DESCRIPCION));
+  const traces = [
+    {
       type: "bar" as const,
       orientation: "h" as const,
-      base: itemsTipo.map((p) => p.inicio.toISOString().slice(0, 10)),
-      x: itemsTipo.map((p) => p.finEfectiva.getTime() - p.inicio.getTime()),
-      y: itemsTipo.map((p) => filaYPorEvento.get(p) ?? 0),
-      name: etiquetaTipoEvento[tipo] ?? tipo,
-      marker: { color: colorTipoEvento[tipo] ?? "#94A3B8", line: { width: 0 } },
-      customdata: itemsTipo.map((p) => [p.detalle, p.rango]),
+      base: preparados.map((p) => p.inicio.toISOString().slice(0, 10)),
+      x: preparados.map((p) => p.finEfectiva.getTime() - p.inicio.getTime()),
+      y: preparados.map((p) => filaYPorEvento.get(p) ?? 0),
+      showlegend: false,
+      marker: {
+        color: preparados.map((p) => paletaCargos.get(p.evento.DESCRIPCION) ?? "#94A3B8"),
+        line: { width: 0 },
+      },
+      customdata: preparados.map((p) => [p.detalle, p.rango]),
       hovertemplate: "<b>%{customdata[0]}</b><br>%{customdata[1]}<extra></extra>",
       width: 0.7,
-    };
-  });
+    },
+  ];
 
   const hayVigentes = preparados.some((p) => p.evento.ES_VIGENTE);
   const lanesVigentes = Array.from(new Set(preparados.filter((p) => p.evento.ES_VIGENTE).map((p) => p.lane)));
@@ -161,16 +196,8 @@ export default function TimelineTrayectoria({ eventos, colorTipoEvento, etiqueta
         layout={{
           height: 190 + 42 * totalFilas,
           barmode: "overlay",
-          showlegend: true,
-          legend: {
-            orientation: "h",
-            yanchor: "bottom",
-            y: 1.02,
-            xanchor: "left",
-            x: 0,
-            font: { size: 11 },
-          },
-          margin: { l: 160, r: 30, t: 44, b: 44 },
+          showlegend: false,
+          margin: { l: 160, r: 30, t: 24, b: 44 },
           font: { size: 12, color: "#334155" },
           plot_bgcolor: "#FFFFFF",
           paper_bgcolor: "#FFFFFF",

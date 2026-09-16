@@ -33,9 +33,14 @@ export async function getMapa(
   return data;
 }
 
-export async function getPersonasIds(): Promise<number[]> {
-  const { data } = await api.get<{ ids: number[] }>("/api/personas");
-  return data.ids;
+export interface PersonaResumen {
+  IDPERSONA: number;
+  NOMBRE_COMPLETO: string;
+}
+
+export async function getPersonas(): Promise<PersonaResumen[]> {
+  const { data } = await api.get<{ personas: PersonaResumen[] }>("/api/personas");
+  return data.personas;
 }
 
 export async function getPersonaFicha(idPersona: number): Promise<PersonaFichaResponse> {
@@ -44,27 +49,29 @@ export async function getPersonaFicha(idPersona: number): Promise<PersonaFichaRe
 }
 
 export interface EquiposFiltros {
-  perfiles: number[];
   vigencia: string;
   tipo: string[];
   nivel: string[];
   minPublicaciones: number;
   minExpAdmin: number;
-  maxTurbulencia: number;
+  maxIrregularidad: number;
   minDuracionMediana: number;
+  minCargosEspol: number;
+  maxCargosEspol: number;
 }
 
 export async function getEquipos(filtros: EquiposFiltros): Promise<EquiposResponse> {
   const { data } = await api.get<EquiposResponse>("/api/equipos", {
     params: {
-      perfiles: filtros.perfiles.join(","),
       vigencia: filtros.vigencia,
       tipo: filtros.tipo.join(","),
       nivel: filtros.nivel.join(","),
       min_publicaciones: filtros.minPublicaciones,
       min_exp_admin: filtros.minExpAdmin,
-      max_turbulencia: filtros.maxTurbulencia,
+      max_turbulencia: filtros.maxIrregularidad,
       min_duracion_mediana: filtros.minDuracionMediana,
+      min_cargos_espol: filtros.minCargosEspol,
+      max_cargos_espol: filtros.maxCargosEspol,
     },
   });
   return data;
@@ -76,5 +83,47 @@ export async function buscarSemantica(
   vigencia: string = "Cualquiera",
 ): Promise<BusquedaResponse> {
   const { data } = await api.post<BusquedaResponse>("/api/buscar", { consulta, top_n: topN, vigencia });
+  return data;
+}
+
+export interface BusquedaAvanzadaParams extends EquiposFiltros {
+  consulta: string;
+  topN: number;
+}
+
+export interface ResultadoAvanzado {
+  rango: number;
+  id_persona: number;
+  nombre_completo: string;
+  cluster: number | null;
+  perfil_nombre: string | null;
+  vigente: boolean;
+  tipo_empleado: string | null;
+  cargo_actual: string | null;
+  n_cargos_espol: number | null;
+  duracion_mediana_tramo_anios: number | null;
+  evidencia: string;
+}
+
+export interface BusquedaAvanzadaResponse {
+  consulta: string;
+  n_candidatos_tras_filtros: number;
+  resultados: ResultadoAvanzado[];
+}
+
+export async function buscarAvanzada(p: BusquedaAvanzadaParams): Promise<BusquedaAvanzadaResponse> {
+  const { data } = await api.post<BusquedaAvanzadaResponse>("/api/buscar_avanzado", {
+    consulta: p.consulta,
+    top_n: p.topN,
+    vigencia: p.vigencia,
+    tipo: p.tipo.join(","),
+    nivel: p.nivel.join(","),
+    min_publicaciones: p.minPublicaciones,
+    min_exp_admin: p.minExpAdmin,
+    max_turbulencia: p.maxIrregularidad,
+    min_duracion_mediana: p.minDuracionMediana,
+    min_cargos_espol: p.minCargosEspol,
+    max_cargos_espol: p.maxCargosEspol,
+  });
   return data;
 }

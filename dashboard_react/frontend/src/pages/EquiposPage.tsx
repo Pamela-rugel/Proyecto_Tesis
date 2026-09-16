@@ -1,57 +1,63 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { getEquipos, getResumen } from "../api/client";
+import { Link } from "react-router-dom";
+import { getEquipos } from "../api/client";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import DataTable from "../components/DataTable";
+import FiltrosEstructurados from "../components/FiltrosEstructurados";
 import { METRICAS_CLAVE_COLUMNS } from "../lib/columns";
 
-const VIGENCIA_OPTS = ["Cualquiera", "Solo vigentes", "Solo no vigentes"];
+const COLUMNAS_CANDIDATOS = METRICAS_CLAVE_COLUMNS.map((c) =>
+  c.key === "NOMBRE_COMPLETO"
+    ? {
+        ...c,
+        render: (row: Record<string, unknown>) => (
+          <Link
+            to={`/persona/${row.IDPERSONA}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-espol-blue hover:text-espol-navy font-medium transition-colors"
+          >
+            {String(row.NOMBRE_COMPLETO ?? "-")}
+          </Link>
+        ),
+      }
+    : c
+);
 
 export default function EquiposPage() {
-  const resumenQuery = useQuery({ queryKey: ["resumen"], queryFn: getResumen });
-  const perfiles = resumenQuery.data?.perfiles ?? [];
-
-  const [perfilesSel, setPerfilesSel] = useState<number[]>([]);
   const [vigencia, setVigencia] = useState("Cualquiera");
   const [tipoSel, setTipoSel] = useState<string[]>([]);
   const [nivelSel, setNivelSel] = useState<string[]>([]);
   const [minPub, setMinPub] = useState(0);
   const [minExpAdmin, setMinExpAdmin] = useState(0);
-  const [maxTurbulencia, setMaxTurbulencia] = useState(0);
+  const [maxIrregularidad, setMaxIrregularidad] = useState(0);
   const [minDuracionMediana, setMinDuracionMediana] = useState(0);
-  const [perfilesInit, setPerfilesInit] = useState(false);
-
-  if (!perfilesInit && perfiles.length > 0) {
-    setPerfilesSel(perfiles.map((p) => p.CLUSTER));
-    setPerfilesInit(true);
-  }
+  const [minCargosEspol, setMinCargosEspol] = useState(0);
+  const [maxCargosEspol, setMaxCargosEspol] = useState(0);
 
   const equiposQuery = useQuery({
-    queryKey: ["equipos", perfilesSel, vigencia, tipoSel, nivelSel, minPub, minExpAdmin, maxTurbulencia, minDuracionMediana],
+    queryKey: [
+      "equipos", vigencia, tipoSel, nivelSel, minPub, minExpAdmin,
+      maxIrregularidad, minDuracionMediana, minCargosEspol, maxCargosEspol,
+    ],
     queryFn: () =>
       getEquipos({
-        perfiles: perfilesSel,
         vigencia,
         tipo: tipoSel,
         nivel: nivelSel,
         minPublicaciones: minPub,
         minExpAdmin,
-        maxTurbulencia,
+        maxIrregularidad,
         minDuracionMediana,
+        minCargosEspol,
+        maxCargosEspol,
       }),
-    enabled: perfilesInit,
   });
-
-  function togglePerfil(c: number) {
-    setPerfilesSel((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-  }
-  function toggleMulti(list: string[], setList: (v: string[]) => void, value: string) {
-    setList(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
-  }
 
   function descargarCSV() {
     if (!equiposQuery.data) return;
-    const cols = METRICAS_CLAVE_COLUMNS.filter((c) => equiposQuery.data!.candidatos[0]?.[c.key] !== undefined || c.key === "IDPERSONA");
+    const cols = METRICAS_CLAVE_COLUMNS.filter((c) => equiposQuery.data!.candidatos[0]?.[c.key] !== undefined || c.key === "NOMBRE_COMPLETO");
     const header = cols.map((c) => c.key).join(",");
     const rows = equiposQuery.data.candidatos.map((row) =>
       cols.map((c) => JSON.stringify(row[c.key] ?? "")).join(",")
@@ -70,143 +76,20 @@ export default function EquiposPage() {
     <div className="space-y-5">
       <p className="text-sm text-slate-600">
         Filtra candidatos por perfil y por criterios profesionales/institucionales para apoyar la
-        conformación de una comisión o equipo.
+        conformación de una comisión o equipo. ¿Buscas por conocimiento/experiencia además de
+        estos filtros? Usa "Búsqueda combinada" en su lugar.
       </p>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Perfiles a incluir</p>
-          <div className="flex flex-wrap gap-1.5">
-            {perfiles.map((p) => (
-              <button
-                key={p.CLUSTER}
-                onClick={() => togglePerfil(p.CLUSTER)}
-                className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                  perfilesSel.includes(p.CLUSTER) ? "text-white border-transparent" : "border-slate-300 text-slate-600 hover:bg-slate-50"
-                }`}
-                style={perfilesSel.includes(p.CLUSTER) ? { backgroundColor: p.COLOR } : undefined}
-              >
-                {p.CLUSTER} — {p.PERFIL_NOMBRE}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Vigencia</p>
-            <select
-              value={vigencia}
-              onChange={(e) => setVigencia(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
-            >
-              {VIGENCIA_OPTS.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Tipo de empleado</p>
-            <div className="flex flex-wrap gap-1.5">
-              {(resumenQuery.data ? equiposQuery.data?.opciones.tipo_empleado ?? [] : []).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => toggleMulti(tipoSel, setTipoSel, t)}
-                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                    tipoSel.includes(t) ? "bg-espol-blue text-white border-espol-blue" : "border-slate-300 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Nivel académico máximo</p>
-            <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
-              {(equiposQuery.data?.opciones.nivel_academico ?? []).map((n) => (
-                <button
-                  key={n}
-                  onClick={() => toggleMulti(nivelSel, setNivelSel, n)}
-                  className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                    nivelSel.includes(n) ? "bg-espol-blue text-white border-espol-blue" : "border-slate-300 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Mínimo de publicaciones</p>
-            <input
-              type="number"
-              min={0}
-              value={minPub}
-              onChange={(e) => setMinPub(Number(e.target.value))}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
-            />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Mínimo de años de experiencia administrativa</p>
-            <input
-              type="number"
-              min={0}
-              step={0.5}
-              value={minExpAdmin}
-              onChange={(e) => setMinExpAdmin(Number(e.target.value))}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
-            />
-          </div>
-        </div>
-
-        <div className="border-t border-slate-100 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-            Estabilidad de carrera (opcional)
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">
-                Rotación máxima permitida (0 = sin límite)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={0.1}
-                value={maxTurbulencia}
-                onChange={(e) => setMaxTurbulencia(Number(e.target.value))}
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Valores bajos (cerca de 0) = pocos cambios de cargo cortos/erráticos. Personas con
-                un solo cargo en toda su carrera cuentan como rotación 0.
-              </p>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">
-                Mínimo de años de permanencia típica por cargo
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={minDuracionMediana}
-                onChange={(e) => setMinDuracionMediana(Number(e.target.value))}
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Duración mediana de sus cargos en ESPOL — filtra directamente cargos cortos (ej. 2-3
-                meses) al exigir un mínimo, sin depender del texto de búsqueda.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <FiltrosEstructurados
+        state={{
+          vigencia, setVigencia, tipoSel, setTipoSel,
+          nivelSel, setNivelSel, minPub, setMinPub, minExpAdmin, setMinExpAdmin,
+          maxIrregularidad, setMaxIrregularidad, minDuracionMediana, setMinDuracionMediana,
+          minCargosEspol, setMinCargosEspol, maxCargosEspol, setMaxCargosEspol,
+        }}
+        opcionesTipo={equiposQuery.data?.opciones.tipo_empleado ?? []}
+        opcionesNivel={equiposQuery.data?.opciones.nivel_academico ?? []}
+      />
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         {equiposQuery.isLoading ? (
@@ -226,7 +109,7 @@ export default function EquiposPage() {
                 Descargar candidatos (CSV)
               </button>
             </div>
-            <DataTable columns={METRICAS_CLAVE_COLUMNS} rows={equiposQuery.data.candidatos} maxHeight={500} />
+            <DataTable columns={COLUMNAS_CANDIDATOS} rows={equiposQuery.data.candidatos} maxHeight={500} />
           </>
         )}
       </div>

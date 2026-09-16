@@ -1,27 +1,47 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { buscarSemantica } from "../api/client";
+import { Link } from "react-router-dom";
+import { buscarAvanzada, getEquipos } from "../api/client";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import PersonaFicha from "../components/PersonaFicha";
-import type { BusquedaResultado } from "../api/types";
+import FiltrosEstructurados from "../components/FiltrosEstructurados";
+import type { ResultadoAvanzado } from "../api/client";
 
 const EJEMPLOS = [
-  "experiencia en aprendizaje automático aplicado a imágenes médicas",
-  "persona que haya trabajado fuera de ESPOL en el extranjero",
+  "conocimientos y experiencia en talento humano",
+  "experiencia en gestión de proyectos de vinculación con la comunidad",
   "administración de servidores y redes",
-  "gestión de proyectos de vinculación con la comunidad",
 ];
 
-const VIGENCIA_OPTS = ["Cualquiera", "Solo vigentes", "Solo no vigentes"];
-
-export default function SemanticaPage() {
+export default function BusquedaCombinadaPage() {
   const [consulta, setConsulta] = useState("");
   const [topN, setTopN] = useState(10);
+  const [seleccion, setSeleccion] = useState<ResultadoAvanzado | null>(null);
+
   const [vigencia, setVigencia] = useState("Cualquiera");
-  const [seleccion, setSeleccion] = useState<BusquedaResultado | null>(null);
+  const [tipoSel, setTipoSel] = useState<string[]>([]);
+  const [nivelSel, setNivelSel] = useState<string[]>([]);
+  const [minPub, setMinPub] = useState(0);
+  const [minExpAdmin, setMinExpAdmin] = useState(0);
+  const [maxIrregularidad, setMaxIrregularidad] = useState(0);
+  const [minDuracionMediana, setMinDuracionMediana] = useState(0);
+  const [minCargosEspol, setMinCargosEspol] = useState(0);
+  const [maxCargosEspol, setMaxCargosEspol] = useState(0);
+
+  // Reutiliza /api/equipos solo para poblar las opciones de tipo/nivel del bloque de
+  // filtros (mismas listas que "Formar equipos") — no dispara la búsqueda combinada.
+  const opcionesQuery = useQuery({ queryKey: ["equipos-opciones"], queryFn: () => getEquipos({
+    vigencia: "Cualquiera", tipo: [], nivel: [], minPublicaciones: 0,
+    minExpAdmin: 0, maxIrregularidad: 0, minDuracionMediana: 0, minCargosEspol: 0, maxCargosEspol: 0,
+  }) });
 
   const mutation = useMutation({
-    mutationFn: () => buscarSemantica(consulta, topN, vigencia),
+    mutationFn: () =>
+      buscarAvanzada({
+        consulta, topN, vigencia, tipo: tipoSel, nivel: nivelSel,
+        minPublicaciones: minPub, minExpAdmin, maxIrregularidad, minDuracionMediana,
+        minCargosEspol, maxCargosEspol,
+      }),
     onSuccess: () => setSeleccion(null),
   });
 
@@ -33,11 +53,14 @@ export default function SemanticaPage() {
   return (
     <div className="space-y-5">
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <h3 className="font-semibold text-sm mb-1 text-slate-700">Describe lo que buscas, en tus propias palabras</h3>
+        <h3 className="font-semibold text-sm mb-1 text-slate-700">
+          Describe el conocimiento o experiencia que buscas, y aplica filtros estructurados
+        </h3>
         <p className="text-sm text-slate-500 mb-2">
-          A diferencia de "Buscar persona" (que requiere saber su nombre), aquí describes
-          libremente el conocimiento, experiencia o trayectoria que necesitas y el sistema encuentra a
-          las personas más afines por significado, no por palabras clave exactas.
+          A diferencia de "Búsqueda semántica" (solo texto) o "Formar equipos" (solo filtros), aquí
+          se combinan ambos: primero se filtra por los criterios de abajo (cargos, permanencia,
+          vigencia...) y luego se ordena por afinidad al texto SOLO entre quienes cumplen esos
+          filtros — nadie que cumple los filtros se pierde por baja afinidad de texto.
         </p>
         <p className="text-xs text-slate-400 mb-3">
           Ejemplos: {EJEMPLOS.map((e) => `"${e}"`).join(" · ")}
@@ -49,7 +72,7 @@ export default function SemanticaPage() {
             value={consulta}
             onChange={(e) => setConsulta(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && buscar()}
-            placeholder="Ej: persona con experiencia en gestión de proyectos de vinculación con la comunidad"
+            placeholder="Ej: conocimientos y experiencia en talento humano"
             className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
           />
           <button
@@ -71,31 +94,29 @@ export default function SemanticaPage() {
             className="w-40"
           />
           <span className="text-xs text-slate-600">{topN}</span>
-
-          <label className="text-xs font-semibold text-slate-500 ml-4">Vigencia</label>
-          <select
-            value={vigencia}
-            onChange={(e) => setVigencia(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-espol-blue"
-          >
-            {VIGENCIA_OPTS.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
+      <FiltrosEstructurados
+        state={{
+          vigencia, setVigencia, tipoSel, setTipoSel,
+          nivelSel, setNivelSel, minPub, setMinPub, minExpAdmin, setMinExpAdmin,
+          maxIrregularidad, setMaxIrregularidad, minDuracionMediana, setMinDuracionMediana,
+          minCargosEspol, setMinCargosEspol, maxCargosEspol, setMaxCargosEspol,
+        }}
+        opcionesTipo={opcionesQuery.data?.opciones.tipo_empleado ?? []}
+        opcionesNivel={opcionesQuery.data?.opciones.nivel_academico ?? []}
+      />
+
       {mutation.isPending && <LoadingBlock label="Buscando..." />}
-      {mutation.isError && <ErrorBlock message="No se pudo completar la búsqueda semántica." />}
+      {mutation.isError && <ErrorBlock message="No se pudo completar la búsqueda." />}
 
       {mutation.data && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <p className="text-xs text-slate-500 mb-3">
-            Ordenado del más al menos afín a tu consulta (no se muestra un puntaje de similitud: no es
-            un porcentaje de relevancia interpretable de forma absoluta). Selecciona una fila para ver
-            el perfil profesional completo.
+            {mutation.data.n_candidatos_tras_filtros} personas cumplen los filtros estructurados —
+            ordenadas del más al menos afín a tu consulta. Selecciona una fila para ver el perfil
+            profesional completo.
           </p>
           <div className="overflow-auto rounded-lg border border-slate-200">
             <table className="min-w-full text-sm">
@@ -104,8 +125,9 @@ export default function SemanticaPage() {
                   <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">#</th>
                   <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Nombre</th>
                   <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Vigente</th>
-                  <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Tipo empleado</th>
                   <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Cargo actual</th>
+                  <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Cargos ESPOL</th>
+                  <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Permanencia típica (años)</th>
                   <th className="text-left px-3 py-2 font-medium text-xs uppercase tracking-wide text-slate-500">Por qué coincide</th>
                 </tr>
               </thead>
@@ -119,7 +141,17 @@ export default function SemanticaPage() {
                     }`}
                   >
                     <td className="px-3 py-2">{r.rango}</td>
-                    <td className="px-3 py-2 font-medium">{r.nombre_completo}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <Link
+                        to={`/persona/${r.id_persona}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-espol-blue hover:text-espol-navy transition-colors"
+                      >
+                        {r.nombre_completo}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2">
                       <span
                         className={`px-2 py-0.5 text-xs rounded-full ${
@@ -129,11 +161,20 @@ export default function SemanticaPage() {
                         {r.vigente ? "Vigente" : "No vigente"}
                       </span>
                     </td>
-                    <td className="px-3 py-2">{r.tipo_empleado ?? "No vigente"}</td>
                     <td className="px-3 py-2">{r.cargo_actual ?? "No vigente"}</td>
+                    <td className="px-3 py-2">{r.n_cargos_espol ?? "-"}</td>
+                    <td className="px-3 py-2">{r.duracion_mediana_tramo_anios ?? "-"}</td>
                     <td className="px-3 py-2 text-slate-500 max-w-md">{r.evidencia}</td>
                   </tr>
                 ))}
+                {mutation.data.resultados.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-4 text-center text-slate-400">
+                      Nadie cumple los filtros estructurados aplicados — prueba con criterios menos
+                      estrictos.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -73,8 +73,31 @@ def df_to_records(df: pd.DataFrame) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
+def get_nombres_persona() -> pd.Series:
+    """Mapeo IDPERSONA -> nombre completo, cargado directo del CSV crudo (data/raw/
+    historialaboralpersonas.csv) porque ningún archivo procesado del pipeline (features,
+    embeddings, personas_dashboard.csv) incluye nombre - el pipeline trabaja
+    intencionalmente con IDPERSONA como identificador. Pedido explícito del usuario
+    2026-09-16 ("ya no uses idpersona, usa los nombres que estan en hstorial laboral"),
+    confirmando que quiere nombres visibles en todo el dashboard (no anonimizado) -
+    IDPERSONA se mantiene internamente (URLs, joins) pero no se muestra en ninguna
+    pantalla. Cacheado en memoria, igual patrón que los demás get_*() de este archivo."""
+    df = pd.read_csv(
+        ROOT / "data" / "raw" / "historialaboralpersonas.csv",
+        usecols=["IDPERSONA", "NOMBRES", "APELLIDOS"], low_memory=False,
+    ).drop_duplicates("IDPERSONA")
+    nombre = (df["NOMBRES"].str.strip() + " " + df["APELLIDOS"].str.strip()).str.title()
+    return pd.Series(nombre.values, index=df["IDPERSONA"], name="NOMBRE_COMPLETO")
+
+
+@lru_cache(maxsize=1)
 def get_personas() -> pd.DataFrame:
-    return lib.load_personas_dashboard()
+    personas = lib.load_personas_dashboard()
+    nombres = get_nombres_persona()
+    personas["NOMBRE_COMPLETO"] = personas["IDPERSONA"].map(nombres).fillna(
+        "Persona " + personas["IDPERSONA"].astype(str)
+    )
+    return personas
 
 
 @lru_cache(maxsize=1)
@@ -100,6 +123,20 @@ def get_pca() -> pd.DataFrame:
 @lru_cache(maxsize=1)
 def get_eventos_trayectoria() -> pd.DataFrame:
     return lib.load_eventos_trayectoria()
+
+
+@lru_cache(maxsize=1)
+def get_tramos_rol() -> pd.DataFrame:
+    """Tramos de rol (`pc.construir_tramos_rol`): rachas de contratos consecutivos del
+    mismo cargo ya colapsadas en una sola fila, con roles administrativos/docentes
+    paralelos ya resueltos correctamente (DEC-011: solo se colapsa un rol corto solapado
+    si hay una subrogación real detrás, si no ambos quedan como tramos separados). Solo
+    cubre ADMINISTRATIVO/DOCENTE (excluye por diseño los contratos puntuales/"servicios
+    profesionales" sin tipo, ver `CATEGORIAS_PUNTUALES` en `_preprocesamiento_comun.py`)."""
+    df = pd.read_csv(ROOT / "data" / "trayectorias" / "tramos_rol.csv", low_memory=False)
+    for c in ("TRAMO_INICIO", "TRAMO_FIN"):
+        df[c] = pd.to_datetime(df[c], format="mixed", errors="coerce")
+    return df
 
 
 @lru_cache(maxsize=1)
@@ -195,7 +232,7 @@ def perfil_detalle(cluster_id: int):
     conteo_cargos = cargos_cluster.value_counts().reset_index()
     conteo_cargos.columns = ["CARGO_ACTUAL", "N_PERSONAS"]
 
-    muestra_cols = ["IDPERSONA"] + [c for c in lib.METRICAS_CLAVE if c in personas.columns]
+    muestra_cols = ["IDPERSONA", "NOMBRE_COMPLETO"] + [c for c in lib.METRICAS_CLAVE if c in personas.columns]
     muestra = personas[personas["CLUSTER"] == cluster_id][muestra_cols].head(50)
 
     return {
@@ -217,7 +254,7 @@ def perfil_detalle(cluster_id: int):
 def mapa(tipo: str = Query("Todos"), perfiles: str = Query(""), modo: str = Query("rama")):
     personas = get_personas()
     pca_df = get_pca().merge(
-        personas[["IDPERSONA", "CLUSTER", "PERFIL_NOMBRE", "TIPOEMPLEADO_ACTUAL_DESC",
+        personas[["IDPERSONA", "NOMBRE_COMPLETO", "CLUSTER", "PERFIL_NOMBRE", "TIPOEMPLEADO_ACTUAL_DESC",
                   "VIGENTE_MOSTRAR", "CARGO_ACTUAL", "ES_MIXTO", "CARGOS_ACTUALES_MIXTO",
                   "CATEGORIAS_ACTUALES_MIXTO"]],
         on="IDPERSONA", how="inner",
@@ -268,10 +305,203 @@ def mapa(tipo: str = Query("Todos"), perfiles: str = Query(""), modo: str = Quer
     return {"total_modelo": int(len(personas)), "n_mostrados": len(puntos), "puntos": puntos, "modo": modo}
 
 
+_TOLERANCIA_RECESO_ACADEMICO = pd.Timedelta(days=90)
+
+
+def _contar_tramos_por_categoria(tramos_persona: pd.DataFrame, tipo_empleado: str) -> int:
+    """Cuenta cargos de un tipo (ADMINISTRATIVO/DOCENTE) fusionando tramos consecutivos de
+    la MISMA CATEGORIA_CARGO separados por un receso corto (<= 90 días) - cubre el patrón
+    real de contratación docente por periodo académico/semestral, donde `tramos_rol.csv`
+    trae un tramo nuevo por cada semestre aunque sea el mismo cargo repetido con brechas de
+    vacaciones entre medio (ej. persona 3519: 22 tramos "PROFESOR PREGRADO" 2001-2011, uno
+    por semestre). Sin esto, alguien con muchos años de docencia por periodo se ve con una
+    cifra de "cargos" artificialmente alta comparado con alguien de contrato anual
+    continuo. Se agrupa por CATEGORIA_CARGO (no por CARGO_TRAMO textual) porque es la
+    identidad estable de "mismo tipo de cargo" ya usada en el resto del pipeline."""
+    del_tipo = tramos_persona[tramos_persona["TIPOEMPLEADO_DESC"] == tipo_empleado]
+    n_tramos = 0
+    for _, grupo in del_tipo.groupby("CATEGORIA_CARGO"):
+        grupo = grupo.sort_values("TRAMO_INICIO")
+        fin_anterior = None
+        for _, fila in grupo.iterrows():
+            inicio = fila["TRAMO_INICIO"]
+            if fin_anterior is None or pd.isna(fin_anterior) or (inicio - fin_anterior) > _TOLERANCIA_RECESO_ACADEMICO:
+                n_tramos += 1
+            fin_actual = fila["TRAMO_FIN"]
+            fin_anterior = fin_actual if pd.notna(fin_actual) else fin_anterior
+    return n_tramos
+
+
+def _contar_tramos_servicios_profesionales(eventos_sin_tipo: pd.DataFrame) -> list[dict]:
+    """Cuenta tramos entre los eventos CARGO_ESPOL* sin TIPOEMPLEADO ("servicios
+    profesionales"/contratos puntuales, excluidos de tramos_rol.csv por diseño): dos
+    eventos con la MISMA DESCRIPCION se fusionan en un solo tramo si el segundo empieza
+    dentro de un receso corto (<= 90 días, mismo criterio que `_contar_tramos_por_categoria`
+    para el patrón de contrato puntual por periodo/semestre) de terminar el primero - no se
+    cruzan con los tramos administrativo/docente de tramos_rol.csv (ese cruce causaba
+    fusiones indebidas con cargos paralelos reales, ver persona 3519: un cargo docente
+    vigente desde 2011 o un rol de Director solapado con "servicios profesionales" sueltos
+    no deben absorberlos)."""
+    n_tramos = 0
+    descripciones: list[str] = []
+    for descripcion, grupo in eventos_sin_tipo.groupby("DESCRIPCION"):
+        grupo = grupo.sort_values("FECHA_INICIO")
+        fin_anterior = None
+        for _, fila in grupo.iterrows():
+            inicio = fila["FECHA_INICIO"]
+            if fin_anterior is None or pd.isna(fin_anterior) or (inicio - fin_anterior) > _TOLERANCIA_RECESO_ACADEMICO:
+                n_tramos += 1
+                descripciones.append(descripcion)
+            fin_actual = fila["FECHA_FIN"]
+            fin_anterior = fin_actual if pd.notna(fin_actual) else fin_anterior
+    if not n_tramos:
+        return []
+    if len(set(descripciones)) == 1:
+        return [{"etiqueta": descripciones[0], "cantidad": n_tramos}]
+    return [{"etiqueta": "Otros", "cantidad": n_tramos}]
+
+
+def _resumen_cargos_espol(id_persona: int, eventos_persona: pd.DataFrame) -> dict:
+    """Cuenta cargos en ESPOL por TRAMO, no por evento/contrato individual - alguien que
+    renueva el mismo contrato varias veces (incluyendo renovaciones separadas por un receso
+    académico corto, ej. vacaciones entre semestres) cuenta como 1 cargo, no como N.
+    Administrativo/Docente parten de `tramos_rol.csv` (que ya maneja roles paralelos
+    correctamente, DEC-011) pero se fusionan aquí por CATEGORIA_CARGO + receso corto; los
+    contratos "servicios profesionales" sin tipo se cuentan aparte con el mismo criterio de
+    receso, sin cruzarse con los tramos con tipo."""
+    tramos = get_tramos_rol()
+    tramos_persona = tramos[tramos["IDPERSONA"] == id_persona]
+    n_administrativo = _contar_tramos_por_categoria(tramos_persona, "ADMINISTRATIVO")
+    n_docente = _contar_tramos_por_categoria(tramos_persona, "DOCENTE")
+
+    cargos_espol = eventos_persona[eventos_persona["TIPO_EVENTO"].str.startswith("CARGO_ESPOL")]
+    sin_tipo = cargos_espol[cargos_espol["TIPOEMPLEADO"].isna()]
+    otras_categorias = _contar_tramos_servicios_profesionales(sin_tipo) if len(sin_tipo) else []
+
+    total = n_administrativo + n_docente + sum(o["cantidad"] for o in otras_categorias)
+    return {
+        "total": total,
+        "administrativo": n_administrativo,
+        "docente": n_docente,
+        "otras_categorias": otras_categorias,
+    }
+
+
+def _contar_tramos_vectorizado(df: pd.DataFrame, clave_grupo: list[str], col_inicio: str, col_fin: str) -> pd.Series:
+    """Misma regla de fusión que `_contar_tramos_por_categoria`/
+    `_contar_tramos_servicios_profesionales` (nuevo tramo si el gap con el evento anterior
+    del mismo grupo supera `_TOLERANCIA_RECESO_ACADEMICO`), pero vectorizada con
+    operaciones de pandas sobre TODAS las personas a la vez en vez de un loop Python +
+    `.iterrows()` por persona - con ~5000 personas, el overhead fijo de pandas por llamada
+    de función hacía que la versión con loop tardara ~9s incluso después de evitar el
+    escaneo lineal repetido (reportado por el usuario 2026-09-16: "empieza filtrando y se
+    demora, ni siquiera he colocado los filtros"). `clave_grupo` debe incluir "IDPERSONA"
+    como primer elemento. Devuelve una Serie IDPERSONA -> cantidad de tramos."""
+    d = df.sort_values(clave_grupo + [col_inicio]).copy()
+    # ffill antes de cummax: un tramo abierto (FECHA_FIN/TRAMO_FIN nulo) debe mantener el
+    # ÚLTIMO fin conocido dentro de su grupo, no "resetear" el máximo a NaT (que es lo que
+    # haría cummax solo) - misma semántica que `fin_anterior` en la versión con loop, que
+    # nunca sobrescribe con un valor nulo.
+    fin_maximo_visto = d.groupby(clave_grupo)[col_fin].apply(lambda s: s.ffill().cummax()).reset_index(drop=True)
+    fin_maximo_visto.index = d.index
+    fin_anterior = fin_maximo_visto.groupby([d[c] for c in clave_grupo]).shift(1)
+    primero_del_grupo = d.groupby(clave_grupo).cumcount().eq(0)
+    gap = d[col_inicio] - fin_anterior
+    nuevo_tramo = primero_del_grupo | gap.isna() | (gap > _TOLERANCIA_RECESO_ACADEMICO)
+    return d.assign(_NUEVO=nuevo_tramo).groupby("IDPERSONA")["_NUEVO"].sum()
+
+
+@lru_cache(maxsize=1)
+def get_n_cargos_espol_por_persona() -> pd.Series:
+    """Precalcula `resumen_cargos_espol()["total"]` para TODAS las personas (no solo
+    on-demand como en la ficha individual), para poder usarlo como filtro en "Formar
+    equipos" - ej. "mínimo de cargos distintos en ESPOL" para la necesidad real de
+    selección de Director de Talento Humano (2026-09-16): cantidad de cargos + estabilidad,
+    no solo un puesto único en toda la carrera. Cacheado en memoria (igual patrón que los
+    demás get_*() de este archivo) - vive solo en el backend del dashboard, no se
+    materializa en personas_dashboard.csv ni en el pipeline de notebooks. Usa la versión
+    vectorizada (`_contar_tramos_vectorizado`), no el loop por persona de
+    `_contar_tramos_por_categoria`/`_contar_tramos_servicios_profesionales` (esas dos
+    siguen usándose para la ficha individual, donde el volumen es 1 persona y sí hace
+    falta el desglose admin/docente/etiquetas de "Otros")."""
+    tramos = get_tramos_rol()
+    eventos = get_eventos_trayectoria()
+    cargos_espol_todos = eventos[eventos["TIPO_EVENTO"].str.startswith("CARGO_ESPOL")]
+    sin_tipo_todos = cargos_espol_todos[cargos_espol_todos["TIPOEMPLEADO"].isna()]
+
+    n_admin_docente = _contar_tramos_vectorizado(
+        tramos, ["IDPERSONA", "TIPOEMPLEADO_DESC", "CATEGORIA_CARGO"], "TRAMO_INICIO", "TRAMO_FIN"
+    )
+    n_sin_tipo = _contar_tramos_vectorizado(
+        sin_tipo_todos, ["IDPERSONA", "DESCRIPCION"], "FECHA_INICIO", "FECHA_FIN"
+    )
+    return n_admin_docente.add(n_sin_tipo, fill_value=0).rename("N_CARGOS_ESPOL")
+
+
+def _duraciones_tramos_fusionados(df: pd.DataFrame, clave_grupo: list[str], col_inicio: str, col_fin: str) -> pd.DataFrame:
+    """Como `_contar_tramos_vectorizado`, pero en vez de solo contar, calcula la duración
+    (en años) de cada tramo YA FUSIONADO por receso académico - necesario para
+    DURACION_MEDIANA_TRAMO_ANIOS/TURBULENCIA_TRAMOS, que hoy vienen del pipeline de
+    notebooks calculadas sobre tramos_rol.csv SIN esa fusión: alguien con muchos tramos
+    cortos por periodo académico (ej. persona 3519, 22 tramos semestrales de "Profesor
+    Pregrado" 2001-2011) sale con una mediana artificialmente baja (0.36 años) aunque en
+    la práctica esos tramos son un solo cargo continuo - la misma distorsión que ya se
+    corrigió para N_CARGOS_ESPOL, aplicada aquí a duración en vez de conteo. Devuelve un
+    DataFrame con IDPERSONA y DURACION_ANIOS, una fila por tramo fusionado."""
+    d = df.sort_values(clave_grupo + [col_inicio]).copy()
+    fin_maximo_visto = d.groupby(clave_grupo)[col_fin].apply(lambda s: s.ffill().cummax()).reset_index(drop=True)
+    fin_maximo_visto.index = d.index
+    fin_anterior = fin_maximo_visto.groupby([d[c] for c in clave_grupo]).shift(1)
+    primero_del_grupo = d.groupby(clave_grupo).cumcount().eq(0)
+    gap = d[col_inicio] - fin_anterior
+    nuevo_tramo = primero_del_grupo | gap.isna() | (gap > _TOLERANCIA_RECESO_ACADEMICO)
+    d["_ID_TRAMO"] = nuevo_tramo.cumsum()
+
+    hoy = pd.Timestamp.today()
+    d["_FIN_EFECTIVO"] = d[col_fin].fillna(hoy)
+    agregado = d.groupby("_ID_TRAMO").agg(
+        IDPERSONA=("IDPERSONA", "first"),
+        INICIO=(col_inicio, "min"),
+        FIN=("_FIN_EFECTIVO", "max"),
+    )
+    agregado["DURACION_ANIOS"] = (agregado["FIN"] - agregado["INICIO"]).dt.days / 365.25
+    return agregado[["IDPERSONA", "DURACION_ANIOS"]]
+
+
+@lru_cache(maxsize=1)
+def get_estabilidad_carrera_por_persona() -> pd.DataFrame:
+    """Recalcula DURACION_MEDIANA_TRAMO_ANIOS y TURBULENCIA_TRAMOS sobre tramos YA
+    FUSIONADOS por receso académico (ver `_duraciones_tramos_fusionados`), para usar en
+    los filtros de "Formar equipos"/"Búsqueda combinada" en vez de las columnas originales
+    de `personas_dashboard.csv` (que vienen del pipeline de notebooks sin esa fusión) -
+    pedido explícito del usuario 2026-09-16 tras detectar que 3519 (Director de Talento
+    Humano y Profesor) quedaba excluida de un filtro "mínimo 1 año de permanencia típica"
+    por una mediana de 0.36 años calculada sobre sus 22 tramos semestrales sin fusionar.
+    Solo cubre tramos con TIPOEMPLEADO (ADMINISTRATIVO/DOCENTE, de tramos_rol.csv) - los
+    contratos "servicios profesionales" sin tipo no formaban parte del cálculo original
+    tampoco. Cacheado en memoria, igual patrón que get_n_cargos_espol_por_persona."""
+    tramos = get_tramos_rol()
+    duraciones = _duraciones_tramos_fusionados(
+        tramos, ["IDPERSONA", "TIPOEMPLEADO_DESC", "CATEGORIA_CARGO"], "TRAMO_INICIO", "TRAMO_FIN"
+    )
+    resumen = duraciones.groupby("IDPERSONA")["DURACION_ANIOS"].agg(
+        DURACION_MEDIANA_TRAMO_ANIOS_FUSIONADA="median",
+        _MEDIA="mean",
+        _STD="std",
+        _N="size",
+    )
+    turbulencia = (resumen["_STD"] / resumen["_MEDIA"]).where(resumen["_N"] >= 2)
+    resumen["TURBULENCIA_TRAMOS_FUSIONADA"] = turbulencia
+    return resumen[["DURACION_MEDIANA_TRAMO_ANIOS_FUSIONADA", "TURBULENCIA_TRAMOS_FUSIONADA"]]
+
+
 @app.get("/api/personas")
 def listar_personas():
-    personas = get_personas()
-    return {"ids": personas["IDPERSONA"].sort_values().tolist()}
+    personas = get_personas().sort_values("NOMBRE_COMPLETO")
+    return {
+        "ids": personas["IDPERSONA"].tolist(),
+        "personas": df_to_records(personas[["IDPERSONA", "NOMBRE_COMPLETO"]]),
+    }
 
 
 @app.get("/api/personas/{id_persona}")
@@ -292,6 +522,9 @@ def persona_ficha(id_persona: int):
 
     eventos = get_eventos_trayectoria()
     eventos_persona = eventos[eventos["IDPERSONA"] == id_persona].sort_values("FECHA_INICIO").copy()
+
+    resumen_cargos_espol = _resumen_cargos_espol(id_persona, eventos_persona)
+
     eventos_persona["FECHA_INICIO"] = eventos_persona["FECHA_INICIO"].dt.strftime("%Y-%m-%d")
     eventos_persona["FECHA_FIN"] = eventos_persona["FECHA_FIN"].dt.strftime("%Y-%m-%d")
 
@@ -346,6 +579,7 @@ def persona_ficha(id_persona: int):
         "tiene_perfil": bool(tiene_perfil),
         "motivo_sin_perfil": motivo,
         "eventos_trayectoria": df_to_records(eventos_persona),
+        "resumen_cargos_espol": resumen_cargos_espol,
         "secciones": secciones,
         "radar": radar,
         "cluster_descripcion": cluster_descripcion,
@@ -356,22 +590,35 @@ def persona_ficha(id_persona: int):
     }
 
 
-@app.get("/api/equipos")
-def equipos(
-    perfiles: str = Query(""),
-    vigencia: str = Query("Cualquiera"),
-    tipo: str = Query(""),
-    nivel: str = Query(""),
-    min_publicaciones: int = Query(0),
-    min_exp_admin: float = Query(0.0),
-    max_turbulencia: float = Query(0.0),
-    min_duracion_mediana: float = Query(0.0),
-):
-    personas = get_personas()
-    resultado = personas
-    if perfiles:
-        ids_perfiles = {int(p) for p in perfiles.split(",") if p}
-        resultado = resultado[resultado["CLUSTER"].isin(ids_perfiles)]
+def _aplicar_filtros_estructurados(
+    personas: pd.DataFrame,
+    vigencia: str = "Cualquiera",
+    tipo: str = "",
+    nivel: str = "",
+    min_publicaciones: int = 0,
+    min_exp_admin: float = 0.0,
+    max_turbulencia: float = 0.0,
+    min_duracion_mediana: float = 0.0,
+    min_cargos_espol: int = 0,
+    max_cargos_espol: int = 0,
+) -> pd.DataFrame:
+    """Filtros estructurados compartidos entre "Formar equipos" (`/api/equipos`) y
+    "Búsqueda combinada" (`/api/buscar_avanzado`) - misma lógica, un solo lugar para
+    mantenerla consistente entre ambas pantallas. Sin filtro de perfil/cluster (quitado a
+    pedido explícito del usuario 2026-09-16, "no quiero que en formacion de comisiones ni
+    en el tab combinado se filtre por perfiles")."""
+    resultado = personas.merge(
+        get_n_cargos_espol_por_persona().rename("N_CARGOS_ESPOL"),
+        left_on="IDPERSONA", right_index=True, how="left",
+    ).merge(
+        get_estabilidad_carrera_por_persona(), left_on="IDPERSONA", right_index=True, how="left",
+    )
+    # DURACION_MEDIANA_TRAMO_ANIOS/TURBULENCIA_TRAMOS originales (de personas_dashboard.csv,
+    # calculadas sobre tramos SIN fusionar) se reemplazan por la versión fusionada por
+    # receso académico en toda la tabla, no solo en el filtro - así "Formar equipos" y la
+    # ficha muestran el mismo criterio consistente. Ver `get_estabilidad_carrera_por_persona`.
+    resultado["DURACION_MEDIANA_TRAMO_ANIOS"] = resultado["DURACION_MEDIANA_TRAMO_ANIOS_FUSIONADA"]
+    resultado["TURBULENCIA_TRAMOS"] = resultado["TURBULENCIA_TRAMOS_FUSIONADA"]
     if vigencia == "Solo vigentes":
         resultado = resultado[resultado["VIGENTE_MOSTRAR"] == True]  # noqa: E712
     elif vigencia == "Solo no vigentes":
@@ -387,15 +634,45 @@ def equipos(
     if min_exp_admin:
         resultado = resultado[resultado["ANIOS_EXPERIENCIA_ADMINISTRATIVO"].fillna(0) >= min_exp_admin]
     if max_turbulencia:
-        # TURBULENCIA_TRAMOS es NA real para personas con un solo tramo (ver DEC-027) - no
-        # hay rotacion que medir con un unico tramo, asi que por definicion son personas
-        # MUY estables y no deben excluirse por tener el dato nulo (fillna con 0, el minimo
-        # posible de turbulencia, no con un valor alto que las descartaria injustamente).
+        # TURBULENCIA_TRAMOS es NA real para personas con un solo tramo fusionado (ver
+        # DEC-027) - no hay rotacion que medir con un unico tramo, asi que por definicion
+        # son personas MUY estables y no deben excluirse por tener el dato nulo (fillna con
+        # 0, el minimo posible de turbulencia, no con un valor alto que las descartaria
+        # injustamente).
         resultado = resultado[resultado["TURBULENCIA_TRAMOS"].fillna(0) <= max_turbulencia]
     if min_duracion_mediana:
         resultado = resultado[resultado["DURACION_MEDIANA_TRAMO_ANIOS"].fillna(0) >= min_duracion_mediana]
+    if min_cargos_espol:
+        resultado = resultado[resultado["N_CARGOS_ESPOL"].fillna(0) >= min_cargos_espol]
+    if max_cargos_espol:
+        # Alguien con un solo cargo en toda su carrera (N_CARGOS_ESPOL=1) siempre pasa
+        # cualquier máximo >= 1, tal como pidió el usuario (2026-09-16): "personas con un
+        # cargo pasan cualquier filtro" - de "cuántas veces se mueve de cargo".
+        resultado = resultado[resultado["N_CARGOS_ESPOL"].fillna(0) <= max_cargos_espol]
+    return resultado
 
-    cols_out = ["IDPERSONA"] + [c for c in lib.METRICAS_CLAVE if c in resultado.columns]
+
+@app.get("/api/equipos")
+def equipos(
+    vigencia: str = Query("Cualquiera"),
+    tipo: str = Query(""),
+    nivel: str = Query(""),
+    min_publicaciones: int = Query(0),
+    min_exp_admin: float = Query(0.0),
+    max_turbulencia: float = Query(0.0),
+    min_duracion_mediana: float = Query(0.0),
+    min_cargos_espol: int = Query(0),
+    max_cargos_espol: int = Query(0),
+):
+    personas = get_personas()
+    resultado = _aplicar_filtros_estructurados(
+        personas, vigencia, tipo, nivel, min_publicaciones, min_exp_admin,
+        max_turbulencia, min_duracion_mediana, min_cargos_espol, max_cargos_espol,
+    )
+
+    cols_out = ["IDPERSONA", "NOMBRE_COMPLETO"] + [c for c in lib.METRICAS_CLAVE if c in resultado.columns]
+    if "N_CARGOS_ESPOL" not in cols_out:
+        cols_out.append("N_CARGOS_ESPOL")
     return {
         "n_resultados": int(len(resultado)),
         "candidatos": df_to_records(resultado[cols_out]),
@@ -445,6 +722,7 @@ def buscar(body: BusquedaSemantica):
         resultados.append({
             "rango": rango,
             "id_persona": idp,
+            "nombre_completo": p.get("NOMBRE_COMPLETO"),
             "cluster": None if pd.isna(p.get("CLUSTER")) else int(p.get("CLUSTER")),
             "perfil_nombre": p.get("PERFIL_NOMBRE") if pd.notna(p.get("PERFIL_NOMBRE")) else None,
             "vigente": vigente,
@@ -456,6 +734,79 @@ def buscar(body: BusquedaSemantica):
             break
 
     return {"consulta": body.consulta, "resultados": resultados}
+
+
+class BusquedaAvanzada(BaseModel):
+    consulta: str
+    top_n: int = 10
+    vigencia: str = "Cualquiera"
+    tipo: str = ""
+    nivel: str = ""
+    min_publicaciones: int = 0
+    min_exp_admin: float = 0.0
+    max_turbulencia: float = 0.0
+    min_duracion_mediana: float = 0.0
+    min_cargos_espol: int = 0
+    max_cargos_espol: int = 0
+
+
+@app.post("/api/buscar_avanzado")
+def buscar_avanzado(body: BusquedaAvanzada):
+    """Combina texto libre (afinidad semántica) con los mismos filtros estructurados de
+    "Formar equipos" - pedido explícito del usuario 2026-09-16 ("con esos filtros ahora si
+    puedo buscar por transicion pero no alguien que tenga conocimeintos en th"): los
+    filtros numéricos por sí solos no capturan conocimiento/experiencia temática, y la
+    búsqueda semántica por sí sola no puede aplicar umbrales duros (DEC-019, similitud
+    coseno sin punto de corte interpretable) - se necesitan ambos a la vez, no uno u otro.
+    Orden de combinación (confirmado por el usuario): primero se filtra la población
+    completa por los criterios estructurales, y SOLO DESPUÉS se ordena por afinidad al
+    texto dentro de quienes ya pasaron el filtro - así nadie que cumple los filtros se
+    pierde por haber quedado fuera de un top-N calculado antes de filtrar."""
+    if not body.consulta.strip():
+        raise HTTPException(400, "Consulta vacía")
+
+    personas = get_personas()
+    filtrados = _aplicar_filtros_estructurados(
+        personas, body.vigencia, body.tipo, body.nivel, body.min_publicaciones,
+        body.min_exp_admin, body.max_turbulencia, body.min_duracion_mediana,
+        body.min_cargos_espol, body.max_cargos_espol,
+    )
+    ids_filtrados = set(filtrados["IDPERSONA"])
+
+    ids, matrix = get_embeddings()
+    modelo = get_text_model()
+    q = modelo.encode([f"query: {body.consulta}"], normalize_embeddings=True)[0]
+    sims = matrix @ q
+    orden = np.argsort(-sims)
+
+    documentos = get_documento_semantico().set_index("IDPERSONA")["DOCUMENTO_TEXTO"]
+    personas_por_id = filtrados.set_index("IDPERSONA")
+
+    resultados = []
+    rango = 0
+    for idx in orden:
+        idp = int(ids[idx])
+        if idp not in ids_filtrados:
+            continue
+        p = personas_por_id.loc[idp]
+        rango += 1
+        resultados.append({
+            "rango": rango,
+            "id_persona": idp,
+            "nombre_completo": p.get("NOMBRE_COMPLETO"),
+            "cluster": None if pd.isna(p.get("CLUSTER")) else int(p.get("CLUSTER")),
+            "perfil_nombre": p.get("PERFIL_NOMBRE") if pd.notna(p.get("PERFIL_NOMBRE")) else None,
+            "vigente": bool(p.get("VIGENTE_MOSTRAR")) if pd.notna(p.get("VIGENTE_MOSTRAR")) else False,
+            "tipo_empleado": p.get("TIPOEMPLEADO_ACTUAL_DESC") if pd.notna(p.get("TIPOEMPLEADO_ACTUAL_DESC")) else None,
+            "cargo_actual": p.get("CARGO_ACTUAL") if pd.notna(p.get("CARGO_ACTUAL")) else None,
+            "n_cargos_espol": None if pd.isna(p.get("N_CARGOS_ESPOL")) else float(p.get("N_CARGOS_ESPOL")),
+            "duracion_mediana_tramo_anios": None if pd.isna(p.get("DURACION_MEDIANA_TRAMO_ANIOS")) else float(p.get("DURACION_MEDIANA_TRAMO_ANIOS")),
+            "evidencia": _mejor_evidencia(body.consulta, documentos.get(idp, "")),
+        })
+        if rango >= body.top_n:
+            break
+
+    return {"consulta": body.consulta, "n_candidatos_tras_filtros": int(len(ids_filtrados)), "resultados": resultados}
 
 
 @app.get("/api/health")

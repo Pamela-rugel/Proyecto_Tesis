@@ -1,5 +1,5 @@
 export const METRICAS_CLAVE_COLUMNS = [
-  { key: "IDPERSONA", label: "IDPERSONA" },
+  { key: "NOMBRE_COMPLETO", label: "Nombre" },
   { key: "TIPOEMPLEADO_ACTUAL_DESC", label: "Tipo de empleado" },
   { key: "CARGO_ACTUAL", label: "Cargo actual" },
   { key: "UNIDAD_ACTUAL_NOMBRE", label: "Unidad actual" },
@@ -16,6 +16,7 @@ export const METRICAS_CLAVE_COLUMNS = [
   { key: "NUM_IDIOMAS", label: "Idiomas" },
   { key: "NUM_RECONOCIMIENTOS", label: "Reconocimientos" },
   { key: "DURACION_MEDIANA_TRAMO_ANIOS", label: "Duración mediana por cargo (años)" },
-  { key: "TURBULENCIA_TRAMOS", label: "Rotación (turbulencia)" },
+  { key: "TURBULENCIA_TRAMOS", label: "Regularidad duración de cargos" },
   { key: "ANIOS_EN_UNIDAD_ACTUAL", label: "Años en unidad actual" },
+  { key: "N_CARGOS_ESPOL", label: "Cargos distintos en ESPOL" },
 ];

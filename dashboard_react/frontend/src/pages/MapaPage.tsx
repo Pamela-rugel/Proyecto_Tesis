@@ -4,6 +4,7 @@ import Plot from "react-plotly.js";
 import { getMapa, getResumen } from "../api/client";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import PersonaFicha from "../components/PersonaFicha";
+import { colorPorTexto } from "../lib/color";
 
 const TIPOS = ["Todos", "Solo Administrativo", "Solo Docente", "Solo Mixto"];
 
@@ -24,19 +25,6 @@ function normalizar(texto: string): string {
     .toLowerCase();
 }
 
-// Color determinístico por texto (mismo criterio que color_por_texto en el backend,
-// dashboard_react/backend/main.py: hash estable -> hue HSL, saturación/luminosidad fijas)
-// — replicado en el frontend para las combinaciones "Mixto (A + B)", que no vienen del
-// backend (se detectan en el cliente, ver combinacionesMixtoDetectadas).
-function colorPorTexto(texto: string): string {
-  let hash = 0;
-  for (let i = 0; i < texto.length; i++) {
-    hash = (hash * 31 + texto.charCodeAt(i)) >>> 0;
-  }
-  const hue = hash % 360;
-  return `hsl(${hue}, 45%, 55%)`;
-}
-
 export default function MapaPage() {
   const [tipoFiltro, setTipoFiltro] = useState("Todos");
   const [perfilesFiltro, setPerfilesFiltro] = useState<number[]>([]);
@@ -44,9 +32,9 @@ export default function MapaPage() {
   const [terminosCargo, setTerminosCargo] = useState<string[]>([]);
   const [terminoCargoActual, setTerminoCargoActual] = useState("");
   const [idSel, setIdSel] = useState<number | null>(null);
-  const [idBuscado, setIdBuscado] = useState("");
+  const [nombreBuscado, setNombreBuscado] = useState("");
   const [idResaltado, setIdResaltado] = useState<number | null>(null);
-  const [avisoNoEncontrado, setAvisoNoEncontrado] = useState(false);
+  const [nombreResaltado, setNombreResaltado] = useState("");
 
   const resumenQuery = useQuery({ queryKey: ["resumen"], queryFn: getResumen });
   const mapaQuery = useQuery({
@@ -88,6 +76,19 @@ export default function MapaPage() {
     // vez de ocultar coincidencias reales.
     return cargosDisponibles.filter((c) => normalizar(c).includes(q));
   }, [cargosDisponibles, terminoCargoActual]);
+
+  const sugerenciasNombre = useMemo(() => {
+    const q = normalizar(nombreBuscado.trim());
+    if (!q || !mapaQuery.data) return [];
+    const vistos = new Set<number>();
+    const resultado: { idPersona: number; nombre: string }[] = [];
+    for (const p of mapaQuery.data.puntos) {
+      if (vistos.has(p.IDPERSONA) || !normalizar(p.NOMBRE_COMPLETO).includes(q)) continue;
+      vistos.add(p.IDPERSONA);
+      resultado.push({ idPersona: p.IDPERSONA, nombre: p.NOMBRE_COMPLETO });
+    }
+    return resultado.slice(0, 20);
+  }, [mapaQuery.data, nombreBuscado]);
 
   // Combinaciones "Mixto (A + B)" reales: para cada par de cargos seleccionados, busca si
   // existe al menos una persona Mixto cuyos cargos concurrentes sean EXACTAMENTE esos dos
@@ -173,10 +174,10 @@ export default function MapaPage() {
           marker: { color, size: 6, opacity: idResaltado !== null ? 0.25 : 0.9, line: { width: 0 } },
           customdata: pts.map((p) => [
             p.IDPERSONA, p.CARGO_ACTUAL ?? "-", p.TIPOEMPLEADO_ACTUAL_DESC,
-            p.VIGENTE_MOSTRAR ? "Si" : "No", p.CARGOS_ACTUALES_MIXTO ?? "",
+            p.VIGENTE_MOSTRAR ? "Si" : "No", p.CARGOS_ACTUALES_MIXTO ?? "", p.NOMBRE_COMPLETO,
           ]),
           hovertemplate:
-            "ID %{customdata[0]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}" +
+            "%{customdata[5]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}" +
             (nombre.startsWith("Mixto") ? "<br>Cargos concurrentes: %{customdata[4]}" : "") +
             "<extra></extra>",
         }));
@@ -189,8 +190,8 @@ export default function MapaPage() {
           x: resto.map((p) => p.PC1),
           y: resto.map((p) => p.PC2),
           marker: { color: "#94A3B8", size: 6, opacity: idResaltado !== null ? 0.1 : 0.12, line: { width: 0 } },
-          customdata: resto.map((p) => [p.IDPERSONA, p.CARGO_ACTUAL ?? "-", p.TIPOEMPLEADO_ACTUAL_DESC, p.VIGENTE_MOSTRAR ? "Si" : "No", ""]),
-          hovertemplate: "ID %{customdata[0]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}<extra></extra>",
+          customdata: resto.map((p) => [p.IDPERSONA, p.CARGO_ACTUAL ?? "-", p.TIPOEMPLEADO_ACTUAL_DESC, p.VIGENTE_MOSTRAR ? "Si" : "No", "", p.NOMBRE_COMPLETO]),
+          hovertemplate: "%{customdata[5]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}<extra></extra>",
         });
       }
     } else {
@@ -213,10 +214,10 @@ export default function MapaPage() {
             marker: { color: pts[0].COLOR, size: 6, opacity: idResaltado === null ? 0.7 : 0.25, line: { width: 0 } },
             customdata: pts.map((p) => [
               p.IDPERSONA, p.CARGO_ACTUAL ?? "-", p.TIPOEMPLEADO_ACTUAL_DESC,
-              p.VIGENTE_MOSTRAR ? "Si" : "No", p.CARGOS_ACTUALES_MIXTO ?? "",
+              p.VIGENTE_MOSTRAR ? "Si" : "No", p.CARGOS_ACTUALES_MIXTO ?? "", p.NOMBRE_COMPLETO,
             ]),
             hovertemplate:
-              "ID %{customdata[0]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}" +
+              "%{customdata[5]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}" +
               (esMixto ? "<br>Cargos concurrentes: %{customdata[4]}" : "") +
               "<extra></extra>",
           };
@@ -227,7 +228,7 @@ export default function MapaPage() {
       base.push({
         type: "scattergl" as const,
         mode: "markers" as const,
-        name: `Persona ${puntoResaltado.IDPERSONA}`,
+        name: puntoResaltado.NOMBRE_COMPLETO,
         x: [puntoResaltado.PC1],
         y: [puntoResaltado.PC2],
         marker: {
@@ -238,10 +239,10 @@ export default function MapaPage() {
         },
         customdata: [[
           puntoResaltado.IDPERSONA, puntoResaltado.CARGO_ACTUAL ?? "-", puntoResaltado.TIPOEMPLEADO_ACTUAL_DESC,
-          puntoResaltado.VIGENTE_MOSTRAR ? "Si" : "No", puntoResaltado.CARGOS_ACTUALES_MIXTO ?? "",
+          puntoResaltado.VIGENTE_MOSTRAR ? "Si" : "No", puntoResaltado.CARGOS_ACTUALES_MIXTO ?? "", puntoResaltado.NOMBRE_COMPLETO,
         ]],
         hovertemplate:
-          "ID %{customdata[0]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}" +
+          "%{customdata[5]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}" +
           (puntoResaltado.ES_MIXTO ? "<br>Cargos concurrentes: %{customdata[4]}" : "") +
           "<extra></extra>",
       });
@@ -265,26 +266,16 @@ export default function MapaPage() {
     setPerfilesFiltro([]);
   }
 
-  function buscarPersonaEnMapa() {
-    const id = Number(idBuscado.trim());
-    if (!idBuscado.trim() || Number.isNaN(id)) {
-      setAvisoNoEncontrado(false);
-      return;
-    }
-    const existe = mapaQuery.data?.puntos.some((p) => p.IDPERSONA === id);
-    if (existe) {
-      setIdResaltado(id);
-      setAvisoNoEncontrado(false);
-    } else {
-      setIdResaltado(null);
-      setAvisoNoEncontrado(true);
-    }
+  function resaltarPersona(idPersona: number, nombre: string) {
+    setIdResaltado(idPersona);
+    setNombreResaltado(nombre);
+    setNombreBuscado("");
   }
 
   function limpiarResaltado() {
-    setIdBuscado("");
+    setNombreBuscado("");
     setIdResaltado(null);
-    setAvisoNoEncontrado(false);
+    setNombreResaltado("");
   }
 
   const hayFiltrosActivos =
@@ -474,20 +465,29 @@ export default function MapaPage() {
             Ubicar una persona en el mapa
           </p>
           <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={idBuscado}
-              onChange={(e) => setIdBuscado(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && buscarPersonaEnMapa()}
-              placeholder="IDPERSONA"
-              className="w-40 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
-            />
-            <button
-              onClick={buscarPersonaEnMapa}
-              className="px-3 py-1.5 text-sm rounded-md bg-espol-navy text-white hover:bg-espol-blue transition-colors"
-            >
-              Ubicar
-            </button>
+            <div className="relative w-64">
+              <input
+                type="text"
+                value={nombreBuscado}
+                onChange={(e) => setNombreBuscado(e.target.value)}
+                placeholder="Escribe un nombre..."
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
+              />
+              {sugerenciasNombre.length > 0 && (
+                <ul className="absolute z-10 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                  {sugerenciasNombre.map((s) => (
+                    <li key={s.idPersona}>
+                      <button
+                        onClick={() => resaltarPersona(s.idPersona, s.nombre)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-espol-blue hover:text-white transition-colors"
+                      >
+                        {s.nombre}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             {idResaltado !== null && (
               <button
                 onClick={limpiarResaltado}
@@ -497,15 +497,9 @@ export default function MapaPage() {
               </button>
             )}
           </div>
-          {avisoNoEncontrado && (
-            <p className="text-xs text-amber-600 mt-1.5">
-              Esa persona no aparece en el mapa (puede estar fuera de los filtros activos, o sin
-              perfil/cluster asignado).
-            </p>
-          )}
-          {idResaltado !== null && !avisoNoEncontrado && (
+          {idResaltado !== null && (
             <p className="text-xs text-slate-500 mt-1.5">
-              Persona {idResaltado} resaltada en rojo — el resto de puntos se mantiene visible.
+              {nombreResaltado} resaltada en rojo — el resto de puntos se mantiene visible.
             </p>
           )}
         </div>

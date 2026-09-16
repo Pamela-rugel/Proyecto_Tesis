@@ -181,8 +181,8 @@ export default function PersonaFicha({
   if (isLoading) return <LoadingBlock label="Cargando ficha de persona..." />;
   if (error || !data) return <ErrorBlock message="No se pudo cargar la ficha de esta persona." />;
 
-  const { persona, tiene_perfil, motivo_sin_perfil, eventos_trayectoria, secciones, radar, cluster_descripcion,
-    corpus_muestra, n_textos, color_tipo_evento, etiqueta_tipo_evento } = data;
+  const { persona, tiene_perfil, motivo_sin_perfil, eventos_trayectoria, resumen_cargos_espol, secciones, radar,
+    cluster_descripcion, corpus_muestra, n_textos, etiqueta_tipo_evento } = data;
 
   const seccionesDisponibles = Object.keys(SECCIONES_CONFIG).filter((k) => secciones[k]);
   if (secciones.investigacion) seccionesDisponibles.push("investigacion");
@@ -196,7 +196,7 @@ export default function PersonaFicha({
     <div className="space-y-5">
       <div>
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold tracking-tight">Persona {idPersona}</h3>
+          <h3 className="text-lg font-semibold tracking-tight">{fmtVal(persona.NOMBRE_COMPLETO)}</h3>
           {persona.VIGENTE_MOSTRAR ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
               Vigente
@@ -253,11 +253,33 @@ export default function PersonaFicha({
         </div>
       </div>
 
+      <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+        <p className="text-xs font-medium text-slate-500 mb-2">
+          Cargos en ESPOL ({resumen_cargos_espol.total} en total — no incluye experiencia externa;
+          renovaciones consecutivas del mismo cargo cuentan como uno solo)
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-espol-navy/10 text-espol-navy">
+            Administrativo: {resumen_cargos_espol.administrativo}
+          </span>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-espol-blue/10 text-espol-blue">
+            Docente: {resumen_cargos_espol.docente}
+          </span>
+          {resumen_cargos_espol.otras_categorias.map((o) => (
+            <span
+              key={o.etiqueta}
+              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-200 text-slate-600"
+            >
+              {o.etiqueta}: {o.cantidad}
+            </span>
+          ))}
+        </div>
+      </div>
+
       <div>
         <h4 className="font-semibold text-sm mb-2 text-slate-700">Trayectoria</h4>
         <TimelineTrayectoria
           eventos={eventos_trayectoria}
-          colorTipoEvento={color_tipo_evento}
           etiquetaTipoEvento={etiqueta_tipo_evento}
         />
       </div>

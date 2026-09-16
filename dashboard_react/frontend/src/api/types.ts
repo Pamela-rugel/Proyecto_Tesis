@@ -44,6 +44,7 @@ export interface PerfilDetalle {
 
 export interface MapaPunto {
   IDPERSONA: number;
+  NOMBRE_COMPLETO: string;
   PC1: number;
   PC2: number;
   CLUSTER: number;
@@ -79,11 +80,19 @@ export interface RadarData {
   valores: number[];
 }
 
+export interface ResumenCargosEspol {
+  total: number;
+  administrativo: number;
+  docente: number;
+  otras_categorias: { etiqueta: string; cantidad: number }[];
+}
+
 export interface PersonaFichaResponse {
   persona: Record<string, unknown>;
   tiene_perfil: boolean;
   motivo_sin_perfil: string | null;
   eventos_trayectoria: EventoTrayectoria[];
+  resumen_cargos_espol: ResumenCargosEspol;
   secciones: Record<string, unknown>;
   radar: RadarData | null;
   cluster_descripcion: string | null;
@@ -105,6 +114,7 @@ export interface EquiposResponse {
 export interface BusquedaResultado {
   rango: number;
   id_persona: number;
+  nombre_completo: string;
   cluster: number | null;
   perfil_nombre: string | null;
   vigente: boolean;
