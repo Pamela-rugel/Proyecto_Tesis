@@ -43,8 +43,13 @@ export async function getPersonas(): Promise<PersonaResumen[]> {
   return data.personas;
 }
 
-export async function getPersonaFicha(idPersona: number): Promise<PersonaFichaResponse> {
-  const { data } = await api.get<PersonaFichaResponse>(`/api/personas/${idPersona}`);
+export async function getPersonaFicha(
+  idPersona: number,
+  origenBusqueda?: "trayectoria",
+): Promise<PersonaFichaResponse> {
+  const { data } = await api.get<PersonaFichaResponse>(`/api/personas/${idPersona}`, {
+    params: origenBusqueda ? { origen_busqueda: origenBusqueda } : {},
+  });
   return data;
 }
 
@@ -113,6 +118,26 @@ export interface BusquedaAvanzadaResponse {
 
 export async function buscarAvanzada(p: BusquedaAvanzadaParams): Promise<BusquedaAvanzadaResponse> {
   const { data } = await api.post<BusquedaAvanzadaResponse>("/api/buscar_avanzado", {
+    consulta: p.consulta,
+    top_n: p.topN,
+    vigencia: p.vigencia,
+    tipo: p.tipo.join(","),
+    nivel: p.nivel.join(","),
+    min_publicaciones: p.minPublicaciones,
+    min_exp_admin: p.minExpAdmin,
+    max_turbulencia: p.maxIrregularidad,
+    min_duracion_mediana: p.minDuracionMediana,
+    min_cargos_espol: p.minCargosEspol,
+    max_cargos_espol: p.maxCargosEspol,
+  });
+  return data;
+}
+
+// Igual que buscarAvanzada, pero ordena por afinidad al embedding de TRAYECTORIA (cargo/
+// unidad/permanencia/estabilidad/movilidad) en vez del embedding general - capa
+// exploratoria para comparar ambos rankings, ver /api/buscar_avanzado_trayectoria.
+export async function buscarAvanzadaTrayectoria(p: BusquedaAvanzadaParams): Promise<BusquedaAvanzadaResponse> {
+  const { data } = await api.post<BusquedaAvanzadaResponse>("/api/buscar_avanzado_trayectoria", {
     consulta: p.consulta,
     top_n: p.topN,
     vigencia: p.vigencia,

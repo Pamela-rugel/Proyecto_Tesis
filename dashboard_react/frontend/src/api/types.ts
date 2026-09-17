@@ -87,6 +87,53 @@ export interface ResumenCargosEspol {
   otras_categorias: { etiqueta: string; cantidad: number }[];
 }
 
+export interface PeriodoParaleloRef {
+  cargo: string | null;
+  unidad: string | null;
+  inicio: string | null;
+  fin: string | null;
+}
+
+export interface PeriodoTrayectoria {
+  cargo: string | null;
+  unidad: string | null;
+  inicio: string | null;
+  fin: string | null;
+  vigente: boolean;
+  duracion_anios: number | null;
+  es_significativo: boolean;
+  es_paralelo: boolean;
+  paralelo_con: PeriodoParaleloRef[];
+}
+
+export interface CambioSecuencia {
+  fecha: string | null;
+  de: string | null;
+  a: string | null;
+}
+
+export interface EvidenciaTrayectoria {
+  disponible: boolean;
+  motivo?: string;
+  documento_texto?: string;
+  variables?: {
+    n_cargos_total: number;
+    n_cargos_significativos: number;
+    n_cambios_cargo: number;
+    n_cambios_unidad: number;
+    duracion_media_cargo_anios: number | null;
+    duracion_mediana_cargo_anios: number | null;
+    duracion_max_cargo_anios: number | null;
+    n_unidades_total: number;
+    n_unidades_significativas: number;
+    proporcion_cargos_significativos: number | null;
+  };
+  periodos?: PeriodoTrayectoria[];
+  secuencia_cambios_cargo?: CambioSecuencia[];
+  secuencia_cambios_unidad?: CambioSecuencia[];
+  tiene_cargos_paralelos?: boolean;
+}
+
 export interface PersonaFichaResponse {
   persona: Record<string, unknown>;
   tiene_perfil: boolean;
@@ -98,6 +145,7 @@ export interface PersonaFichaResponse {
   cluster_descripcion: string | null;
   corpus_muestra: { FUENTE: string; TEXTO: string }[];
   n_textos: number;
+  evidencia_trayectoria: EvidenciaTrayectoria | null;
   color_tipo_evento: Record<string, string>;
   etiqueta_tipo_evento: Record<string, string>;
 }

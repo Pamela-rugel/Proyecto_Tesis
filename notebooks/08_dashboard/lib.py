@@ -259,8 +259,24 @@ def feature_label_map() -> dict:
 
 
 def load_embeddings() -> tuple[np.ndarray, np.ndarray]:
-    """Devuelve (ids, matriz normalizada L2) desde embeddings_personas.csv."""
+    """Devuelve (ids, matriz normalizada L2) desde embeddings_personas.csv (embedding
+    GENERAL: trayectoria + formacion + docencia + investigacion + etc., ver DEC-014)."""
     df = _read_csv(EMBEDDINGS_DIR / "embeddings_personas.csv")
+    ids = df["IDPERSONA"].to_numpy()
+    matrix = df.drop(columns=["IDPERSONA"]).to_numpy(dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return ids, matrix / norms
+
+
+def load_embeddings_trayectoria() -> tuple[np.ndarray, np.ndarray]:
+    """Devuelve (ids, matriz normalizada L2) desde embeddings_trayectoria.csv - capa nueva
+    e INDEPENDIENTE del embedding general (ver notebooks/07_embeddings/07_embeddings.ipynb,
+    seccion 7): calculada solo sobre el documento de trayectoria (cargo/unidad/permanencia/
+    estabilidad/movilidad), no sobre formacion/docencia/investigacion/etc. Cubre solo a las
+    personas con al menos un tramo de rol estructural (ver CATEGORIAS_PUNTUALES/DEC-004),
+    un subconjunto mas chico que `load_embeddings()`."""
+    df = _read_csv(EMBEDDINGS_DIR / "embeddings_trayectoria.csv")
     ids = df["IDPERSONA"].to_numpy()
     matrix = df.drop(columns=["IDPERSONA"]).to_numpy(dtype=np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -351,6 +367,27 @@ def load_eventos_trayectoria() -> pd.DataFrame:
 
 def load_documento_semantico() -> pd.DataFrame:
     return _read_csv(EMBEDDINGS_DIR / "documento_semantico_persona.csv")
+
+
+def load_documento_trayectoria() -> pd.DataFrame:
+    """Documento de TRAYECTORIA por persona (DOCUMENTO_TRAYECTORIA_TEXTO + variables
+    objetivas: N_CARGOS_TOTAL, N_CARGOS_SIGNIFICATIVOS, N_CAMBIOS_CARGO, N_CAMBIOS_UNIDAD,
+    duraciones, unidades), usado como fuente de "evidencia" de la busqueda de trayectoria -
+    analogo a `load_documento_semantico()` pero con el texto de cargo/unidad/permanencia/
+    movilidad en vez del documento general."""
+    return _read_csv(EMBEDDINGS_DIR / "documento_trayectoria_persona.csv")
+
+
+def load_tramos_cargo_unidad() -> pd.DataFrame:
+    """Tramos consolidados por cargo+unidad (una fila por tramo, con deteccion de cargos
+    paralelos) - ver notebooks/07_embeddings/_embeddings_comun.py::
+    construir_tramos_cargo_unidad_persona. Misma consolidacion (cargo+unidad+receso corto)
+    que ya usa el documento de trayectoria, expuesta como tabla para la ficha del
+    dashboard."""
+    df = _read_csv(EMBEDDINGS_DIR / "tramos_cargo_unidad_persona.csv")
+    for c in ("INICIO", "FIN"):
+        df[c] = pd.to_datetime(df[c], format="mixed", errors="coerce")
+    return df
 
 
 @lru_cache(maxsize=1)

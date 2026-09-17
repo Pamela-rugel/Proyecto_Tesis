@@ -154,6 +154,21 @@ def get_embeddings():
     return lib.load_embeddings()
 
 
+@lru_cache(maxsize=1)
+def get_embeddings_trayectoria():
+    return lib.load_embeddings_trayectoria()
+
+
+@lru_cache(maxsize=1)
+def get_documento_trayectoria() -> pd.DataFrame:
+    return lib.load_documento_trayectoria()
+
+
+@lru_cache(maxsize=1)
+def get_tramos_cargo_unidad() -> pd.DataFrame:
+    return lib.load_tramos_cargo_unidad()
+
+
 _text_model = None
 
 
@@ -504,8 +519,104 @@ def listar_personas():
     }
 
 
+def _evidencia_trayectoria(id_persona: int) -> dict:
+    """Arma el bloque de evidencia para la ficha de persona cuando la coincidencia viene de
+    la busqueda por TRAYECTORIA (`origen_busqueda=trayectoria`) - a diferencia del corpus
+    generico (`corpus_muestra`, pensado para el embedding general de temas/conocimiento),
+    aqui se muestra: el documento de trayectoria completo (el mismo texto que se embebio,
+    ver notebooks/07_embeddings/07_embeddings.ipynb seccion 7), sus variables objetivas
+    (N_CARGOS_TOTAL, N_CAMBIOS_CARGO, N_CAMBIOS_UNIDAD, duraciones...), y el detalle de
+    periodos/cargos/unidades consolidados con marca de cargo paralelo (ES_PARALELO) cuando
+    la persona ejercio 2+ cargos en unidades distintas al mismo tiempo."""
+    documentos_trayectoria = get_documento_trayectoria()
+    fila_doc = documentos_trayectoria[documentos_trayectoria["IDPERSONA"] == id_persona]
+    if fila_doc.empty:
+        return {"disponible": False, "motivo": "Sin tramo de rol estructural (sin embedding de trayectoria)."}
+
+    d = fila_doc.iloc[0]
+    variables = {
+        "n_cargos_total": int(d["N_CARGOS_TOTAL"]),
+        "n_cargos_significativos": int(d["N_CARGOS_SIGNIFICATIVOS"]),
+        "n_cambios_cargo": int(d["N_CAMBIOS_CARGO"]),
+        "n_cambios_unidad": int(d["N_CAMBIOS_UNIDAD"]),
+        "duracion_media_cargo_anios": None if pd.isna(d["DURACION_MEDIA_CARGO_ANIOS"]) else float(d["DURACION_MEDIA_CARGO_ANIOS"]),
+        "duracion_mediana_cargo_anios": None if pd.isna(d["DURACION_MEDIANA_CARGO_ANIOS"]) else float(d["DURACION_MEDIANA_CARGO_ANIOS"]),
+        "duracion_max_cargo_anios": None if pd.isna(d["DURACION_MAX_CARGO_ANIOS"]) else float(d["DURACION_MAX_CARGO_ANIOS"]),
+        "n_unidades_total": int(d["N_UNIDADES_TOTAL"]),
+        "n_unidades_significativas": int(d["N_UNIDADES_SIGNIFICATIVAS"]),
+        "proporcion_cargos_significativos": None if pd.isna(d["PROPORCION_CARGOS_SIGNIFICATIVOS"]) else float(d["PROPORCION_CARGOS_SIGNIFICATIVOS"]),
+    }
+
+    tramos = get_tramos_cargo_unidad()
+    tramos_persona = tramos[tramos["IDPERSONA"] == id_persona].sort_values("INICIO").reset_index(drop=True)
+
+    # Fin efectivo (hoy si vigente) para comparar solapes de fecha - mismo criterio que
+    # `construir_tramos_cargo_unidad_persona` en _embeddings_comun.py, recalculado aqui
+    # (no en el notebook) porque solo se necesita el DETALLE de con qué otro periodo se
+    # solapa cada uno, no el booleano ES_PARALELO en si (ese ya viene calculado).
+    hoy = pd.Timestamp.today().normalize()
+    fin_cmp = tramos_persona["FIN"].fillna(hoy)
+
+    periodos = []
+    for i, r in tramos_persona.iterrows():
+        paralelo_con = []
+        if bool(r["ES_PARALELO"]):
+            for j, r2 in tramos_persona.iterrows():
+                if i == j:
+                    continue
+                solapan = r["INICIO"] <= fin_cmp.iloc[j] and r2["INICIO"] <= fin_cmp.iloc[i]
+                if solapan:
+                    paralelo_con.append({
+                        "cargo": r2["CARGO"] or None,
+                        "unidad": r2["UNIDAD"] or None,
+                        "inicio": r2["INICIO"].strftime("%Y-%m-%d") if pd.notna(r2["INICIO"]) else None,
+                        "fin": r2["FIN"].strftime("%Y-%m-%d") if pd.notna(r2["FIN"]) else None,
+                    })
+
+        periodos.append({
+            "cargo": r["CARGO"] or None,
+            "unidad": r["UNIDAD"] or None,
+            "inicio": r["INICIO"].strftime("%Y-%m-%d") if pd.notna(r["INICIO"]) else None,
+            "fin": r["FIN"].strftime("%Y-%m-%d") if pd.notna(r["FIN"]) else None,
+            "vigente": bool(pd.isna(r["FIN"])),
+            "duracion_anios": None if pd.isna(r["DURACION_ANIOS"]) else float(r["DURACION_ANIOS"]),
+            "es_significativo": bool(r["ES_SIGNIFICATIVO"]),
+            "es_paralelo": bool(r["ES_PARALELO"]),
+            "paralelo_con": paralelo_con,
+        })
+
+    # Secuencia de cambios de CARGO (ignora cambios que son solo de unidad) y de UNIDAD
+    # (ignora cambios que son solo de cargo), cada una como lista de transiciones
+    # consecutivas EN ORDEN CRONOLOGICO - separado del conteo simple N_CAMBIOS_CARGO/
+    # N_CAMBIOS_UNIDAD (ya en `variables`) para responder "como fue la secuencia" con
+    # fechas y valores concretos, no solo el numero.
+    secuencia_cambios_cargo = []
+    secuencia_cambios_unidad = []
+    for i in range(1, len(tramos_persona)):
+        anterior, actual = tramos_persona.iloc[i - 1], tramos_persona.iloc[i]
+        fecha_cambio = actual["INICIO"].strftime("%Y-%m-%d") if pd.notna(actual["INICIO"]) else None
+        if anterior["CARGO"] != actual["CARGO"]:
+            secuencia_cambios_cargo.append({
+                "fecha": fecha_cambio, "de": anterior["CARGO"] or None, "a": actual["CARGO"] or None,
+            })
+        if anterior["UNIDAD"] != actual["UNIDAD"]:
+            secuencia_cambios_unidad.append({
+                "fecha": fecha_cambio, "de": anterior["UNIDAD"] or None, "a": actual["UNIDAD"] or None,
+            })
+
+    return {
+        "disponible": True,
+        "documento_texto": d["DOCUMENTO_TRAYECTORIA_TEXTO"],
+        "variables": variables,
+        "periodos": periodos,
+        "secuencia_cambios_cargo": secuencia_cambios_cargo,
+        "secuencia_cambios_unidad": secuencia_cambios_unidad,
+        "tiene_cargos_paralelos": any(p["es_paralelo"] for p in periodos),
+    }
+
+
 @app.get("/api/personas/{id_persona}")
-def persona_ficha(id_persona: int):
+def persona_ficha(id_persona: int, origen_busqueda: str = Query("")):
     personas = get_personas()
     fila = personas[personas["IDPERSONA"] == id_persona]
     if fila.empty:
@@ -572,6 +683,13 @@ def persona_ficha(id_persona: int):
         corpus = get_corpus()
         corpus_muestra = df_to_records(corpus[corpus["IDPERSONA"] == id_persona].head(10)[["FUENTE", "TEXTO"]])
 
+    # DEC (2026-09-16): "Por qué coincide" debe reflejar la fuente REAL que se comparo en
+    # la busqueda de origen, no siempre el corpus generico del embedding general - el
+    # frontend indica el origen via `origen_busqueda` (ver BusquedaTrayectoriaPage.tsx).
+    evidencia_trayectoria = None
+    if origen_busqueda == "trayectoria":
+        evidencia_trayectoria = _evidencia_trayectoria(id_persona)
+
     persona_dict = fila.replace({np.nan: None}).iloc[0].to_dict()
 
     return {
@@ -585,6 +703,7 @@ def persona_ficha(id_persona: int):
         "cluster_descripcion": cluster_descripcion,
         "corpus_muestra": corpus_muestra,
         "n_textos": int(n_textos) if pd.notna(n_textos) else 0,
+        "evidencia_trayectoria": evidencia_trayectoria,
         "color_tipo_evento": lib.COLOR_TIPO_EVENTO,
         "etiqueta_tipo_evento": lib.ETIQUETA_TIPO_EVENTO,
     }
@@ -802,6 +921,72 @@ def buscar_avanzado(body: BusquedaAvanzada):
             "n_cargos_espol": None if pd.isna(p.get("N_CARGOS_ESPOL")) else float(p.get("N_CARGOS_ESPOL")),
             "duracion_mediana_tramo_anios": None if pd.isna(p.get("DURACION_MEDIANA_TRAMO_ANIOS")) else float(p.get("DURACION_MEDIANA_TRAMO_ANIOS")),
             "evidencia": _mejor_evidencia(body.consulta, documentos.get(idp, "")),
+        })
+        if rango >= body.top_n:
+            break
+
+    return {"consulta": body.consulta, "n_candidatos_tras_filtros": int(len(ids_filtrados)), "resultados": resultados}
+
+
+@app.post("/api/buscar_avanzado_trayectoria")
+def buscar_avanzado_trayectoria(body: BusquedaAvanzada):
+    """Igual que `/api/buscar_avanzado` (mismos filtros estructurados, mismo cuerpo de
+    request `BusquedaAvanzada`, mismo orden de combinacion: primero se filtra la poblacion
+    por los criterios estructurales, y SOLO DESPUES se ordena por afinidad al texto dentro
+    de quienes ya pasaron el filtro), pero el ranking semantico usa el embedding de
+    TRAYECTORIA (`embeddings_trayectoria.csv`, ver notebooks/07_embeddings/07_embeddings.ipynb
+    seccion 7) en vez del embedding general - permite comparar como cambia el orden de
+    resultados cuando la afinidad se mide solo por patron de carrera (cargo/unidad/
+    permanencia/estabilidad/movilidad) en vez de por conocimiento/tema. Capa exploratoria
+    para comparacion, no reemplaza `/api/buscar_avanzado` ni se mezcla con el.
+
+    La "evidencia" de por que coincide usa `documento_trayectoria_persona.csv` (el texto de
+    trayectoria), no el documento semantico general - asi el fragmento resaltado es
+    coherente con lo que efectivamente se comparo semanticamente.
+
+    Solo cubre a las personas con embedding de trayectoria (las que tienen al menos un tramo
+    de rol estructural, ver CATEGORIAS_PUNTUALES/DEC-004) - un subconjunto mas chico que el
+    embedding general."""
+    if not body.consulta.strip():
+        raise HTTPException(400, "Consulta vacía")
+
+    personas = get_personas()
+    filtrados = _aplicar_filtros_estructurados(
+        personas, body.vigencia, body.tipo, body.nivel, body.min_publicaciones,
+        body.min_exp_admin, body.max_turbulencia, body.min_duracion_mediana,
+        body.min_cargos_espol, body.max_cargos_espol,
+    )
+    ids_filtrados = set(filtrados["IDPERSONA"])
+
+    ids, matrix = get_embeddings_trayectoria()
+    modelo = get_text_model()
+    q = modelo.encode([f"query: {body.consulta}"], normalize_embeddings=True)[0]
+    sims = matrix @ q
+    orden = np.argsort(-sims)
+
+    documentos_trayectoria = get_documento_trayectoria().set_index("IDPERSONA")["DOCUMENTO_TRAYECTORIA_TEXTO"]
+    personas_por_id = filtrados.set_index("IDPERSONA")
+
+    resultados = []
+    rango = 0
+    for idx in orden:
+        idp = int(ids[idx])
+        if idp not in ids_filtrados:
+            continue
+        p = personas_por_id.loc[idp]
+        rango += 1
+        resultados.append({
+            "rango": rango,
+            "id_persona": idp,
+            "nombre_completo": p.get("NOMBRE_COMPLETO"),
+            "cluster": None if pd.isna(p.get("CLUSTER")) else int(p.get("CLUSTER")),
+            "perfil_nombre": p.get("PERFIL_NOMBRE") if pd.notna(p.get("PERFIL_NOMBRE")) else None,
+            "vigente": bool(p.get("VIGENTE_MOSTRAR")) if pd.notna(p.get("VIGENTE_MOSTRAR")) else False,
+            "tipo_empleado": p.get("TIPOEMPLEADO_ACTUAL_DESC") if pd.notna(p.get("TIPOEMPLEADO_ACTUAL_DESC")) else None,
+            "cargo_actual": p.get("CARGO_ACTUAL") if pd.notna(p.get("CARGO_ACTUAL")) else None,
+            "n_cargos_espol": None if pd.isna(p.get("N_CARGOS_ESPOL")) else float(p.get("N_CARGOS_ESPOL")),
+            "duracion_mediana_tramo_anios": None if pd.isna(p.get("DURACION_MEDIANA_TRAMO_ANIOS")) else float(p.get("DURACION_MEDIANA_TRAMO_ANIOS")),
+            "evidencia": _mejor_evidencia(body.consulta, documentos_trayectoria.get(idp, "")),
         })
         if rango >= body.top_n:
             break

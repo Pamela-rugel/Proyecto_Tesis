@@ -1,0 +1,2 @@
+MODELO,DIMENSIONES,METODO,PREFIJO_DOCUMENTO,PREFIJO_CONSULTA_BUSQUEDA,MIN_MESES_CARGO_SIGNIFICATIVO,TOLERANCIA_RECESO_DIAS_CARGO,N_PERSONAS_CON_EMBEDDING,N_PERSONAS_SIN_EMBEDDING
+intfloat/multilingual-e5-base,768,"un embedding por persona, calculado sobre el documento de TRAYECTORIA PROFESIONAL (cargo/unidad/permanencia/estabilidad/movilidad) - independiente del embedding general (documento_semantico_persona.csv); no se concatenan ni se fusionan",passage: ,query: ,3,90,2476,719

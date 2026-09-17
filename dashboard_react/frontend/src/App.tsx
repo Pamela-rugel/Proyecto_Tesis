@@ -6,6 +6,7 @@ import EquiposPage from "./pages/EquiposPage";
 import SemanticaPage from "./pages/SemanticaPage";
 import PersonaPage from "./pages/PersonaPage";
 import BusquedaCombinadaPage from "./pages/BusquedaCombinadaPage";
+import BusquedaTrayectoriaPage from "./pages/BusquedaTrayectoriaPage";
 
 const TABS = [
   { to: "/resumen", label: "Resumen general y perfiles" },
@@ -14,6 +15,7 @@ const TABS = [
   { to: "/equipos", label: "Formar equipos / comisiones" },
   { to: "/semantica", label: "Búsqueda semántica" },
   { to: "/busqueda-combinada", label: "Búsqueda combinada" },
+  { to: "/busqueda-trayectoria", label: "Búsqueda por trayectoria" },
 ];
 
 export default function App() {
@@ -65,6 +67,7 @@ export default function App() {
           <Route path="/semantica" element={<SemanticaPage />} />
           <Route path="/persona/:id" element={<PersonaPage />} />
           <Route path="/busqueda-combinada" element={<BusquedaCombinadaPage />} />
+          <Route path="/busqueda-trayectoria" element={<BusquedaTrayectoriaPage />} />
         </Routes>
       </main>
 

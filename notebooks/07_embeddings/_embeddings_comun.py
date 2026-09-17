@@ -479,6 +479,468 @@ def _seccion_idiomas(poblacion: set[int]) -> pd.Series:
     return txt.apply(lambda t: f"Idiomas adicionales: {t}." if t else pd.NA).dropna().rename("IDIOMAS")
 
 
+# ---------------------------------------------------------------------------
+# Embedding de TRAYECTORIA PROFESIONAL (capa nueva, separada del embedding general)
+#
+# Arquitectura (ver docstring del modulo): reutiliza `tramos_rol.csv` (ya construido en
+# `04_trayectorias.ipynb` via `pc.construir_tramos_rol`) como fuente de cargo/unidad/fechas,
+# y el conocimiento estructurado existente (`personas_dashboard.csv` o
+# `dataset_personas_features.csv`) SOLO para el estado de vigencia (VIGENTE_ACTUALMENTE /
+# VIGENTE_TRAMO_ESTRUCTURAL) que ya se calcula alli - no se recalculan variables que ya
+# existen en otro lado del pipeline (turbulencia/entropia/duracion mediana de TODOS los
+# tramos siguen viviendo en `features_trayectoria_persona.csv`, ver DEC-027; esta seccion
+# calcula variables NUEVAS y mas finas: cargo+unidad consolidados, no solo CATEGORIA_CARGO).
+#
+# No se genera un CSV estructurado nuevo aparte: las variables objetivas de esta seccion
+# son un insumo intermedio para la PLANTILLA DE TEXTO (ver `construir_documento_trayectoria`
+# mas abajo), igual que el resto de secciones de este modulo no persisten sus tablas
+# intermedias por separado.
+# ---------------------------------------------------------------------------
+
+# Umbral configurable (pedido explicito): duracion minima, en meses, para que un cargo
+# cuente como "significativo" en los indicadores de trayectoria (N_CARGOS_SIGNIFICATIVOS,
+# estabilidad). Un cargo por debajo del umbral SIGUE apareciendo en la secuencia cronologica
+# del texto (no se elimina el tramo, ver `_secuencia_cronologica_texto`) - el umbral solo
+# afecta que variables lo cuentan como "cargo significativo" para permanencia/estabilidad.
+MIN_MESES_CARGO_SIGNIFICATIVO = 3
+
+# Tolerancia de receso (dias) para consolidar dos tramos consecutivos de MISMO cargo+unidad
+# separados por una brecha corta - mismo problema y mismo valor que ya corrige
+# `dashboard_react/backend/main.py::_TOLERANCIA_RECESO_ACADEMICO` (contratacion docente por
+# periodo academico/semestral: `tramos_rol.csv` solo fusiona por CATEGORIA_CARGO, asi que un
+# "Profesor Pregrado" con 22 tramos semestrales del mismo cargo/unidad separados por
+# vacaciones aparece como 22 cargos distintos si no se vuelve a consolidar aqui). Separado
+# como constante propia (no se importa del backend: ese modulo no es una dependencia de
+# `notebooks/07_embeddings`, mismo principio de separacion que el resto de este archivo).
+TOLERANCIA_RECESO_DIAS_CARGO = 90
+
+
+def _meses_entre(inicio, fin) -> float:
+    """Duracion en meses (30.44 dias/mes en promedio, igual criterio que dias/365.25 para
+    anios usado en el resto del proyecto) entre dos fechas. `fin` puede ser NaT (tramo
+    vigente): se usa hoy como fin efectivo, igual criterio que `construir_features_
+    historial_laboral`/`construir_features_trayectoria` en `_preprocesamiento_comun.py`."""
+    fin_efectivo = pd.Timestamp.today().normalize() if pd.isna(fin) else fin
+    return (fin_efectivo - inicio).days / 30.44
+
+
+def _consolidar_tramos_cargo_unidad(tramos_persona: pd.DataFrame) -> pd.DataFrame:
+    """Consolida, dentro de los tramos de UNA persona (ya ordenados por TRAMO_INICIO), los
+    que representan el MISMO cargo real: mismo `CARGO_TRAMO` (texto) + mismo `UNIDAD_TRAMO`
+    + continuos o separados solo por un receso corto (`TOLERANCIA_RECESO_DIAS_CARGO`).
+
+    Regla pedida explicitamente (evitar falsos "cambios de cargo" por particularidades del
+    dato, p.ej. contratacion por periodo academico/semestral):
+    - mismo cargo + misma unidad + consecutivos/solapados/receso corto -> se consolidan en
+      un solo tramo consolidado (mismo cargo, mismo periodo ampliado).
+    - mismo cargo + distinta unidad -> NO se consolidan: es un cambio de unidad (se cuenta
+      aparte en N_CAMBIOS_UNIDAD, nunca como cambio de cargo).
+    - distinto cargo (misma o distinta unidad) -> NO se consolidan: es un cambio de cargo.
+
+    Devuelve una fila por tramo CONSOLIDADO: CARGO, UNIDAD, INICIO, FIN (NaT si el ultimo
+    tramo del grupo sigue vigente), CATEGORIA_CARGO (del tramo mas reciente del grupo, para
+    conservar la categorizacion de rol), N_TRAMOS_ORIGEN (cuantos tramos de `tramos_rol.csv`
+    se fusionaron - diagnostico/trazabilidad, no se usa en el texto).
+
+    Rastreo en PARALELO por clave (cargo, unidad) - mismo patron que `pc.construir_tramos_
+    rol`/`pc.construir_tramos_unidad` (`abiertos_por_categoria`/`abiertos_por_unidad`): sin
+    esto, un cargo largo que se ve interrumpido en la linea cronologica por OTRO cargo
+    intercalado (p.ej. una coordinacion breve en medio de 10 anios de "Profesor Pregrado",
+    caso real IDPERSONA 3519) cortaria el grupo del primer cargo para siempre en cuanto
+    aparece el segundo, en vez de retomarlo cuando "Profesor Pregrado" vuelve a aparecer
+    despues. El resultado final se ordena por INICIO al final, no por orden de cierre."""
+    columnas = ["CARGO", "UNIDAD", "INICIO", "FIN", "CATEGORIA_CARGO", "N_TRAMOS_ORIGEN"]
+    if tramos_persona.empty:
+        return pd.DataFrame(columns=columnas)
+
+    filas = tramos_persona.sort_values("TRAMO_INICIO").to_dict("records")
+    abiertos_por_clave: dict[tuple, dict] = {}
+    cerrados: list[dict] = []
+    for r in filas:
+        cargo = str(r["CARGO_TRAMO"]).strip() if pd.notna(r["CARGO_TRAMO"]) else ""
+        unidad = str(r["UNIDAD_TRAMO"]).strip() if pd.notna(r["UNIDAD_TRAMO"]) else ""
+        inicio, fin = r["TRAMO_INICIO"], r["TRAMO_FIN"]
+        clave = (cargo, unidad)
+        actual = abiertos_por_clave.get(clave)
+
+        continua = False
+        if actual is not None:
+            if pd.isna(actual["FIN"]):
+                # tramo abierto de esta clave ya vigente (sin fin): cualquier tramo
+                # posterior de la MISMA clave es, por definicion, una continuacion.
+                continua = True
+            else:
+                gap_dias = (inicio - actual["FIN"]).days
+                continua = gap_dias <= 0 or gap_dias <= TOLERANCIA_RECESO_DIAS_CARGO
+
+        if continua:
+            if pd.isna(fin) or (pd.notna(actual["FIN"]) and fin > actual["FIN"]):
+                actual["FIN"] = fin
+            actual["CATEGORIA_CARGO"] = r["CATEGORIA_CARGO"]  # el mas reciente del grupo
+            actual["N_TRAMOS_ORIGEN"] += 1
+            continue
+
+        # No continua: si habia un grupo abierto de esta clave, se cierra (pasa a
+        # `cerrados`) y se abre uno nuevo de la misma clave (reinicio real, brecha larga).
+        if actual is not None:
+            cerrados.append(actual)
+        abiertos_por_clave[clave] = {
+            "CARGO": cargo, "UNIDAD": unidad, "INICIO": inicio, "FIN": fin,
+            "CATEGORIA_CARGO": r["CATEGORIA_CARGO"], "N_TRAMOS_ORIGEN": 1,
+        }
+
+    cerrados.extend(abiertos_por_clave.values())
+    if not cerrados:
+        return pd.DataFrame(columns=columnas)
+    return pd.DataFrame(cerrados)[columnas].sort_values("INICIO").reset_index(drop=True)
+
+
+def _variables_objetivas_trayectoria(tramos_consolidados: pd.DataFrame) -> dict:
+    """Calcula las variables objetivas de trayectoria (seccion 4 del pedido) a partir de los
+    tramos YA CONSOLIDADOS de una persona (ver `_consolidar_tramos_cargo_unidad`). No
+    duplica `N_CARGOS_DISTINTOS`/`N_UNIDADES_DISTINTAS` del conocimiento estructurado
+    existente (esas cuentan sobre TODO el historial de contratos, no sobre tramos
+    consolidados por cargo+unidad real) - estas son deliberadamente mas finas."""
+    if tramos_consolidados.empty:
+        return {
+            "N_CARGOS_TOTAL": 0, "N_CARGOS_SIGNIFICATIVOS": 0,
+            "N_CAMBIOS_CARGO": 0, "N_CAMBIOS_UNIDAD": 0,
+            "DURACION_MEDIA_CARGO_ANIOS": np.nan, "DURACION_MEDIANA_CARGO_ANIOS": np.nan,
+            "DURACION_MAX_CARGO_ANIOS": np.nan,
+            "N_UNIDADES_TOTAL": 0, "N_UNIDADES_SIGNIFICATIVAS": 0,
+            "PROPORCION_CARGOS_SIGNIFICATIVOS": np.nan,
+        }
+
+    t = tramos_consolidados.copy()
+    t["DURACION_MESES"] = t.apply(lambda r: _meses_entre(r["INICIO"], r["FIN"]), axis=1)
+    t["DURACION_ANIOS"] = t["DURACION_MESES"] / 12
+    t["ES_SIGNIFICATIVO"] = t["DURACION_MESES"] >= MIN_MESES_CARGO_SIGNIFICATIVO
+
+    n_cargos_total = len(t)
+    significativos = t[t["ES_SIGNIFICATIVO"]]
+    n_cargos_significativos = len(significativos)
+
+    # Cambios de cargo/unidad: se miden sobre los tramos CONSOLIDADOS ya sin fragmentacion
+    # espuria (misma logica pedida: cambio de cargo = CARGO distinto entre tramos
+    # consecutivos; cambio de unidad = UNIDAD distinta entre tramos consecutivos, sin
+    # importar si el cargo tambien cambio - ambos conteos son independientes, una
+    # transicion puede contar en ninguno, uno o ambos a la vez).
+    n_cambios_cargo = 0
+    n_cambios_unidad = 0
+    for i in range(1, len(t)):
+        if t.iloc[i]["CARGO"] != t.iloc[i - 1]["CARGO"]:
+            n_cambios_cargo += 1
+        if t.iloc[i]["UNIDAD"] != t.iloc[i - 1]["UNIDAD"]:
+            n_cambios_unidad += 1
+
+    unidades_todas = set(u for u in t["UNIDAD"] if u)
+    unidades_significativas = set(u for u in significativos["UNIDAD"] if u)
+
+    return {
+        "N_CARGOS_TOTAL": n_cargos_total,
+        "N_CARGOS_SIGNIFICATIVOS": n_cargos_significativos,
+        "N_CAMBIOS_CARGO": n_cambios_cargo,
+        "N_CAMBIOS_UNIDAD": n_cambios_unidad,
+        "DURACION_MEDIA_CARGO_ANIOS": round(t["DURACION_ANIOS"].mean(), 2),
+        "DURACION_MEDIANA_CARGO_ANIOS": round(t["DURACION_ANIOS"].median(), 2),
+        "DURACION_MAX_CARGO_ANIOS": round(t["DURACION_ANIOS"].max(), 2),
+        "N_UNIDADES_TOTAL": len(unidades_todas),
+        "N_UNIDADES_SIGNIFICATIVAS": len(unidades_significativas),
+        "PROPORCION_CARGOS_SIGNIFICATIVOS": (
+            round(n_cargos_significativos / n_cargos_total, 3) if n_cargos_total else np.nan
+        ),
+    }
+
+
+# Umbrales de ESTABILIDAD (configurables, revisados contra la distribucion real de
+# `DURACION_MEDIANA_CARGO_ANIOS`/`PROPORCION_CARGOS_SIGNIFICATIVOS` sobre la poblacion antes
+# de fijarlos - ver notebook, seccion de calibracion). Regla explicita y transparente, NO
+# una etiqueta arbitraria: se exigen AMBAS condiciones a la vez (misma logica ya usada en
+# `_seccion_trayectoria` para la oracion de "alta estabilidad" del embedding GENERAL, DEC-016
+# del feature engineering de movilidad) para no llamar "estable" a alguien con datos
+# insuficientes o con un patron mixto.
+UMBRAL_ESTABILIDAD_DURACION_MEDIANA_ANIOS = 2.0
+UMBRAL_ESTABILIDAD_PROPORCION_SIGNIFICATIVOS = 0.7
+UMBRAL_BAJA_ESTABILIDAD_DURACION_MEDIANA_ANIOS = 0.5
+
+# Umbrales de MOVILIDAD (mismo principio: configurables, no escondidos en la funcion).
+UMBRAL_ALTA_MOVILIDAD_N_CAMBIOS_CARGO = 3
+UMBRAL_ALTA_MOVILIDAD_N_CAMBIOS_UNIDAD = 2
+
+
+def _describir_estabilidad(v: dict) -> str:
+    """Genera la descripcion de estabilidad (seccion 5 del pedido) a partir de las
+    variables objetivas ya calculadas - reglas simples y explicitas, basadas en
+    `DURACION_MEDIANA_CARGO_ANIOS` y `PROPORCION_CARGOS_SIGNIFICATIVOS` (revisadas contra la
+    distribucion real de la poblacion antes de fijar los umbrales, ver notebook). No emite
+    una etiqueta si no hay evidencia suficiente (menos de 1 cargo significativo, o
+    duracion/proporcion no calculables)."""
+    dur_mediana = v["DURACION_MEDIANA_CARGO_ANIOS"]
+    proporcion = v["PROPORCION_CARGOS_SIGNIFICATIVOS"]
+    if v["N_CARGOS_TOTAL"] == 0 or pd.isna(dur_mediana) or pd.isna(proporcion):
+        return ""
+
+    if (
+        dur_mediana >= UMBRAL_ESTABILIDAD_DURACION_MEDIANA_ANIOS
+        and proporcion >= UMBRAL_ESTABILIDAD_PROPORCION_SIGNIFICATIVOS
+    ):
+        return (
+            "Su trayectoria presenta permanencias relativamente prolongadas en sus cargos, "
+            f"con una duración mediana de {dur_mediana:.1f} años por cargo."
+        )
+    if (
+        dur_mediana <= UMBRAL_BAJA_ESTABILIDAD_DURACION_MEDIANA_ANIOS
+        and proporcion < UMBRAL_ESTABILIDAD_PROPORCION_SIGNIFICATIVOS
+    ):
+        return (
+            "Su trayectoria está formada principalmente por períodos cortos, "
+            f"con una duración mediana de {dur_mediana:.1f} años por cargo."
+        )
+    return (
+        f"Su trayectoria combina cargos de distinta duración, con una mediana de "
+        f"{dur_mediana:.1f} años por cargo."
+    )
+
+
+def _describir_movilidad(v: dict) -> str:
+    """Genera la descripcion de movilidad (seccion 5 del pedido): distingue cambios de
+    cargo (funcional) de cambios de unidad (organizacional), sin mezclarlos en un solo
+    numero (pedido explicito: "no confundas un cambio de unidad con un cambio de cargo")."""
+    n_cargo = v["N_CAMBIOS_CARGO"]
+    n_unidad = v["N_CAMBIOS_UNIDAD"]
+    if v["N_CARGOS_TOTAL"] == 0:
+        return ""
+
+    alta_cargo = n_cargo >= UMBRAL_ALTA_MOVILIDAD_N_CAMBIOS_CARGO
+    alta_unidad = n_unidad >= UMBRAL_ALTA_MOVILIDAD_N_CAMBIOS_UNIDAD
+
+    if alta_cargo and alta_unidad:
+        return (
+            f"Ha ocupado varios cargos a lo largo de su trayectoria ({n_cargo} cambios de "
+            f"cargo), con cambios entre distintas unidades ({n_unidad} cambios de unidad)."
+        )
+    if alta_cargo and not alta_unidad:
+        return (
+            f"Ha ocupado varios cargos distintos ({n_cargo} cambios de cargo), "
+            "manteniéndose dentro de la misma unidad."
+        )
+    if not alta_cargo and alta_unidad:
+        return (
+            f"Ha mantenido el mismo cargo, pero ha pasado por distintas unidades "
+            f"({n_unidad} cambios de unidad)."
+        )
+    return "Ha permanecido durante varios años en un mismo cargo y unidad, sin cambios frecuentes."
+
+
+def _insights_trayectoria(v: dict) -> list[str]:
+    """Insights derivados automaticamente de las variables objetivas (seccion 7 del
+    pedido) - reglas explicitas, no descripciones subjetivas. Cada insight es
+    independiente: una persona puede recibir varios, uno solo, o ninguno."""
+    insights = []
+    dur_mediana = v["DURACION_MEDIANA_CARGO_ANIOS"]
+    dur_max = v["DURACION_MAX_CARGO_ANIOS"]
+
+    if pd.notna(dur_max) and dur_max >= UMBRAL_ESTABILIDAD_DURACION_MEDIANA_ANIOS * 2:
+        insights.append(
+            f"Permanencia prolongada en al menos un cargo (máximo {dur_max:.1f} años)."
+        )
+    if v["N_CAMBIOS_CARGO"] >= UMBRAL_ALTA_MOVILIDAD_N_CAMBIOS_CARGO:
+        insights.append(f"Múltiples cambios de cargo a lo largo de su trayectoria ({v['N_CAMBIOS_CARGO']}).")
+    if v["N_CAMBIOS_UNIDAD"] >= UMBRAL_ALTA_MOVILIDAD_N_CAMBIOS_UNIDAD:
+        insights.append(f"Múltiples cambios de unidad a lo largo de su trayectoria ({v['N_CAMBIOS_UNIDAD']}).")
+    if v["N_UNIDADES_SIGNIFICATIVAS"] <= 1 and v["N_CARGOS_SIGNIFICATIVOS"] >= 1:
+        insights.append("Trayectoria concentrada en una sola unidad.")
+    elif v["N_UNIDADES_SIGNIFICATIVAS"] >= 3:
+        insights.append(f"Trayectoria distribuida entre varias unidades ({v['N_UNIDADES_SIGNIFICATIVAS']}).")
+    if pd.notna(v["PROPORCION_CARGOS_SIGNIFICATIVOS"]) and v["PROPORCION_CARGOS_SIGNIFICATIVOS"] < 0.5:
+        insights.append("Predominio de períodos cortos en su historial de cargos.")
+    elif pd.notna(v["PROPORCION_CARGOS_SIGNIFICATIVOS"]) and v["PROPORCION_CARGOS_SIGNIFICATIVOS"] >= 0.9:
+        insights.append("Predominio de períodos prolongados en su historial de cargos.")
+
+    return insights
+
+
+def _secuencia_cronologica_texto(tramos_consolidados: pd.DataFrame, maximo: int = 10) -> str:
+    """Secuencia cronologica de cargos/unidades (seccion 4/6 del pedido) - lista TODOS los
+    tramos consolidados (no solo los significativos: un cargo corto sigue aportando
+    contexto a la secuencia, aunque no cuente para los indicadores de estabilidad, ver
+    seccion 3 del pedido: 'no elimines esos periodos del historial textual'). Se acota a
+    `maximo` para documentos con muchisimos cargos (mismo criterio que `_lista_items`)."""
+    if tramos_consolidados.empty:
+        return ""
+    t = tramos_consolidados.sort_values("INICIO")
+    items = []
+    for _, r in t.iterrows():
+        rango = _rango_anios(r["INICIO"], r["FIN"])
+        unidad_txt = f" en {r['UNIDAD']}" if r["UNIDAD"] else ""
+        cargo_txt = r["CARGO"] if r["CARGO"] else "cargo sin especificar"
+        items.append(f"{cargo_txt}{unidad_txt} ({rango})" if rango else f"{cargo_txt}{unidad_txt}")
+    if len(items) > maximo:
+        primero, ultimos = items[0], items[-(maximo - 1):]
+        return "; ".join([primero, f"... ({len(items) - maximo} cargos intermedios omitidos) ...", *ultimos])
+    return "; ".join(items)
+
+
+def construir_tramos_cargo_unidad_persona(
+    tramos_rol: pd.DataFrame,
+    poblacion: set[int] | None = None,
+) -> pd.DataFrame:
+    """Expone, como tabla estructurada (una fila por tramo consolidado por persona), el
+    mismo resultado intermedio que `construir_documento_trayectoria` calcula para armar el
+    texto (`_consolidar_tramos_cargo_unidad`) - pensado para que el backend del dashboard
+    pueda mostrar "periodos, cargos y unidades" en la ficha de una persona sin volver a
+    calcular nada (reutiliza la MISMA consolidacion cargo+unidad+receso corto que ya valida
+    la seccion 7 de este notebook, no una version aparte).
+
+    Devuelve: IDPERSONA, CARGO, UNIDAD, INICIO (fecha), FIN (fecha, NaT si vigente),
+    DURACION_ANIOS, ES_SIGNIFICATIVO (bool, segun MIN_MESES_CARGO_SIGNIFICATIVO),
+    ES_PARALELO (bool) - True si este tramo se solapa en fecha con otro tramo consolidado
+    DISTINTO (cargo o unidad distintos) de la MISMA persona; permite detectar, p.ej., un
+    Profesor Titular que en paralelo ejerce como Director de una unidad distinta (mismo
+    patron que ya resuelve `pc.resolver_roles_simultaneos` a nivel de CATEGORIA_CARGO, pero
+    aqui a nivel de cargo+unidad consolidado, mas fino).
+    """
+    ids = poblacion if poblacion is not None else set(tramos_rol["IDPERSONA"].unique())
+    columnas = ["IDPERSONA", "CARGO", "UNIDAD", "INICIO", "FIN", "DURACION_ANIOS", "ES_SIGNIFICATIVO", "ES_PARALELO"]
+
+    filas = []
+    for idp, grupo in tramos_rol[tramos_rol["IDPERSONA"].isin(ids)].groupby("IDPERSONA", sort=False):
+        consolidados = _consolidar_tramos_cargo_unidad(grupo)
+        if consolidados.empty:
+            continue
+        t = consolidados.copy()
+        t["DURACION_MESES"] = t.apply(lambda r: _meses_entre(r["INICIO"], r["FIN"]), axis=1)
+        t["DURACION_ANIOS"] = round(t["DURACION_MESES"] / 12, 2)
+        t["ES_SIGNIFICATIVO"] = t["DURACION_MESES"] >= MIN_MESES_CARGO_SIGNIFICATIVO
+
+        fin_cmp = t["FIN"].fillna(pd.Timestamp.today().normalize())
+        es_paralelo = []
+        for i in range(len(t)):
+            solapa_con_otro = False
+            for j in range(len(t)):
+                if i == j:
+                    continue
+                # mismo INICIO/FIN exactos con distinto cargo o unidad = paralelo real; se
+                # exige ademas que no sean el mismo cargo+unidad (eso ya se habria fusionado
+                # en la consolidacion) - basta con overlap de rango de fechas.
+                solapan_fechas = t["INICIO"].iloc[i] <= fin_cmp.iloc[j] and t["INICIO"].iloc[j] <= fin_cmp.iloc[i]
+                if solapan_fechas:
+                    solapa_con_otro = True
+                    break
+            es_paralelo.append(solapa_con_otro)
+        t["ES_PARALELO"] = es_paralelo
+        t["IDPERSONA"] = idp
+        filas.append(t[columnas])
+
+    if not filas:
+        return pd.DataFrame(columns=columnas)
+    return pd.concat(filas, ignore_index=True).sort_values(["IDPERSONA", "INICIO"]).reset_index(drop=True)
+
+
+def construir_documento_trayectoria(
+    tramos_rol: pd.DataFrame,
+    estado_vigencia: pd.DataFrame,
+    poblacion: set[int] | None = None,
+) -> pd.DataFrame:
+    """Construye el DOCUMENTO DE TRAYECTORIA PROFESIONAL por persona (capa nueva, separada
+    del documento semantico general de `construir_documentos_semanticos`).
+
+    Parametros:
+    - `tramos_rol`: salida de `pc.construir_tramos_rol` (ya calculada en
+      `04_trayectorias.ipynb`) - columnas IDPERSONA, CATEGORIA_CARGO, TRAMO_INICIO,
+      TRAMO_FIN, CARGO_TRAMO, UNIDAD_TRAMO. Fuente unica de cargo/unidad/fechas (pedido
+      explicito, seccion 2) - no se recalculan tramos desde el historial crudo.
+    - `estado_vigencia`: DataFrame con IDPERSONA, CARGO_ACTUAL, UNIDAD_ACTUAL_NOMBRE,
+      VIGENTE_TRAMO_ESTRUCTURAL (o VIGENTE_ACTUALMENTE) - el conocimiento estructurado
+      EXISTENTE (`personas_dashboard.csv`/`dataset_personas_features.csv`), reutilizado
+      solo para el estado actual (pedido explicito, seccion 1: no recalcular lo que ya
+      existe). Si una columna no esta disponible, esa parte de "Estado actual" queda vacia
+      en vez de inventarse.
+    - `poblacion`: IDs a incluir (por defecto, todas las de `tramos_rol`). Personas sin
+      ningun tramo de rol (ver `pc.CATEGORIAS_PUNTUALES`, DEC-004) no reciben documento de
+      trayectoria - mismo criterio ya usado para `features_trayectoria_persona.csv`.
+
+    Devuelve una fila por IDPERSONA con: DOCUMENTO_TRAYECTORIA_TEXTO (el texto a embeber) y
+    las variables objetivas calculadas (para diagnostico/validacion, no para re-embeber).
+    """
+    ids = poblacion if poblacion is not None else set(tramos_rol["IDPERSONA"].unique())
+    vigencia_por_persona = (
+        estado_vigencia.set_index("IDPERSONA") if estado_vigencia is not None and len(estado_vigencia)
+        else pd.DataFrame().reindex(columns=["CARGO_ACTUAL", "UNIDAD_ACTUAL_NOMBRE", "VIGENTE_TRAMO_ESTRUCTURAL"])
+    )
+
+    filas = []
+    for idp, grupo in tramos_rol[tramos_rol["IDPERSONA"].isin(ids)].groupby("IDPERSONA", sort=False):
+        consolidados = _consolidar_tramos_cargo_unidad(grupo)
+        v = _variables_objetivas_trayectoria(consolidados)
+
+        cargo_actual = unidad_actual = None
+        estado_vigencia_txt = "no determinado"
+        if idp in vigencia_por_persona.index:
+            fila_vig = vigencia_por_persona.loc[idp]
+            cargo_actual = fila_vig.get("CARGO_ACTUAL")
+            unidad_actual = fila_vig.get("UNIDAD_ACTUAL_NOMBRE")
+            vigente = fila_vig.get("VIGENTE_TRAMO_ESTRUCTURAL", fila_vig.get("VIGENTE_ACTUALMENTE"))
+            if pd.notna(vigente):
+                estado_vigencia_txt = "vigente" if bool(vigente) else "no vigente"
+
+        descripcion_estabilidad = _describir_estabilidad(v)
+        descripcion_movilidad = _describir_movilidad(v)
+        insights = _insights_trayectoria(v)
+        secuencia = _secuencia_cronologica_texto(consolidados)
+
+        bloques = ["TRAYECTORIA PROFESIONAL"]
+        if cargo_actual and pd.notna(cargo_actual):
+            unidad_txt = f" en {unidad_actual}" if unidad_actual and pd.notna(unidad_actual) else ""
+            bloques.append(
+                f"Estado actual: Actualmente ocupa el cargo de {cargo_actual}{unidad_txt} "
+                f"y su estado de vigencia es {estado_vigencia_txt}."
+            )
+        if v["N_CARGOS_SIGNIFICATIVOS"] > 0:
+            bloques.append(
+                f"Trayectoria: Ha ocupado {v['N_CARGOS_SIGNIFICATIVOS']} cargos significativos "
+                "a lo largo de su trayectoria."
+            )
+        if secuencia:
+            bloques.append(f"Secuencia profesional: {secuencia}.")
+        if v["N_CARGOS_TOTAL"] > 0:
+            bloques.append(
+                f"Movilidad: Ha realizado {v['N_CAMBIOS_CARGO']} cambios de cargo y "
+                f"{v['N_CAMBIOS_UNIDAD']} cambios de unidad. Ha desarrollado su trayectoria "
+                f"en {v['N_UNIDADES_SIGNIFICATIVAS']} unidades."
+            )
+        if pd.notna(v["DURACION_MEDIA_CARGO_ANIOS"]):
+            bloques.append(
+                f"Permanencia: La duración media de sus cargos es de "
+                f"{v['DURACION_MEDIA_CARGO_ANIOS']:.1f} años y la duración mediana es de "
+                f"{v['DURACION_MEDIANA_CARGO_ANIOS']:.1f} años. Su cargo de mayor duración "
+                f"se mantuvo durante {v['DURACION_MAX_CARGO_ANIOS']:.1f} años."
+            )
+        if descripcion_estabilidad:
+            bloques.append(f"Estabilidad: {descripcion_estabilidad}")
+        if descripcion_movilidad:
+            bloques.append(f"Movilidad profesional: {descripcion_movilidad}")
+        if insights:
+            bloques.append("Patrones de trayectoria: " + " ".join(insights))
+
+        documento = "\n".join(bloques)
+        filas.append({
+            "IDPERSONA": idp,
+            "DOCUMENTO_TRAYECTORIA_TEXTO": documento if len(bloques) > 1 else "",
+            **v,
+        })
+
+    columnas_base = ["IDPERSONA", "DOCUMENTO_TRAYECTORIA_TEXTO"]
+    columnas_variables = [
+        "N_CARGOS_TOTAL", "N_CARGOS_SIGNIFICATIVOS", "N_CAMBIOS_CARGO", "N_CAMBIOS_UNIDAD",
+        "DURACION_MEDIA_CARGO_ANIOS", "DURACION_MEDIANA_CARGO_ANIOS", "DURACION_MAX_CARGO_ANIOS",
+        "N_UNIDADES_TOTAL", "N_UNIDADES_SIGNIFICATIVAS", "PROPORCION_CARGOS_SIGNIFICATIVOS",
+    ]
+    if not filas:
+        return pd.DataFrame(columns=columnas_base + columnas_variables)
+    return pd.DataFrame(filas)[columnas_base + columnas_variables]
+
+
 def _seccion_reconocimientos(poblacion: set[int]) -> pd.Series:
     df = _leer("mencion_honor.csv")
     df["FECHA"] = pd.to_datetime(df["FECHA"], format="mixed", errors="coerce")
