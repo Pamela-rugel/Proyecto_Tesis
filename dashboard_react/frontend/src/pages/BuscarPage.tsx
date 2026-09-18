@@ -3,13 +3,7 @@ import { useMemo, useState } from "react";
 import { getPersonas } from "../api/client";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import PersonaFicha from "../components/PersonaFicha";
-
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
+import { coincideNombre } from "../lib/busqueda";
 
 export default function BuscarPage() {
   const { data: personas, isLoading, error } = useQuery({ queryKey: ["personas"], queryFn: getPersonas });
@@ -19,8 +13,7 @@ export default function BuscarPage() {
   const filtrados = useMemo(() => {
     if (!personas) return [];
     if (!filtro.trim()) return personas.slice(0, 50);
-    const q = normalizar(filtro.trim());
-    return personas.filter((p) => normalizar(p.NOMBRE_COMPLETO).includes(q)).slice(0, 50);
+    return personas.filter((p) => coincideNombre(p.NOMBRE_COMPLETO, filtro)).slice(0, 50);
   }, [personas, filtro]);
 
   return (

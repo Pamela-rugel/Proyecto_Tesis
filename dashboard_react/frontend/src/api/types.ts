@@ -175,3 +175,65 @@ export interface BusquedaResponse {
   consulta: string;
   resultados: BusquedaResultado[];
 }
+
+// --- Clustering SEMANTICO (en espacio de embeddings) ---------------------------------
+// Estructuras paralelas a PerfilResumen/PerfilDetalle/MapaPunto de arriba, pero para el
+// clustering de notebooks/07b_clustering_semantico (espacio distinto, K propio, sin
+// relacion 1:1 de IDs de cluster con el clustering estructural — nunca mezclar CLUSTER con
+// CLUSTER_SEMANTICO).
+
+export interface PerfilResumenSemantico {
+  CLUSTER_SEMANTICO: number;
+  PERFIL_NOMBRE_SEMANTICO: string;
+  N_PERSONAS: number;
+  PCT_POBLACION: number;
+  DESCRIPCION: string;
+  TIPOEMPLEADO_PREDOMINANTE: string | null;
+  CARGO_MAS_FRECUENTE: string | null;
+  NIVEL_ACADEMICO_PREDOMINANTE: string | null;
+  PCT_VIGENTE: number | null;
+  COLOR: string;
+}
+
+export interface ResumenSemanticoResponse {
+  n_personas: number;
+  n_perfiles: number;
+  perfiles: PerfilResumenSemantico[];
+}
+
+export interface PerfilDetalleSemantico {
+  cluster: number;
+  nombre: string;
+  n_personas: number;
+  pct_poblacion: number;
+  descripcion: string;
+  color: string;
+  top_features: TopFeature[];
+  cargos: CargoConteo[];
+  n_cargos_distintos: number;
+  n_con_cargo: number;
+  muestra_personas: Record<string, unknown>[];
+}
+
+export interface MapaPuntoSemantico {
+  IDPERSONA: number;
+  NOMBRE_COMPLETO: string;
+  PC1: number;
+  PC2: number;
+  CLUSTER_SEMANTICO: number;
+  PERFIL_NOMBRE_SEMANTICO: string | null;
+  TIPOEMPLEADO_ACTUAL_DESC: string;
+  VIGENTE_MOSTRAR: boolean;
+  CARGO_ACTUAL: string | null;
+  ES_MIXTO: boolean;
+  CARGOS_ACTUALES_MIXTO: string | null;
+  COLOR: string;
+  GRUPO_COLOR: string;
+}
+
+export interface MapaSemanticoResponse {
+  total_modelo: number;
+  n_mostrados: number;
+  modo: "rama" | "cluster_semantico" | "cargo_real";
+  puntos: MapaPuntoSemantico[];
+}

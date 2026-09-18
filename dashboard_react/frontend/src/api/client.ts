@@ -3,9 +3,12 @@ import type {
   BusquedaResponse,
   EquiposResponse,
   MapaResponse,
+  MapaSemanticoResponse,
   PerfilDetalle,
+  PerfilDetalleSemantico,
   PersonaFichaResponse,
   ResumenResponse,
+  ResumenSemanticoResponse,
 } from "./types";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8001";
@@ -29,6 +32,29 @@ export async function getMapa(
 ): Promise<MapaResponse> {
   const { data } = await api.get<MapaResponse>("/api/mapa", {
     params: { tipo, perfiles: perfiles.join(","), modo },
+  });
+  return data;
+}
+
+// --- Clustering SEMANTICO (en espacio de embeddings) ---------------------------------
+
+export async function getResumenSemantico(): Promise<ResumenSemanticoResponse> {
+  const { data } = await api.get<ResumenSemanticoResponse>("/api/resumen_semantico");
+  return data;
+}
+
+export async function getPerfilDetalleSemantico(clusterId: number): Promise<PerfilDetalleSemantico> {
+  const { data } = await api.get<PerfilDetalleSemantico>(`/api/perfiles_semantico/${clusterId}`);
+  return data;
+}
+
+export async function getMapaSemantico(
+  perfiles: number[],
+  modo: "rama" | "cluster_semantico" | "cargo_real" = "cluster_semantico",
+  tipo: string = "Todos",
+): Promise<MapaSemanticoResponse> {
+  const { data } = await api.get<MapaSemanticoResponse>("/api/mapa_semantico", {
+    params: { perfiles: perfiles.join(","), modo, tipo },
   });
   return data;
 }

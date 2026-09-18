@@ -50,6 +50,11 @@ def cluster_color(cluster: int) -> str:
     return lib.PERFIL_COLORES.get(int(cluster), CLUSTER_COLORS_FALLBACK[int(cluster) % len(CLUSTER_COLORS_FALLBACK)])
 
 
+def cluster_color_semantico(cluster: int) -> str:
+    paleta = lib.PERFIL_COLORES_SEMANTICO
+    return paleta[int(cluster) % len(paleta)]
+
+
 def color_por_texto(texto: str) -> str:
     """Color determinístico (mismo texto -> siempre el mismo color) para el modo "cargo
     real" del mapa (~239 valores distintos de CARGO_ACTUAL, demasiados para una paleta
@@ -118,6 +123,26 @@ def get_feature_labels() -> dict:
 @lru_cache(maxsize=1)
 def get_pca() -> pd.DataFrame:
     return lib.load_pca_personas()
+
+
+@lru_cache(maxsize=1)
+def get_resumen_semantico() -> pd.DataFrame:
+    return lib.load_cluster_resumen_semantico()
+
+
+@lru_cache(maxsize=1)
+def get_top_features_semantico() -> pd.DataFrame:
+    return lib.load_cluster_top_features_semantico()
+
+
+@lru_cache(maxsize=1)
+def get_clusters_semantico() -> pd.DataFrame:
+    return lib.load_clusters_personas_semantico()
+
+
+@lru_cache(maxsize=1)
+def get_pca_semantico() -> pd.DataFrame:
+    return lib.load_pca_personas_semantico()
 
 
 @lru_cache(maxsize=1)
@@ -318,6 +343,135 @@ def mapa(tipo: str = Query("Todos"), perfiles: str = Query(""), modo: str = Quer
             p["COLOR"] = cluster_color(p["CLUSTER"])
             p["GRUPO_COLOR"] = str(p["CLUSTER"])
     return {"total_modelo": int(len(personas)), "n_mostrados": len(puntos), "puntos": puntos, "modo": modo}
+
+
+# ---------------------------------------------------------------------------
+# Clustering SEMANTICO (en espacio de embeddings) - endpoints paralelos a resumen/perfiles/
+# mapa de arriba, pero sobre el clustering de notebooks/07b_clustering_semantico (distinto
+# espacio, distinto K, sin relacion 1:1 de IDs de cluster con el clustering estructural).
+# Deliberadamente separados de los endpoints existentes (no un parametro "modo" en los
+# mismos) para no arriesgar el comportamiento ya validado del clustering estructural.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/resumen_semantico")
+def resumen_semantico():
+    resumen_df = get_resumen_semantico()
+    clusters_df = get_clusters_semantico()
+    return {
+        "n_personas": int(len(clusters_df)),
+        "n_perfiles": int(resumen_df["CLUSTER_SEMANTICO"].nunique()),
+        "perfiles": [
+            {**rec, "COLOR": cluster_color_semantico(rec["CLUSTER_SEMANTICO"])}
+            for rec in df_to_records(resumen_df.sort_values("CLUSTER_SEMANTICO"))
+        ],
+    }
+
+
+@app.get("/api/perfiles_semantico/{cluster_id}")
+def perfil_detalle_semantico(cluster_id: int):
+    resumen_df = get_resumen_semantico()
+    fila = resumen_df[resumen_df["CLUSTER_SEMANTICO"] == cluster_id]
+    if fila.empty:
+        raise HTTPException(404, "Perfil semántico no encontrado")
+    fila = fila.iloc[0]
+
+    labels = get_feature_labels()
+    feats = get_top_features_semantico()
+    feats = feats[feats["CLUSTER_SEMANTICO"] == cluster_id].copy()
+    feats["FEATURE_LABEL"] = feats["FEATURE"].map(lambda f: labels.get(f, f))
+
+    personas = get_personas()
+    clusters_df = get_clusters_semantico()
+    ids_cluster = set(clusters_df.loc[clusters_df["CLUSTER_SEMANTICO"] == cluster_id, "IDPERSONA"])
+    personas_cluster = personas[personas["IDPERSONA"].isin(ids_cluster)]
+
+    cargos_cluster = personas_cluster["CARGO_ACTUAL"].dropna()
+    conteo_cargos = cargos_cluster.value_counts().reset_index()
+    conteo_cargos.columns = ["CARGO_ACTUAL", "N_PERSONAS"]
+
+    muestra_cols = ["IDPERSONA", "NOMBRE_COMPLETO"] + [c for c in lib.METRICAS_CLAVE if c in personas_cluster.columns]
+    muestra = personas_cluster[muestra_cols].head(50)
+
+    return {
+        "cluster": int(cluster_id),
+        "nombre": fila["PERFIL_NOMBRE_SEMANTICO"],
+        "n_personas": int(fila["N_PERSONAS"]),
+        "pct_poblacion": float(fila["PCT_POBLACION"]),
+        "descripcion": fila["DESCRIPCION"],
+        "color": cluster_color_semantico(cluster_id),
+        "top_features": df_to_records(feats[["FEATURE", "FEATURE_LABEL", "VALUE_CLUSTER", "VALUE_GLOBAL"]]),
+        "cargos": df_to_records(conteo_cargos),
+        "n_cargos_distintos": int(cargos_cluster.nunique()),
+        "n_con_cargo": int(len(cargos_cluster)),
+        "muestra_personas": df_to_records(muestra),
+    }
+
+
+@app.get("/api/mapa_semantico")
+def mapa_semantico(perfiles: str = Query(""), modo: str = Query("cluster_semantico"), tipo: str = Query("Todos")):
+    """Mismo mapa PCA que /api/mapa pero en el espacio de EMBEDDINGS (ver
+    notebooks/07b_clustering_semantico) - `modo` decide COMO se colorea, igual patron que
+    /api/mapa: "cluster_semantico" (default) usa los clusters de este notebook,
+    "rama" usa TIPOEMPLEADO_ACTUAL_DESC/Mixto (igual regla que el mapa estructural, para
+    comparar administrativo/docente/mixto en ambos espacios), "cargo_real" usa el cargo
+    textual exacto (color_por_texto, mismo criterio que el mapa estructural)."""
+    personas = get_personas()
+    clusters_df = get_clusters_semantico()
+    pca_df = get_pca_semantico().merge(clusters_df, on="IDPERSONA", how="inner").merge(
+        personas[["IDPERSONA", "NOMBRE_COMPLETO", "TIPOEMPLEADO_ACTUAL_DESC", "VIGENTE_MOSTRAR", "CARGO_ACTUAL",
+                  "ES_MIXTO", "CARGOS_ACTUALES_MIXTO"]],
+        on="IDPERSONA", how="inner",
+    )
+    pca_df["ES_MIXTO"] = pca_df["ES_MIXTO"].fillna(False)
+
+    if tipo == "Solo Administrativo":
+        pca_df = pca_df[(pca_df["TIPOEMPLEADO_ACTUAL_DESC"] == "ADMINISTRATIVO") & (~pca_df["ES_MIXTO"])]
+    elif tipo == "Solo Docente":
+        pca_df = pca_df[(pca_df["TIPOEMPLEADO_ACTUAL_DESC"] == "DOCENTE") & (~pca_df["ES_MIXTO"])]
+    elif tipo == "Solo Mixto":
+        pca_df = pca_df[pca_df["ES_MIXTO"]]
+
+    if perfiles and modo == "cluster_semantico":
+        ids_perfiles = {int(p) for p in perfiles.split(",") if p}
+        pca_df = pca_df[pca_df["CLUSTER_SEMANTICO"].isin(ids_perfiles)]
+
+    resumen_df = get_resumen_semantico().set_index("CLUSTER_SEMANTICO")["PERFIL_NOMBRE_SEMANTICO"]
+    pca_df = pca_df.sort_values("CLUSTER_SEMANTICO")
+    puntos = df_to_records(pca_df)
+    for p in puntos:
+        p["PERFIL_NOMBRE_SEMANTICO"] = resumen_df.get(p["CLUSTER_SEMANTICO"])
+        # El color/agrupacion por Mixto solo tiene sentido en modo "rama" (2+ cargos
+        # estructurales vigentes en paralelo es un concepto de la rama admin/docente) - en
+        # modo "cluster_semantico" no debe tapar el cluster real de la persona (bug real:
+        # aparecia un 10mo grupo "MIXTO" ademas de los 9 clusters, aunque el usuario pidiera
+        # ver los clusters puros).
+        if p["ES_MIXTO"] and modo == "rama":
+            p["COLOR"] = lib.COLOR_MIXTO
+            p["GRUPO_COLOR"] = "MIXTO"
+        elif modo == "rama":
+            # El clustering semantico cubre a TODA la poblacion con embedding (incluye
+            # personas sin tramo de rol estructural vigente, ver DEC en 07b_clustering_
+            # semantico), a diferencia del mapa estructural que ya filtra CLUSTER != -1 -
+            # ~22% no tiene TIPOEMPLEADO_ACTUAL_DESC. Sin este caso quedaban silenciosamente
+            # coloreados como "administrativo" (el else original) y agrupados bajo el
+            # nombre de grupo "None" crudo.
+            if p["TIPOEMPLEADO_ACTUAL_DESC"] == "DOCENTE":
+                p["COLOR"] = "#457B9D"
+                p["GRUPO_COLOR"] = "DOCENTE"
+            elif p["TIPOEMPLEADO_ACTUAL_DESC"] == "ADMINISTRATIVO":
+                p["COLOR"] = "#E76F51"
+                p["GRUPO_COLOR"] = "ADMINISTRATIVO"
+            else:
+                p["COLOR"] = "#94A3B8"
+                p["GRUPO_COLOR"] = "SIN CARGO ACTUAL"
+        elif modo == "cargo_real":
+            cargo = p["CARGO_ACTUAL"] or "SIN CARGO"
+            p["COLOR"] = color_por_texto(cargo)
+            p["GRUPO_COLOR"] = cargo
+        else:
+            p["COLOR"] = cluster_color_semantico(p["CLUSTER_SEMANTICO"])
+            p["GRUPO_COLOR"] = str(p["CLUSTER_SEMANTICO"])
+    return {"total_modelo": int(len(clusters_df)), "n_mostrados": len(puntos), "puntos": puntos, "modo": modo}
 
 
 _TOLERANCIA_RECESO_ACADEMICO = pd.Timedelta(days=90)

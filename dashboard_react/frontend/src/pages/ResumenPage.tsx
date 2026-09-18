@@ -1,12 +1,65 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import Plot from "react-plotly.js";
-import { getPerfilDetalle, getResumen } from "../api/client";
+import {
+  getPerfilDetalle,
+  getPerfilDetalleSemantico,
+  getResumen,
+  getResumenSemantico,
+} from "../api/client";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import DataTable from "../components/DataTable";
 import { METRICAS_CLAVE_COLUMNS } from "../lib/columns";
+import type { PerfilDetalle, PerfilDetalleSemantico } from "../api/types";
+
+type Vista = "estructural" | "semantico";
+
+const VISTAS: { value: Vista; label: string; descripcion: string }[] = [
+  {
+    value: "estructural",
+    label: "Clustering estático",
+    descripcion:
+      "Perfiles calculados sobre variables estructuradas (cargo, antigüedad, nivel académico, trayectoria...). Interpretable variable por variable — es la base de perfiles del dashboard.",
+  },
+  {
+    value: "semantico",
+    label: "Clustering en embeddings",
+    descripcion:
+      "Clustering independiente sobre el espacio de embeddings (texto narrativo de trayectoria/formación/docencia/investigación de cada persona). Capa de comparación/validación: valida si los perfiles estructurales también emergen del texto, no los reemplaza. Los clusters aquí no tienen nombre interpretado a mano todavía — se describen automáticamente con las mismas variables estructuradas.",
+  },
+];
 
 export default function ResumenPage() {
+  const [vista, setVista] = useState<Vista>("estructural");
+  const vistaActual = VISTAS.find((v) => v.value === vista)!;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="flex gap-1 border-b border-slate-200">
+          {VISTAS.map((v) => (
+            <button
+              key={v.value}
+              onClick={() => setVista(v.value)}
+              className={`px-4 py-2.5 text-sm font-medium rounded-t-md border-b-2 -mb-px transition-colors ${
+                vista === v.value
+                  ? "bg-white text-espol-navy border-espol-blue"
+                  : "text-slate-500 border-transparent hover:text-espol-navy hover:bg-slate-50"
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400 mt-2">{vistaActual.descripcion}</p>
+      </div>
+
+      {vista === "estructural" ? <ResumenEstructural /> : <ResumenSemantico />}
+    </div>
+  );
+}
+
+function ResumenEstructural() {
   const [clusterSel, setClusterSel] = useState<number | null>(null);
   const { data, isLoading, error } = useQuery({ queryKey: ["resumen"], queryFn: getResumen });
 
@@ -91,6 +144,96 @@ export default function ResumenPage() {
   );
 }
 
+function ResumenSemantico() {
+  const [clusterSel, setClusterSel] = useState<number | null>(null);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["resumen_semantico"],
+    queryFn: getResumenSemantico,
+  });
+
+  const detalleQuery = useQuery({
+    queryKey: ["perfil_semantico", clusterSel],
+    queryFn: () => getPerfilDetalleSemantico(clusterSel as number),
+    enabled: clusterSel !== null,
+  });
+
+  if (isLoading) return <LoadingBlock label="Cargando resumen semántico..." />;
+  if (error || !data) return <ErrorBlock message="No se pudo cargar el resumen semántico." />;
+
+  const orden = [...data.perfiles].sort((a, b) => a.CLUSTER_SEMANTICO - b.CLUSTER_SEMANTICO);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <MetricCard label="Personas con embedding" value={data.n_personas.toLocaleString()} />
+        <MetricCard label="Perfiles semánticos (clusters)" value={String(data.n_perfiles)} />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <p className="text-xs text-slate-500 mb-2">
+          Haz clic en una barra para ver el detalle de ese perfil semántico más abajo. Los IDs de
+          cluster aquí no corresponden a los del clustering estructural — son dos particiones
+          independientes.
+        </p>
+        <Plot
+          data={[
+            {
+              type: "bar",
+              x: orden.map((p) => p.PERFIL_NOMBRE_SEMANTICO),
+              y: orden.map((p) => p.N_PERSONAS),
+              marker: { color: orden.map((p) => p.COLOR) },
+              text: orden.map((p) => `${p.PCT_POBLACION.toFixed(1)}%`),
+              textposition: "outside",
+              customdata: orden.map((p) => p.CLUSTER_SEMANTICO),
+            } as never,
+          ]}
+          layout={{
+            height: 420,
+            showlegend: false,
+            margin: { l: 60, r: 20, t: 20, b: 80 },
+            font: { size: 12, color: "#334155" },
+            plot_bgcolor: "#FFFFFF",
+            paper_bgcolor: "#FFFFFF",
+            xaxis: {
+              title: { text: "" },
+              automargin: true,
+              tickfont: { size: 11 },
+              showgrid: false,
+              showline: true,
+              linecolor: "#CBD5E1",
+            },
+            yaxis: {
+              title: { text: "N personas" },
+              showgrid: true,
+              gridcolor: "#EEF1F5",
+              zeroline: false,
+              automargin: true,
+            },
+          }}
+          config={{ displayModeBar: false, responsive: true }}
+          style={{ width: "100%" }}
+          useResizeHandler
+          onClick={(e) => {
+            const point = e.points[0];
+            const idx = point.pointIndex as number;
+            setClusterSel(orden[idx].CLUSTER_SEMANTICO);
+          }}
+        />
+      </div>
+
+      {clusterSel === null ? (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-sm px-4 py-3">
+          Haz clic en una barra del gráfico de arriba para ver el detalle de ese perfil.
+        </div>
+      ) : detalleQuery.isLoading ? (
+        <LoadingBlock label="Cargando detalle del perfil..." />
+      ) : detalleQuery.data ? (
+        <PerfilDetalleView detalle={detalleQuery.data} />
+      ) : null}
+    </div>
+  );
+}
+
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -100,7 +243,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PerfilDetalleView({ detalle }: { detalle: NonNullable<ReturnType<typeof getPerfilDetalle>> extends Promise<infer T> ? T : never }) {
+function PerfilDetalleView({ detalle }: { detalle: PerfilDetalle | PerfilDetalleSemantico }) {
   return (
     <div className="space-y-4 bg-white rounded-xl border border-slate-200 p-5">
       <div className="flex items-start gap-3">

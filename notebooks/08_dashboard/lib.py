@@ -151,6 +151,20 @@ PERFIL_COLORES = {
 # esta categoria por ahora.
 COLOR_MIXTO = "#7B2CBF"
 
+# Paleta para el clustering SEMANTICO (en espacio de embeddings, ver
+# notebooks/07b_clustering_semantico) - deliberadamente distinta de PERFIL_COLORES (que usa
+# calido=administrativo/frio=docente) para que nunca se confunda visualmente con el
+# clustering estructural: ambos clusterings pueden mostrarse lado a lado en el dashboard y
+# usan IDs de cluster que no son comparables entre si (mismo numero de cluster no significa
+# el mismo grupo de personas). Paleta categorica neutra (tonos teal/purpura), largo 12 (el
+# clustering semantico selecciona K entre 8 y 25 candidatos - ver notebook seccion 4 - asi
+# que debe cubrir mas de 8 sin repetir color por wraparound, caso real: K=9 repetia el color
+# del cluster 0 en el cluster 8).
+PERFIL_COLORES_SEMANTICO = [
+    "#118AB2", "#EF476F", "#06D6A0", "#FFD166", "#7209B7", "#F3722C", "#4361EE", "#843B62",
+    "#2A9D8F", "#E76F51", "#8338EC", "#3A86FF",
+]
+
 # Subconjunto curado de `dataset_personas_features.csv` para tarjetas de
 # persona / comparaciones rapidas (evita saturar la UI con las 85 columnas).
 METRICAS_CLAVE = [
@@ -245,6 +259,34 @@ def load_pca_personas() -> pd.DataFrame:
     sola vez en `06_clustering.ipynb` sobre las 141 columnas de `X_modelado` (DEC-008), para
     que el dashboard dibuje un punto por persona sin cargar `X_modelado.csv` completo."""
     return _read_csv(CLUSTERING_DIR / "pca_personas.csv")
+
+
+# ---------------------------------------------------------------------------
+# Clustering SEMANTICO (en espacio de embeddings) - capa de comparacion/validacion nueva,
+# ver notebooks/07b_clustering_semantico/07b_clustering_semantico.ipynb. Independiente del
+# clustering estructural de arriba: distinto espacio (embeddings de 768 dim del documento
+# semantico general, no X_modelado), distinto numero de clusters (K propio, no forzado a 13),
+# y sin nombres de perfil interpretados a mano todavia (PERFIL_NOMBRE_SEMANTICO es generico,
+# "Perfil semantico N" + descripcion automatica por variables estructuradas).
+# ---------------------------------------------------------------------------
+
+def load_cluster_resumen_semantico() -> pd.DataFrame:
+    return _read_csv(DASHBOARD_DIR / "cluster_perfiles_resumen_semantico.csv")
+
+
+def load_cluster_top_features_semantico() -> pd.DataFrame:
+    return _read_csv(DASHBOARD_DIR / "cluster_top_features_semantico.csv")
+
+
+def load_clusters_personas_semantico() -> pd.DataFrame:
+    return _read_csv(CLUSTERING_DIR / "clusters_personas_semantico.csv")
+
+
+def load_pca_personas_semantico() -> pd.DataFrame:
+    """Proyeccion PCA de 2 componentes por persona en el espacio de EMBEDDINGS (no
+    X_modelado) - PC1/PC2 aqui no son comparables con los de `load_pca_personas()` (distinto
+    espacio de origen, distinta escala)."""
+    return _read_csv(CLUSTERING_DIR / "pca_personas_semantico.csv")
 
 
 def load_feature_dictionary() -> pd.DataFrame:
