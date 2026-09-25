@@ -3,7 +3,6 @@ import ResumenPage from "./pages/ResumenPage";
 import MapaPage from "./pages/MapaPage";
 import BuscarPage from "./pages/BuscarPage";
 import EquiposPage from "./pages/EquiposPage";
-import SemanticaPage from "./pages/SemanticaPage";
 import PersonaPage from "./pages/PersonaPage";
 import BusquedaCombinadaPage from "./pages/BusquedaCombinadaPage";
 import BusquedaTrayectoriaPage from "./pages/BusquedaTrayectoriaPage";
@@ -13,8 +12,7 @@ const TABS = [
   { to: "/mapa", label: "Mapa de perfiles" },
   { to: "/buscar", label: "Buscar persona" },
   { to: "/equipos", label: "Formar equipos / comisiones" },
-  { to: "/semantica", label: "Búsqueda semántica" },
-  { to: "/busqueda-combinada", label: "Búsqueda combinada" },
+  { to: "/busqueda-combinada", label: "Búsqueda semántica" },
   { to: "/busqueda-trayectoria", label: "Búsqueda por trayectoria" },
 ];
 
@@ -64,7 +62,6 @@ export default function App() {
           <Route path="/mapa" element={<MapaPage />} />
           <Route path="/buscar" element={<BuscarPage />} />
           <Route path="/equipos" element={<EquiposPage />} />
-          <Route path="/semantica" element={<SemanticaPage />} />
           <Route path="/persona/:id" element={<PersonaPage />} />
           <Route path="/busqueda-combinada" element={<BusquedaCombinadaPage />} />
           <Route path="/busqueda-trayectoria" element={<BusquedaTrayectoriaPage />} />

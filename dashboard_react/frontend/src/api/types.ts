@@ -159,22 +159,6 @@ export interface EquiposResponse {
   };
 }
 
-export interface BusquedaResultado {
-  rango: number;
-  id_persona: number;
-  nombre_completo: string;
-  cluster: number | null;
-  perfil_nombre: string | null;
-  vigente: boolean;
-  tipo_empleado: string | null;
-  cargo_actual: string | null;
-  evidencia: string;
-}
-
-export interface BusquedaResponse {
-  consulta: string;
-  resultados: BusquedaResultado[];
-}
 
 // --- Clustering SEMANTICO (en espacio de embeddings) ---------------------------------
 // Estructuras paralelas a PerfilResumen/PerfilDetalle/MapaPunto de arriba, pero para el
@@ -213,6 +197,13 @@ export interface PerfilDetalleSemantico {
   n_cargos_distintos: number;
   n_con_cargo: number;
   muestra_personas: Record<string, unknown>[];
+  cargo_textual_predominante: string | null;
+  unidad_textual_predominante: string | null;
+  desglose_cargo_textual: string | null;
+  desglose_unidad_textual: string | null;
+  pct_con_trayectoria: number | null;
+  pct_formacion_titulo_top1: number | null;
+  ejemplos_texto: string[];
 }
 
 export interface MapaPuntoSemantico {
@@ -236,4 +227,139 @@ export interface MapaSemanticoResponse {
   n_mostrados: number;
   modo: "rama" | "cluster_semantico" | "cargo_real";
   puntos: MapaPuntoSemantico[];
+}
+
+// --- Clustering GLOBAL K=5 (DEC-001/DEC-007) -------------------------------------------
+// KMeans directo sobre X_modelado, SIN el paso de 2 niveles admin/docente de DEC-008. IDs
+// de cluster no comparables con los 13 grupos de "Categoría".
+
+export interface PerfilResumenK5 {
+  CLUSTER_K5: number;
+  PERFIL_NOMBRE_K5: string;
+  N_PERSONAS: number;
+  PCT_POBLACION: number;
+  DESCRIPCION: string;
+  TIPOEMPLEADO_PREDOMINANTE: string | null;
+  CARGO_MAS_FRECUENTE: string | null;
+  NIVEL_ACADEMICO_PREDOMINANTE: string | null;
+  PCT_VIGENTE: number | null;
+  COLOR: string;
+}
+
+export interface ResumenK5Response {
+  n_personas: number;
+  n_perfiles: number;
+  perfiles: PerfilResumenK5[];
+}
+
+export interface PerfilDetalleK5 {
+  cluster: number;
+  nombre: string;
+  n_personas: number;
+  pct_poblacion: number;
+  descripcion: string;
+  color: string;
+  top_features: TopFeature[];
+  cargos: CargoConteo[];
+  n_cargos_distintos: number;
+  n_con_cargo: number;
+  muestra_personas: Record<string, unknown>[];
+}
+
+export interface MapaPuntoK5 {
+  IDPERSONA: number;
+  NOMBRE_COMPLETO: string;
+  PC1: number;
+  PC2: number;
+  CLUSTER_K5: number;
+  PERFIL_NOMBRE_K5: string | null;
+  TIPOEMPLEADO_ACTUAL_DESC: string;
+  VIGENTE_MOSTRAR: boolean;
+  CARGO_ACTUAL: string | null;
+  COLOR: string;
+  GRUPO_COLOR: string;
+}
+
+export interface MapaK5Response {
+  total_modelo: number;
+  n_mostrados: number;
+  puntos: MapaPuntoK5[];
+}
+
+// --- Clustering POR RAMA (ADMINISTRATIVO o DOCENTE por separado) ----------------------
+// El clustering estructural y el semantico de arriba agrupan a TODA la poblacion junta
+// antes de separar por rama, asi que en la practica el eje que domina la separacion de
+// clusters es simplemente "administrativo vs docente". Estas estructuras son para un
+// SEGUNDO corte de clustering propio de cada rama (mismo espacio de
+// features/embeddings, pero solo dentro de esa rama), con su propio K y PCA no
+// comparable entre ramas ni con las vistas globales.
+
+export type TipoClusteringRama = "estructurado" | "semantico";
+export type Rama = "ADMINISTRATIVO" | "DOCENTE";
+
+// Seccion del documento semantico con embedding propio (ver ARCHIVO_EMBEDDING_SECCION en
+// main.py) - usado como chip seleccionable en la busqueda semantica: elegir una o mas
+// limita la similitud a ese texto especifico, evitando que temas puntuales (ej.
+// "investigacion en IA") se diluyan en personas con trayectoria extensa y variada.
+export interface SeccionBusqueda {
+  clave: string;
+  etiqueta: string;
+  n_personas: number;
+}
+
+export interface SeccionesBusquedaResponse {
+  secciones: SeccionBusqueda[];
+}
+
+export interface PerfilResumenPorRama {
+  CLUSTER_RAMA: number;
+  PERFIL_NOMBRE: string;
+  DESCRIPCION: string;
+  N_PERSONAS: number;
+  PCT_POBLACION: number;
+  COLOR: string;
+}
+
+export interface ResumenPorRamaResponse {
+  n_personas: number;
+  n_perfiles: number;
+  perfiles: PerfilResumenPorRama[];
+}
+
+export interface PerfilDetallePorRama {
+  cluster: number;
+  rama: Rama;
+  tipo_clustering: TipoClusteringRama;
+  nombre: string;
+  n_personas: number;
+  pct_poblacion: number;
+  descripcion: string;
+  color: string;
+  cargos: CargoConteo[];
+  n_cargos_distintos: number;
+  n_con_cargo: number;
+  muestra_personas: Record<string, unknown>[];
+}
+
+export interface MapaPuntoPorRama {
+  IDPERSONA: number;
+  RAMA: Rama;
+  NOMBRE_COMPLETO: string;
+  PC1: number;
+  PC2: number;
+  CLUSTER_RAMA: number;
+  PERFIL_NOMBRE: string | null;
+  TIPOEMPLEADO_ACTUAL_DESC: string;
+  VIGENTE_MOSTRAR: boolean;
+  CARGO_ACTUAL: string | null;
+  COLOR: string;
+  GRUPO_COLOR: string;
+}
+
+export interface MapaPorRamaResponse {
+  total_modelo: number;
+  n_mostrados: number;
+  puntos: MapaPuntoPorRama[];
+  tipo_clustering: TipoClusteringRama;
+  rama: Rama;
 }

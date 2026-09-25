@@ -55,6 +55,11 @@ def cluster_color_semantico(cluster: int) -> str:
     return paleta[int(cluster) % len(paleta)]
 
 
+def cluster_color_k5(cluster: int) -> str:
+    paleta = lib.PERFIL_COLORES_K5
+    return paleta[int(cluster) % len(paleta)]
+
+
 def color_por_texto(texto: str) -> str:
     """Color determinístico (mismo texto -> siempre el mismo color) para el modo "cargo
     real" del mapa (~239 valores distintos de CARGO_ACTUAL, demasiados para una paleta
@@ -146,6 +151,69 @@ def get_pca_semantico() -> pd.DataFrame:
 
 
 @lru_cache(maxsize=1)
+def get_resumen_por_rama() -> pd.DataFrame:
+    return lib.load_cluster_resumen_por_rama()
+
+
+@lru_cache(maxsize=1)
+def get_clusters_estructurado_por_rama() -> pd.DataFrame:
+    return lib.load_clusters_personas_estructurado_por_rama()
+
+
+@lru_cache(maxsize=1)
+def get_pca_estructurado_por_rama() -> pd.DataFrame:
+    return lib.load_pca_personas_estructurado_por_rama()
+
+
+@lru_cache(maxsize=1)
+def get_clusters_semantico_por_rama() -> pd.DataFrame:
+    return lib.load_clusters_personas_semantico_por_rama()
+
+
+@lru_cache(maxsize=1)
+def get_pca_semantico_por_rama() -> pd.DataFrame:
+    return lib.load_pca_personas_semantico_por_rama()
+
+
+def get_clusters_por_rama(tipo_clustering: str) -> pd.DataFrame:
+    return get_clusters_estructurado_por_rama() if tipo_clustering == "estructurado" else get_clusters_semantico_por_rama()
+
+
+def get_pca_por_rama(tipo_clustering: str) -> pd.DataFrame:
+    return get_pca_estructurado_por_rama() if tipo_clustering == "estructurado" else get_pca_semantico_por_rama()
+
+
+_PALETA_POR_RAMA = [
+    "#118AB2", "#EF476F", "#06D6A0", "#FFD166", "#7209B7", "#F3722C", "#4361EE", "#843B62",
+    "#2A9D8F", "#E76F51", "#8338EC",
+]
+
+
+def cluster_color_por_rama(cluster: int) -> str:
+    return _PALETA_POR_RAMA[int(cluster) % len(_PALETA_POR_RAMA)]
+
+
+@lru_cache(maxsize=1)
+def get_resumen_k5() -> pd.DataFrame:
+    return lib.load_cluster_resumen_k5()
+
+
+@lru_cache(maxsize=1)
+def get_top_features_k5() -> pd.DataFrame:
+    return lib.load_cluster_top_features_k5()
+
+
+@lru_cache(maxsize=1)
+def get_clusters_k5() -> pd.DataFrame:
+    return lib.load_clusters_personas_k5()
+
+
+@lru_cache(maxsize=1)
+def get_pca_k5() -> pd.DataFrame:
+    return lib.load_pca_personas_k5()
+
+
+@lru_cache(maxsize=1)
 def get_eventos_trayectoria() -> pd.DataFrame:
     return lib.load_eventos_trayectoria()
 
@@ -184,6 +252,19 @@ def get_embeddings_trayectoria():
     return lib.load_embeddings_trayectoria()
 
 
+SECCIONES_BUSQUEDA_VALIDAS = set(lib.ARCHIVO_EMBEDDING_SECCION.keys())
+
+
+@lru_cache(maxsize=None)
+def get_embeddings_seccion(seccion: str):
+    return lib.load_embeddings_por_seccion(seccion)
+
+
+@lru_cache(maxsize=None)
+def get_documento_por_seccion(seccion: str) -> pd.DataFrame:
+    return lib.load_documento_por_seccion(seccion)
+
+
 @lru_cache(maxsize=1)
 def get_documento_trayectoria() -> pd.DataFrame:
     return lib.load_documento_trayectoria()
@@ -202,7 +283,7 @@ def get_text_model():
     if _text_model is None:
         from sentence_transformers import SentenceTransformer
 
-        _text_model = SentenceTransformer("intfloat/multilingual-e5-base")
+        _text_model = SentenceTransformer("BAAI/bge-m3")
     return _text_model
 
 
@@ -299,7 +380,6 @@ def mapa(tipo: str = Query("Todos"), perfiles: str = Query(""), modo: str = Quer
                   "CATEGORIAS_ACTUALES_MIXTO"]],
         on="IDPERSONA", how="inner",
     )
-    pca_df = pca_df[pca_df["CLUSTER"] != -1]
     pca_df["ES_MIXTO"] = pca_df["ES_MIXTO"].fillna(False)
 
     if tipo == "Solo Administrativo":
@@ -343,6 +423,90 @@ def mapa(tipo: str = Query("Todos"), perfiles: str = Query(""), modo: str = Quer
             p["COLOR"] = cluster_color(p["CLUSTER"])
             p["GRUPO_COLOR"] = str(p["CLUSTER"])
     return {"total_modelo": int(len(personas)), "n_mostrados": len(puntos), "puntos": puntos, "modo": modo}
+
+
+# ---------------------------------------------------------------------------
+# Clustering ESTRUCTURAL GLOBAL, K=5 (DEC-001/DEC-007) - KMeans directo sobre X_modelado
+# SIN el paso de 2 niveles admin/docente de DEC-008 (ver lib.py, seccion K5). Endpoints
+# paralelos a resumen/perfiles/mapa de "Categoria (13 grupos)", pero con su propio espacio
+# de 5 clusters - IDs de cluster no comparables 1:1 con los 13 grupos.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/resumen_k5")
+def resumen_k5():
+    resumen_df = get_resumen_k5()
+    clusters_df = get_clusters_k5()
+    return {
+        "n_personas": int(len(clusters_df)),
+        "n_perfiles": int(resumen_df["CLUSTER_K5"].nunique()),
+        "perfiles": [
+            {**rec, "COLOR": cluster_color_k5(rec["CLUSTER_K5"])}
+            for rec in df_to_records(resumen_df.sort_values("CLUSTER_K5"))
+        ],
+    }
+
+
+@app.get("/api/perfiles_k5/{cluster_id}")
+def perfil_detalle_k5(cluster_id: int):
+    resumen_df = get_resumen_k5()
+    fila = resumen_df[resumen_df["CLUSTER_K5"] == cluster_id]
+    if fila.empty:
+        raise HTTPException(404, "Perfil no encontrado")
+    fila = fila.iloc[0]
+
+    labels = get_feature_labels()
+    feats = get_top_features_k5()
+    feats = feats[feats["CLUSTER_K5"] == cluster_id].copy()
+    feats["FEATURE_LABEL"] = feats["FEATURE"].map(lambda f: labels.get(f, f))
+
+    personas = get_personas()
+    clusters_df = get_clusters_k5()
+    ids_cluster = set(clusters_df.loc[clusters_df["CLUSTER_K5"] == cluster_id, "IDPERSONA"])
+    personas_cluster = personas[personas["IDPERSONA"].isin(ids_cluster)]
+
+    cargos_cluster = personas_cluster["CARGO_ACTUAL"].dropna()
+    conteo_cargos = cargos_cluster.value_counts().reset_index()
+    conteo_cargos.columns = ["CARGO_ACTUAL", "N_PERSONAS"]
+
+    muestra_cols = ["IDPERSONA", "NOMBRE_COMPLETO"] + [c for c in lib.METRICAS_CLAVE if c in personas_cluster.columns]
+    muestra = personas_cluster[muestra_cols].head(50)
+
+    return {
+        "cluster": int(cluster_id),
+        "nombre": fila["PERFIL_NOMBRE_K5"],
+        "n_personas": int(fila["N_PERSONAS"]),
+        "pct_poblacion": float(fila["PCT_POBLACION"]),
+        "descripcion": fila["DESCRIPCION"],
+        "color": cluster_color_k5(cluster_id),
+        "top_features": df_to_records(feats[["FEATURE", "FEATURE_LABEL", "VALUE_CLUSTER", "VALUE_GLOBAL"]]),
+        "cargos": df_to_records(conteo_cargos),
+        "n_cargos_distintos": int(cargos_cluster.nunique()),
+        "n_con_cargo": int(len(cargos_cluster)),
+        "muestra_personas": df_to_records(muestra),
+    }
+
+
+@app.get("/api/mapa_k5")
+def mapa_k5(perfiles: str = Query("")):
+    personas = get_personas()
+    clusters_df = get_clusters_k5()
+    pca_df = get_pca_k5().merge(clusters_df, on="IDPERSONA", how="inner").merge(
+        personas[["IDPERSONA", "NOMBRE_COMPLETO", "TIPOEMPLEADO_ACTUAL_DESC", "VIGENTE_MOSTRAR", "CARGO_ACTUAL"]],
+        on="IDPERSONA", how="inner",
+    )
+
+    if perfiles:
+        ids_perfiles = {int(p) for p in perfiles.split(",") if p}
+        pca_df = pca_df[pca_df["CLUSTER_K5"].isin(ids_perfiles)]
+
+    resumen_df = get_resumen_k5().set_index("CLUSTER_K5")["PERFIL_NOMBRE_K5"]
+    pca_df = pca_df.sort_values("CLUSTER_K5")
+    puntos = df_to_records(pca_df)
+    for p in puntos:
+        p["PERFIL_NOMBRE_K5"] = resumen_df.get(p["CLUSTER_K5"])
+        p["COLOR"] = cluster_color_k5(p["CLUSTER_K5"])
+        p["GRUPO_COLOR"] = str(p["CLUSTER_K5"])
+    return {"total_modelo": int(len(clusters_df)), "n_mostrados": len(puntos), "puntos": puntos}
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +556,9 @@ def perfil_detalle_semantico(cluster_id: int):
     muestra_cols = ["IDPERSONA", "NOMBRE_COMPLETO"] + [c for c in lib.METRICAS_CLAVE if c in personas_cluster.columns]
     muestra = personas_cluster[muestra_cols].head(50)
 
+    ejemplos_raw = fila.get("EJEMPLOS_TEXTO")
+    ejemplos_texto = ejemplos_raw.split(" || ") if isinstance(ejemplos_raw, str) and ejemplos_raw else []
+
     return {
         "cluster": int(cluster_id),
         "nombre": fila["PERFIL_NOMBRE_SEMANTICO"],
@@ -404,6 +571,13 @@ def perfil_detalle_semantico(cluster_id: int):
         "n_cargos_distintos": int(cargos_cluster.nunique()),
         "n_con_cargo": int(len(cargos_cluster)),
         "muestra_personas": df_to_records(muestra),
+        "cargo_textual_predominante": fila.get("CARGO_TEXTUAL_PREDOMINANTE"),
+        "unidad_textual_predominante": fila.get("UNIDAD_TEXTUAL_PREDOMINANTE"),
+        "desglose_cargo_textual": fila.get("DESGLOSE_CARGO_TEXTUAL"),
+        "desglose_unidad_textual": fila.get("DESGLOSE_UNIDAD_TEXTUAL"),
+        "pct_con_trayectoria": fila.get("PCT_CON_TRAYECTORIA"),
+        "pct_formacion_titulo_top1": fila.get("PCT_FORMACION_TITULO_TOP1"),
+        "ejemplos_texto": ejemplos_texto,
     }
 
 
@@ -472,6 +646,130 @@ def mapa_semantico(perfiles: str = Query(""), modo: str = Query("cluster_semanti
             p["COLOR"] = cluster_color_semantico(p["CLUSTER_SEMANTICO"])
             p["GRUPO_COLOR"] = str(p["CLUSTER_SEMANTICO"])
     return {"total_modelo": int(len(clusters_df)), "n_mostrados": len(puntos), "puntos": puntos, "modo": modo}
+
+
+# ---------------------------------------------------------------------------
+# Clustering POR RAMA (ADMINISTRATIVO o DOCENTE por separado) - tanto el clustering
+# estructural (13 grupos / K=5) como el semantico agrupan a TODA la poblacion junta antes
+# de separar por rama, asi que en la practica el eje que domina la separacion de clusters
+# es simplemente "administrativo vs docente", no matices dentro de cada rama. Estos
+# endpoints exponen un segundo corte de clustering, propio de cada rama (mismo espacio de
+# features/embeddings que su version global, pero SIN mezclar ambas ramas, con su propio K
+# y su propio PCA 2D no comparable entre ramas). `tipo_clustering` selecciona
+# "estructurado" o "semantico"; `rama` selecciona "ADMINISTRATIVO" o "DOCENTE".
+# ---------------------------------------------------------------------------
+
+@app.get("/api/resumen_por_rama")
+def resumen_por_rama(tipo_clustering: str = Query("estructurado"), rama: str = Query("ADMINISTRATIVO")):
+    resumen_df = get_resumen_por_rama()
+    resumen_df = resumen_df[
+        (resumen_df["TIPO_CLUSTERING"] == tipo_clustering) & (resumen_df["RAMA"] == rama)
+    ].sort_values("CLUSTER_RAMA")
+    if resumen_df.empty:
+        raise HTTPException(404, "No hay clustering por rama para esa combinacion")
+
+    clusters_df = get_clusters_por_rama(tipo_clustering)
+    clusters_df = clusters_df[clusters_df["RAMA"] == rama]
+
+    return {
+        "n_personas": int(len(clusters_df)),
+        "n_perfiles": int(resumen_df["CLUSTER_RAMA"].nunique()),
+        "perfiles": [
+            {
+                "CLUSTER_RAMA": int(rec["CLUSTER_RAMA"]),
+                "PERFIL_NOMBRE": rec["NOMBRE_PERFIL"],
+                "DESCRIPCION": rec["DESCRIPCION"],
+                "N_PERSONAS": int(rec["N_PERSONAS"]),
+                "PCT_POBLACION": 100.0 * float(rec["N_PERSONAS"]) / len(clusters_df) if len(clusters_df) else 0.0,
+                "COLOR": cluster_color_por_rama(rec["CLUSTER_RAMA"]),
+            }
+            for rec in df_to_records(resumen_df)
+        ],
+    }
+
+
+@app.get("/api/perfiles_por_rama/{cluster_id}")
+def perfil_detalle_por_rama(
+    cluster_id: int,
+    tipo_clustering: str = Query("estructurado"),
+    rama: str = Query("ADMINISTRATIVO"),
+):
+    resumen_df = get_resumen_por_rama()
+    fila = resumen_df[
+        (resumen_df["TIPO_CLUSTERING"] == tipo_clustering)
+        & (resumen_df["RAMA"] == rama)
+        & (resumen_df["CLUSTER_RAMA"] == cluster_id)
+    ]
+    if fila.empty:
+        raise HTTPException(404, "Perfil no encontrado")
+    fila = fila.iloc[0]
+
+    personas = get_personas()
+    clusters_df = get_clusters_por_rama(tipo_clustering)
+    ids_cluster = set(
+        clusters_df.loc[(clusters_df["RAMA"] == rama) & (clusters_df["CLUSTER_RAMA"] == cluster_id), "IDPERSONA"]
+    )
+    personas_cluster = personas[personas["IDPERSONA"].isin(ids_cluster)]
+
+    cargos_cluster = personas_cluster["CARGO_ACTUAL"].dropna()
+    conteo_cargos = cargos_cluster.value_counts().reset_index()
+    conteo_cargos.columns = ["CARGO_ACTUAL", "N_PERSONAS"]
+
+    muestra_cols = ["IDPERSONA", "NOMBRE_COMPLETO"] + [c for c in lib.METRICAS_CLAVE if c in personas_cluster.columns]
+    muestra = personas_cluster[muestra_cols].head(50)
+
+    n_total_rama = int((clusters_df["RAMA"] == rama).sum())
+
+    return {
+        "cluster": int(cluster_id),
+        "rama": rama,
+        "tipo_clustering": tipo_clustering,
+        "nombre": fila["NOMBRE_PERFIL"],
+        "n_personas": int(fila["N_PERSONAS"]),
+        "pct_poblacion": 100.0 * float(fila["N_PERSONAS"]) / n_total_rama if n_total_rama else 0.0,
+        "descripcion": fila["DESCRIPCION"],
+        "color": cluster_color_por_rama(cluster_id),
+        "cargos": df_to_records(conteo_cargos),
+        "n_cargos_distintos": int(cargos_cluster.nunique()),
+        "n_con_cargo": int(len(cargos_cluster)),
+        "muestra_personas": df_to_records(muestra),
+    }
+
+
+@app.get("/api/mapa_por_rama")
+def mapa_por_rama(tipo_clustering: str = Query("estructurado"), rama: str = Query("ADMINISTRATIVO"), perfiles: str = Query("")):
+    personas = get_personas()
+    clusters_df = get_clusters_por_rama(tipo_clustering)
+    clusters_df = clusters_df[clusters_df["RAMA"] == rama]
+    pca_df = get_pca_por_rama(tipo_clustering)
+    pca_df = pca_df[pca_df["RAMA"] == rama]
+    pca_df = pca_df.merge(clusters_df, on=["IDPERSONA", "RAMA"], how="inner").merge(
+        personas[["IDPERSONA", "NOMBRE_COMPLETO", "TIPOEMPLEADO_ACTUAL_DESC", "VIGENTE_MOSTRAR", "CARGO_ACTUAL"]],
+        on="IDPERSONA", how="inner",
+    )
+
+    if perfiles:
+        ids_perfiles = {int(p) for p in perfiles.split(",") if p}
+        pca_df = pca_df[pca_df["CLUSTER_RAMA"].isin(ids_perfiles)]
+
+    resumen_df = get_resumen_por_rama()
+    resumen_df = resumen_df[(resumen_df["TIPO_CLUSTERING"] == tipo_clustering) & (resumen_df["RAMA"] == rama)]
+    nombres = resumen_df.set_index("CLUSTER_RAMA")["NOMBRE_PERFIL"]
+
+    pca_df = pca_df.sort_values("CLUSTER_RAMA")
+    puntos = df_to_records(pca_df)
+    for p in puntos:
+        p["PERFIL_NOMBRE"] = nombres.get(p["CLUSTER_RAMA"])
+        p["COLOR"] = cluster_color_por_rama(p["CLUSTER_RAMA"])
+        p["GRUPO_COLOR"] = str(p["CLUSTER_RAMA"])
+
+    return {
+        "total_modelo": int(len(clusters_df)),
+        "n_mostrados": len(puntos),
+        "puntos": puntos,
+        "tipo_clustering": tipo_clustering,
+        "rama": rama,
+    }
 
 
 _TOLERANCIA_RECESO_ACADEMICO = pd.Timedelta(days=90)
@@ -956,10 +1254,49 @@ def equipos(
     }
 
 
+ETIQUETAS_SECCION_BUSQUEDA = {
+    "TRAYECTORIA": "Trayectoria",
+    "FORMACION": "Formación",
+    "DOCENCIA": "Docencia",
+    "INVESTIGACION": "Investigación",
+    "VINCULACION": "Vinculación",
+    "CAPACITACION": "Capacitación",
+    "IDIOMAS": "Idiomas",
+    "RECONOCIMIENTOS": "Reconocimientos",
+}
+
+
+@app.get("/api/secciones_busqueda")
+def secciones_busqueda():
+    """Lista de secciones disponibles para la búsqueda semántica por-sección (ver
+    ARCHIVO_EMBEDDING_SECCION), con cuántas personas cubre cada una - para poblar los chips
+    de selección en el frontend."""
+    return {
+        "secciones": [
+            {
+                "clave": clave,
+                "etiqueta": ETIQUETAS_SECCION_BUSQUEDA[clave],
+                "n_personas": int(len(get_embeddings_seccion(clave)[0])),
+            }
+            for clave in lib.ARCHIVO_EMBEDDING_SECCION
+        ]
+    }
+
+
 class BusquedaSemantica(BaseModel):
     consulta: str
     top_n: int = 10
     vigencia: str = "Cualquiera"
+    # Secciones a buscar (ver ARCHIVO_EMBEDDING_SECCION) - vacio o None usa el embedding
+    # GENERAL (documento completo, comportamiento historico). Con una o mas secciones, la
+    # similitud se calcula SOLO contra el texto de esas secciones (sin diluirse con el resto
+    # del perfil - ver hallazgo real: "expertos de IA en investigacion" no encontraba
+    # investigadores con trayectoria extensa porque su vector completo promediaba tambien
+    # cargos/docencia/capacitacion no relacionados). Con varias secciones, el score final es
+    # el PROMEDIO de las similitudes de cada una (decision del usuario: sube quien es fuerte
+    # en TODAS las elegidas, no basta con destacar en una sola) - una persona sin esa seccion
+    # no participa en el promedio de esa seccion (se ignora, no se penaliza a 0).
+    secciones: list[str] | None = None
 
 
 @app.post("/api/buscar")
@@ -967,14 +1304,28 @@ def buscar(body: BusquedaSemantica):
     if not body.consulta.strip():
         raise HTTPException(400, "Consulta vacía")
 
-    ids, matrix = get_embeddings()
+    secciones = [s for s in (body.secciones or []) if s]
+    if secciones:
+        invalidas = set(secciones) - SECCIONES_BUSQUEDA_VALIDAS
+        if invalidas:
+            raise HTTPException(400, f"Secciones inválidas: {', '.join(sorted(invalidas))}")
+
     modelo = get_text_model()
-    q = modelo.encode([f"query: {body.consulta}"], normalize_embeddings=True)[0]
-    sims = matrix @ q
+    q = modelo.encode([body.consulta], normalize_embeddings=True)[0]
+
+    if secciones:
+        ids, sims, _texto_evidencia = _similitud_por_secciones(q, secciones)
+    else:
+        ids, matrix = get_embeddings()
+        sims = matrix @ q
+        documentos = get_documento_semantico().set_index("IDPERSONA")["DOCUMENTO_TEXTO"]
+
+        def _texto_evidencia(idp: int) -> str:
+            return documentos.get(idp, "")
+
     orden = np.argsort(-sims)
 
     personas = get_personas()
-    documentos = get_documento_semantico().set_index("IDPERSONA")["DOCUMENTO_TEXTO"]
 
     resultados = []
     rango = 0
@@ -1001,12 +1352,12 @@ def buscar(body: BusquedaSemantica):
             "vigente": vigente,
             "tipo_empleado": p.get("TIPOEMPLEADO_ACTUAL_DESC") if pd.notna(p.get("TIPOEMPLEADO_ACTUAL_DESC")) else None,
             "cargo_actual": p.get("CARGO_ACTUAL") if pd.notna(p.get("CARGO_ACTUAL")) else None,
-            "evidencia": _mejor_evidencia(body.consulta, documentos.get(idp, "")),
+            "evidencia": _mejor_evidencia(body.consulta, _texto_evidencia(idp)),
         })
         if rango >= body.top_n:
             break
 
-    return {"consulta": body.consulta, "resultados": resultados}
+    return {"consulta": body.consulta, "secciones": secciones, "resultados": resultados}
 
 
 class BusquedaAvanzada(BaseModel):
@@ -1021,6 +1372,36 @@ class BusquedaAvanzada(BaseModel):
     min_duracion_mediana: float = 0.0
     min_cargos_espol: int = 0
     max_cargos_espol: int = 0
+    # Ver docstring de BusquedaSemantica.secciones (mismo criterio: vacio/None usa el
+    # embedding general, varias secciones se combinan por promedio de similitudes).
+    secciones: list[str] | None = None
+
+
+def _similitud_por_secciones(q: np.ndarray, secciones: list[str]) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Combina (promedio) la similitud contra `q` de cada seccion en `secciones` - ver
+    docstring de BusquedaSemantica.secciones. Devuelve (ids, sims, docs_por_seccion) donde
+    docs_por_seccion es {IDPERSONA: texto} de la PRIMERA seccion que la persona tenga, para
+    usar como evidencia coherente con lo que se comparo."""
+    suma_sims: dict[int, float] = {}
+    conteo: dict[int, int] = {}
+    docs_cache = {s: get_documento_por_seccion(s).set_index("IDPERSONA")["DOCUMENTO_TEXTO"] for s in secciones}
+    for seccion in secciones:
+        ids_s, matrix_s = get_embeddings_seccion(seccion)
+        sims_s = matrix_s @ q
+        for idp, sim in zip(ids_s.tolist(), sims_s.tolist()):
+            suma_sims[idp] = suma_sims.get(idp, 0.0) + sim
+            conteo[idp] = conteo.get(idp, 0) + 1
+    ids = np.array(list(suma_sims.keys()))
+    sims = np.array([suma_sims[idp] / conteo[idp] for idp in ids])
+
+    def _texto_evidencia(idp: int) -> str:
+        for s in secciones:
+            texto = docs_cache[s].get(idp)
+            if texto:
+                return texto
+        return ""
+
+    return ids, sims, _texto_evidencia
 
 
 @app.post("/api/buscar_avanzado")
@@ -1038,6 +1419,12 @@ def buscar_avanzado(body: BusquedaAvanzada):
     if not body.consulta.strip():
         raise HTTPException(400, "Consulta vacía")
 
+    secciones = [s for s in (body.secciones or []) if s]
+    if secciones:
+        invalidas = set(secciones) - SECCIONES_BUSQUEDA_VALIDAS
+        if invalidas:
+            raise HTTPException(400, f"Secciones inválidas: {', '.join(sorted(invalidas))}")
+
     personas = get_personas()
     filtrados = _aplicar_filtros_estructurados(
         personas, body.vigencia, body.tipo, body.nivel, body.min_publicaciones,
@@ -1046,13 +1433,21 @@ def buscar_avanzado(body: BusquedaAvanzada):
     )
     ids_filtrados = set(filtrados["IDPERSONA"])
 
-    ids, matrix = get_embeddings()
     modelo = get_text_model()
-    q = modelo.encode([f"query: {body.consulta}"], normalize_embeddings=True)[0]
-    sims = matrix @ q
+    q = modelo.encode([body.consulta], normalize_embeddings=True)[0]
+
+    if secciones:
+        ids, sims, _texto_evidencia = _similitud_por_secciones(q, secciones)
+    else:
+        ids, matrix = get_embeddings()
+        sims = matrix @ q
+        documentos = get_documento_semantico().set_index("IDPERSONA")["DOCUMENTO_TEXTO"]
+
+        def _texto_evidencia(idp: int) -> str:
+            return documentos.get(idp, "")
+
     orden = np.argsort(-sims)
 
-    documentos = get_documento_semantico().set_index("IDPERSONA")["DOCUMENTO_TEXTO"]
     personas_por_id = filtrados.set_index("IDPERSONA")
 
     resultados = []
@@ -1074,12 +1469,17 @@ def buscar_avanzado(body: BusquedaAvanzada):
             "cargo_actual": p.get("CARGO_ACTUAL") if pd.notna(p.get("CARGO_ACTUAL")) else None,
             "n_cargos_espol": None if pd.isna(p.get("N_CARGOS_ESPOL")) else float(p.get("N_CARGOS_ESPOL")),
             "duracion_mediana_tramo_anios": None if pd.isna(p.get("DURACION_MEDIANA_TRAMO_ANIOS")) else float(p.get("DURACION_MEDIANA_TRAMO_ANIOS")),
-            "evidencia": _mejor_evidencia(body.consulta, documentos.get(idp, "")),
+            "evidencia": _mejor_evidencia(body.consulta, _texto_evidencia(idp)),
         })
         if rango >= body.top_n:
             break
 
-    return {"consulta": body.consulta, "n_candidatos_tras_filtros": int(len(ids_filtrados)), "resultados": resultados}
+    return {
+        "consulta": body.consulta,
+        "secciones": secciones,
+        "n_candidatos_tras_filtros": int(len(ids_filtrados)),
+        "resultados": resultados,
+    }
 
 
 @app.post("/api/buscar_avanzado_trayectoria")
@@ -1114,7 +1514,7 @@ def buscar_avanzado_trayectoria(body: BusquedaAvanzada):
 
     ids, matrix = get_embeddings_trayectoria()
     modelo = get_text_model()
-    q = modelo.encode([f"query: {body.consulta}"], normalize_embeddings=True)[0]
+    q = modelo.encode([body.consulta], normalize_embeddings=True)[0]
     sims = matrix @ q
     orden = np.argsort(-sims)
 

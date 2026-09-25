@@ -1,2 +1,0 @@
-MODELO,DIMENSIONES,METODO,PREFIJO_DOCUMENTO,PREFIJO_CONSULTA_BUSQUEDA,N_PERSONAS_CON_EMBEDDING,N_PERSONAS_SIN_EMBEDDING,PALABRAS_PROMEDIO_DOCUMENTO
-intfloat/multilingual-e5-base,768,"un embedding por persona, calculado directamente sobre su documento semántico completo (ver sección 5) - sin agregación de fragmentos (DEC-014)",passage: ,query: ,3194,1,189.2

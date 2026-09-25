@@ -430,6 +430,70 @@ def _seccion_investigacion(poblacion: set[int]) -> pd.Series:
     return pd.Series(salida, name="INVESTIGACION")
 
 
+def construir_items_investigacion(poblacion: set[int]) -> pd.DataFrame:
+    """Devuelve un DataFrame con un ITEM individual por fila (un proyecto, una publicacion,
+    una tesis dirigida o una ponencia - no un documento agregado por persona), columnas
+    IDPERSONA, TIPO_ITEM, TEXTO_ITEM.
+
+    Por que: `_seccion_investigacion` (y por ende `embeddings_investigacion.csv`) agrega
+    TODOS los proyectos/publicaciones/tesis/ponencias de una persona en un unico texto, y el
+    embedding resultante es un promedio de todo ese texto - alguien con 1 proyecto de IA
+    entre 17 proyectos de temas variados (energia, COVID, gemelos digitales) diluye esa
+    unica coincidencia entre las otras 16 no relacionadas, mientras que alguien
+    hiperespecializado en el mismo tema exacto de la consulta queda con un vector mas
+    "puro" y gana aunque tenga MENOS produccion real en el tema. Caso real observado: con
+    la consulta corta "experto en IA", investigadores reales con 17-46 publicaciones (varias
+    de ellas en IA/deep learning) rankeaban fuera del top 25 del embedding de SECCION
+    completa.
+
+    Con un embedding por ITEM individual, la busqueda puede tomar el MEJOR item de cada
+    persona (no el promedio de todos) - un solo proyecto de IA fuerte compite de igual a
+    igual sin que los otros 16 proyectos de la misma persona lo debiliten."""
+    proy = _leer("proyectos_investigacion_disponible.csv")
+    proy = proy[proy["IDPERSONA"].isin(poblacion) & proy["NOMBRE"].notna()]
+
+    def _texto_proyecto(r):
+        areas = [str(r[c]) for c in ("STRAREACAMPOAMPLIO", "STRAREAFRASCATI") if pd.notna(r.get(c))]
+        area_txt = f" ({areas[0]})" if areas else ""
+        return f"{r['NOMBRE']}{area_txt}"
+
+    items_proy = pd.DataFrame({
+        "IDPERSONA": proy["IDPERSONA"].to_numpy(),
+        "TIPO_ITEM": "PROYECTO_INVESTIGACION",
+        "TEXTO_ITEM": proy.apply(_texto_proyecto, axis=1).to_numpy(),
+    })
+
+    pub = _leer("publicaciones.csv")
+    pub = pub[pub["IDPERSONA"].isin(poblacion) & pub["TITULO"].notna()]
+    items_pub = pd.DataFrame({
+        "IDPERSONA": pub["IDPERSONA"].to_numpy(),
+        "TIPO_ITEM": "PUBLICACION",
+        "TEXTO_ITEM": pub["TITULO"].astype(str).to_numpy(),
+    })
+
+    tesis = _leer("proyecto_grado.csv").rename(columns={"IDDIRECTOR": "IDPERSONA"})
+    tesis = tesis[tesis["IDPERSONA"].isin(poblacion) & tesis["NOMBRETRABAJOTITULACION"].notna()]
+    items_tesis = pd.DataFrame({
+        "IDPERSONA": tesis["IDPERSONA"].to_numpy(),
+        "TIPO_ITEM": "TESIS_DIRIGIDA",
+        "TEXTO_ITEM": tesis["NOMBRETRABAJOTITULACION"].astype(str).to_numpy(),
+    })
+
+    ponencias = _leer("ponentes_todos.csv")
+    ponencias = ponencias[ponencias["IDPERSONA"].isin(poblacion) & ponencias["NOMBRE"].notna()]
+    items_pon = pd.DataFrame({
+        "IDPERSONA": ponencias["IDPERSONA"].to_numpy(),
+        "TIPO_ITEM": "PONENCIA",
+        "TEXTO_ITEM": ponencias["NOMBRE"].astype(str).to_numpy(),
+    })
+
+    items = pd.concat([items_proy, items_pub, items_tesis, items_pon], ignore_index=True)
+    items = items[items["TEXTO_ITEM"].str.strip() != ""]
+    items = items.drop_duplicates(subset=["IDPERSONA", "TIPO_ITEM", "TEXTO_ITEM"]).reset_index(drop=True)
+    items["IDPERSONA"] = items["IDPERSONA"].astype(int)
+    return items
+
+
 def _seccion_vinculacion(poblacion: set[int]) -> pd.Series:
     df = _leer("proyectos_vinculacion_disponible.csv")
     df = df[df["IDPERSONA"].isin(poblacion) & df["NOMBREPROYECTO"].notna()]
@@ -979,14 +1043,22 @@ ETIQUETAS_SECCION = {
 }
 
 
-# Presupuesto de palabras del documento completo. El modelo de embeddings (E5, 512 tokens,
-# ver seccion de decisiones) trunca silenciosamente lo que exceda su contexto; en vez de
-# depender de ese truncamiento implicito (que cortaria a mitad de frase y castigaria
-# siempre a las secciones finales sin importar su relevancia), se recorta explicitamente
-# por seccion completa, empezando por la de menor prioridad (RECONOCIMIENTOS) hacia la de
-# mayor (TRAYECTORIA nunca se recorta). Margen conservador bajo 512 tokens: el español
-# tokenizado con subwords produce ~1.3 tokens/palabra en promedio.
-PRESUPUESTO_PALABRAS = 380
+# Presupuesto de palabras del documento completo. El modelo de embeddings (DEC-028:
+# BAAI/bge-m3, 8192 tokens de contexto) trunca silenciosamente lo que exceda su contexto; en
+# vez de depender de ese truncamiento implicito (que cortaria a mitad de frase y castigaria
+# siempre a las secciones finales sin importar su relevancia), se recorta explicitamente por
+# seccion completa, empezando por la de menor prioridad (RECONOCIMIENTOS) hacia la de mayor
+# (TRAYECTORIA nunca se recorta).
+#
+# Se removio el limite artificial de 380 palabras heredado del modelo anterior
+# (intfloat/multilingual-e5-base, 512 tokens): con BGE-M3 ese presupuesto ya no tiene
+# justificacion tecnica y estaba recortando la seccion INVESTIGACION de investigadores
+# activos (17-46 publicaciones en IA/ML) simplemente por exceder 380 palabras - la busqueda
+# semantica de "expertos en IA" no los encontraba porque su embedding nunca vio esa seccion.
+# Margen conservador bajo el limite real del modelo: el español tokenizado con subwords
+# produce ~1.3 tokens/palabra en promedio (8192 tokens / 1.3 ≈ 6300 palabras); se deja un
+# margen adicional para no rozar el limite exacto (que si truncaria a mitad de frase).
+PRESUPUESTO_PALABRAS = 5000
 
 
 def construir_documentos_semanticos(
@@ -1049,3 +1121,61 @@ def construir_documentos_semanticos(
         })
 
     return pd.DataFrame(filas)
+
+
+def construir_documentos_por_seccion(
+    poblacion: set[int],
+    eventos_trayectoria: pd.DataFrame,
+    diversidad_trayectoria: pd.DataFrame | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Construye, para cada seccion (TRAYECTORIA/FORMACION/DOCENCIA/.../RECONOCIMIENTOS), un
+    documento INDEPENDIENTE por persona (no fusionado con las demas secciones) - pensado
+    para generar un embedding propio por seccion, complementario al embedding general de
+    `construir_documentos_semanticos` (documento completo).
+
+    Por que: el embedding general diluye temas especificos en personas con trayectoria
+    extensa y variada - una busqueda semantica de "expertos en IA" no encontraba a
+    investigadores reales con 17-46 publicaciones en IA/ML porque su vector promedia
+    tambien 800+ palabras de trayectoria/docencia/capacitacion no relacionadas, mientras que
+    alguien recien graduado cuyo UNICO contenido es investigacion queda mas cerca de la
+    consulta (su vector no tiene nada mas que diluya la senal). Un embedding calculado SOLO
+    sobre el texto de Investigacion (sin el resto del perfil) no tiene ese problema, igual
+    razonamiento que ya aplicaba `construir_documento_trayectoria` (capa nueva, separada del
+    embedding general) - aqui se generaliza a todas las secciones, reutilizando las mismas
+    funciones `_seccion_*` (ninguna logica de extraccion de texto se duplica).
+
+    Reutiliza los MISMOS bloques de texto (mismas etiquetas "Trayectoria: ", "Investigación:
+    ", etc.) que ya usa el documento fusionado, asi que un embedding por seccion vive en el
+    mismo estilo de texto narrativo que el general - solo cambia el alcance (una seccion en
+    vez de todas). No se aplica `PRESUPUESTO_PALABRAS` aqui: cada seccion por si sola es
+    mucho mas corta que el documento completo, no hay necesidad de recortar.
+
+    Devuelve un dict {CLAVE_SECCION: DataFrame} con columnas IDPERSONA, DOCUMENTO_TEXTO,
+    N_PALABRAS - una fila solo para las personas que SI tienen esa seccion (no se fuerza
+    texto vacio para quien no tiene informacion, igual criterio que el documento general)."""
+    secciones = {
+        "TRAYECTORIA": _seccion_trayectoria(eventos_trayectoria, diversidad_trayectoria),
+        "FORMACION": _seccion_formacion(poblacion),
+        "DOCENCIA": _seccion_docencia(poblacion),
+        "INVESTIGACION": _seccion_investigacion(poblacion),
+        "VINCULACION": _seccion_vinculacion(poblacion),
+        "CAPACITACION": _seccion_capacitacion(poblacion),
+        "IDIOMAS": _seccion_idiomas(poblacion),
+        "RECONOCIMIENTOS": _seccion_reconocimientos(poblacion),
+    }
+
+    resultado = {}
+    for clave, serie in secciones.items():
+        serie = serie[serie.index.isin(poblacion)]
+        serie = serie[serie.astype(str).str.strip() != ""]
+        if serie.empty:
+            continue
+        textos_etiquetados = f"{ETIQUETAS_SECCION[clave]}: " + serie.astype(str)
+        df_seccion = pd.DataFrame({
+            "IDPERSONA": serie.index,
+            "DOCUMENTO_TEXTO": textos_etiquetados.to_numpy(),
+        })
+        df_seccion["N_PALABRAS"] = df_seccion["DOCUMENTO_TEXTO"].str.split().str.len()
+        resultado[clave] = df_seccion.reset_index(drop=True)
+
+    return resultado

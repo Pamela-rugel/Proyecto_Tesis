@@ -1,14 +1,14 @@
-Perfil estructural,1,2,3,4,5,6,7,8
-Asistencia secretarial / oficina,16,4,3,8,4,5,25,113
-Autoridad académica (Rector/Vicerrector/Decano/Subdecano),4,0,5,0,1,26,0,0
-Autoridad administrativa (Gerente/Director),7,0,2,1,2,8,2,16
-Auxiliar / ayudante operativo,0,0,0,20,0,0,1,11
-Docente no titular / ocasional,236,0,146,0,114,68,19,12
-Docente titular de carrera,67,0,70,0,12,115,1,2
-Jefatura / supervisión operativa,0,0,0,2,0,2,0,11
-Otros (administrativo),2,0,0,0,1,2,0,3
-Profesional / Analista,43,3,12,12,28,19,31,144
-"Profesional especializado (abogado, psicólogo, etc.)",5,0,0,2,0,0,2,20
-Servicios generales / oficios,0,1,0,5,0,0,1,8
-Técnico docente / de investigación,141,177,90,14,150,42,149,16
-Técnico operativo / mantenimiento,20,5,9,47,11,14,64,22
+Perfil estructural,0,1,2,3,4,6,7
+Asistencia secretarial / oficina,4,10,7,0,1,134,22
+Autoridad académica (Rector/Vicerrector/Decano/Subdecano),34,0,0,0,2,0,0
+Autoridad administrativa (Gerente/Director),10,0,2,0,0,22,4
+Auxiliar / ayudante operativo,0,1,3,1,0,9,18
+Docente no titular / ocasional,106,0,9,7,469,3,1
+Docente titular de carrera,205,1,0,0,61,0,0
+Jefatura / supervisión operativa,1,0,0,0,0,11,3
+Otros (administrativo),4,0,1,0,0,2,1
+Profesional / Analista,44,5,6,1,10,183,43
+"Profesional especializado (abogado, psicólogo, etc.)",0,0,1,0,0,15,13
+Servicios generales / oficios,0,0,0,0,0,4,11
+Técnico docente / de investigación,31,475,77,126,51,8,11
+Técnico operativo / mantenimiento,7,16,97,3,7,14,48

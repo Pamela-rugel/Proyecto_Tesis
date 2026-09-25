@@ -91,10 +91,10 @@ def get_eventos_trayectoria() -> pd.DataFrame:
 def get_text_model():
     from sentence_transformers import SentenceTransformer
 
-    # DEC-014: mismo modelo usado para generar embeddings_personas.csv (documento
+    # DEC-028: mismo modelo usado para generar embeddings_personas.csv (documento
     # semantico completo por persona) - debe ser el mismo modelo para que la consulta
-    # y los documentos vivan en el mismo espacio vectorial.
-    return SentenceTransformer("intfloat/multilingual-e5-base")
+    # y los documentos vivan en el mismo espacio vectorial. BGE-M3 no usa prefijos.
+    return SentenceTransformer("BAAI/bge-m3")
 
 
 def cluster_color(cluster: int) -> str:
@@ -747,9 +747,8 @@ def main():
             with st.spinner("Buscando..."):
                 ids, matrix = get_embeddings()
                 modelo = get_text_model()
-                # DEC-014: modelo E5 - prefijo "query: " para consultas, "passage: " se usó
-                # al generar embeddings_personas.csv (07_embeddings.ipynb); deben coincidir.
-                q = modelo.encode([f"query: {consulta}"], normalize_embeddings=True)[0]
+                # DEC-028: BGE-M3 no usa prefijos (a diferencia de E5) - texto tal cual.
+                q = modelo.encode([consulta], normalize_embeddings=True)[0]
                 sims = matrix @ q
                 top_idx = np.argsort(-sims)[:top_n]
                 # DEC-019 (ver context/DECISION_LOG.md): NO se muestra la similitud coseno

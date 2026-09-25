@@ -9,7 +9,7 @@ el dashboard Streamlit** — ambos leen los mismos datos generados en `data/dash
 
 - `backend/` — API FastAPI que reutiliza `notebooks/08_dashboard/lib.py` (misma lógica de carga
   de datos que ya usa Streamlit) y expone los datos como JSON. También corre el modelo de
-  embeddings (`intfloat/multilingual-e5-base`) para la búsqueda semántica en lenguaje libre.
+  embeddings (`BAAI/bge-m3`) para la búsqueda semántica en lenguaje libre.
 - `frontend/` — SPA en React + TypeScript + Vite + Tailwind + Plotly, con las mismas 5 vistas del
   dashboard original: Resumen general, Mapa de perfiles, Buscar persona, Formar equipos/comisiones,
   Búsqueda semántica.

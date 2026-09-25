@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import Plot from "react-plotly.js";
-import { getMapa, getMapaSemantico, getResumen, getResumenSemantico } from "../api/client";
+import {
+  getMapa, getMapaK5, getMapaPorRama, getMapaSemantico,
+  getResumen, getResumenK5, getResumenPorRama, getResumenSemantico,
+} from "../api/client";
+import type { Rama } from "../api/types";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import PersonaFicha from "../components/PersonaFicha";
 import { colorPorTexto } from "../lib/color";
@@ -9,18 +13,19 @@ import { normalizar, coincideNombre } from "../lib/busqueda";
 
 const TIPOS = ["Todos", "Solo Administrativo", "Solo Docente", "Solo Mixto"];
 
-type Modo = "rama" | "cargo" | "cargo_real";
+type Modo = "rama" | "k5" | "cargo" | "cargo_real";
 type Pestana = "estatico" | "semantico";
 
 const PESTANAS: { value: Pestana; label: string }[] = [
-  { value: "estatico", label: "Clustering estático" },
+  { value: "estatico", label: "Clustering estructurado" },
   { value: "semantico", label: "Clustering en embeddings" },
 ];
 
 const MODOS: { value: Modo; label: string }[] = [
-  { value: "rama", label: "Rama" },
-  { value: "cargo", label: "Categoría (13 grupos)" },
-  { value: "cargo_real", label: "Cargo real (todos)" },
+  { value: "rama", label: "Tipo Cargo" },
+  { value: "k5", label: "Cluster estructurado" },
+  { value: "cargo", label: "Cargos agrupados" },
+  { value: "cargo_real", label: "Todos los cargos" },
 ];
 
 // Leyenda propia en HTML (no la leyenda nativa de Plotly) debajo del mapa: Plotly con
@@ -46,6 +51,7 @@ function LeyendaMapa({ items }: { items: { nombre: string; color: string }[] }) 
 
 export default function MapaPage() {
   const [pestana, setPestana] = useState<Pestana>("estatico");
+  const [perfilesSeparados, setPerfilesSeparados] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -65,7 +71,290 @@ export default function MapaPage() {
         ))}
       </div>
 
-      {pestana === "estatico" ? <MapaEstatico /> : <MapaSemantico />}
+      <div className="bg-espol-blue/5 rounded-xl border border-espol-blue/20 p-4 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-espol-navy">Perfiles separados por tipo de empleado</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            El clustering normal agrupa Administrativo y Docente juntos antes de buscar perfiles, así
+            que en la práctica el rasgo que más pesa es esa misma división. Activa esto para ver un
+            clustering nuevo, calculado por separado dentro de cada rama (su propio número de grupos y
+            su propio mapa), y así encontrar matices que quedan ocultos al mezclarlas.
+          </p>
+        </div>
+        <button
+          onClick={() => setPerfilesSeparados((v) => !v)}
+          className={`shrink-0 px-3 py-1.5 text-sm rounded-md border transition-colors whitespace-nowrap ${
+            perfilesSeparados
+              ? "bg-espol-blue text-white border-espol-blue"
+              : "border-slate-300 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {perfilesSeparados ? "Ver tipo de empleados separados: ON" : "Ver tipo de empleados separados: OFF"}
+        </button>
+      </div>
+
+      {perfilesSeparados ? (
+        <MapaPorRama tipoClustering={pestana === "estatico" ? "estructurado" : "semantico"} />
+      ) : pestana === "estatico" ? (
+        <MapaEstatico />
+      ) : (
+        <MapaSemantico />
+      )}
+    </div>
+  );
+}
+
+function MapaPorRama({ tipoClustering }: { tipoClustering: "estructurado" | "semantico" }) {
+  const [rama, setRama] = useState<Rama>("ADMINISTRATIVO");
+  const [perfilesFiltro, setPerfilesFiltro] = useState<number[]>([]);
+  const [idSel, setIdSel] = useState<number | null>(null);
+  const [nombreBuscado, setNombreBuscado] = useState("");
+  const [idResaltado, setIdResaltado] = useState<number | null>(null);
+  const [nombreResaltado, setNombreResaltado] = useState("");
+
+  const resumenQuery = useQuery({
+    queryKey: ["resumen_por_rama", tipoClustering, rama],
+    queryFn: () => getResumenPorRama(tipoClustering, rama),
+  });
+  const mapaQuery = useQuery({
+    queryKey: ["mapa_por_rama", tipoClustering, rama, perfilesFiltro],
+    queryFn: () => getMapaPorRama(tipoClustering, rama, perfilesFiltro),
+  });
+
+  const perfiles = resumenQuery.data?.perfiles ?? [];
+
+  const puntoResaltado = useMemo(() => {
+    if (idResaltado === null) return null;
+    return mapaQuery.data?.puntos.find((p) => p.IDPERSONA === idResaltado) ?? null;
+  }, [idResaltado, mapaQuery.data]);
+
+  const sugerenciasNombre = useMemo(() => {
+    if (!nombreBuscado.trim() || !mapaQuery.data) return [];
+    const vistos = new Set<number>();
+    const resultado: { idPersona: number; nombre: string }[] = [];
+    for (const p of mapaQuery.data.puntos) {
+      if (vistos.has(p.IDPERSONA) || !coincideNombre(p.NOMBRE_COMPLETO, nombreBuscado)) continue;
+      vistos.add(p.IDPERSONA);
+      resultado.push({ idPersona: p.IDPERSONA, nombre: p.NOMBRE_COMPLETO });
+    }
+    return resultado.slice(0, 20);
+  }, [mapaQuery.data, nombreBuscado]);
+
+  function togglePerfil(c: number) {
+    setPerfilesFiltro((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  }
+
+  function cambiarRama(r: Rama) {
+    setRama(r);
+    setPerfilesFiltro([]);
+    limpiarResaltado();
+  }
+
+  function resaltarPersona(idPersona: number, nombre: string) {
+    setIdResaltado(idPersona);
+    setNombreResaltado(nombre);
+    setNombreBuscado("");
+  }
+
+  function limpiarResaltado() {
+    setNombreBuscado("");
+    setIdResaltado(null);
+    setNombreResaltado("");
+  }
+
+  const traces = useMemo(() => {
+    if (!mapaQuery.data) return [];
+    const porGrupo = new Map<string, typeof mapaQuery.data.puntos>();
+    for (const p of mapaQuery.data.puntos) {
+      if (!porGrupo.has(p.GRUPO_COLOR)) porGrupo.set(p.GRUPO_COLOR, []);
+      porGrupo.get(p.GRUPO_COLOR)!.push(p);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const base: any[] = Array.from(porGrupo.entries())
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([, pts]) => ({
+        type: "scattergl" as const,
+        mode: "markers" as const,
+        name: pts[0].PERFIL_NOMBRE ?? `Cluster ${pts[0].CLUSTER_RAMA}`,
+        x: pts.map((p) => p.PC1),
+        y: pts.map((p) => p.PC2),
+        marker: { color: pts[0].COLOR, size: 6, opacity: idResaltado === null ? 0.7 : 0.25, line: { width: 0 } },
+        customdata: pts.map((p) => [p.IDPERSONA, p.CARGO_ACTUAL ?? "-", p.VIGENTE_MOSTRAR ? "Si" : "No", p.NOMBRE_COMPLETO]),
+        hovertemplate: "%{customdata[3]}<br>%{customdata[1]}<br>Vigente: %{customdata[2]}<extra></extra>",
+      }));
+    if (puntoResaltado) {
+      base.push({
+        type: "scattergl" as const,
+        mode: "markers" as const,
+        name: puntoResaltado.NOMBRE_COMPLETO,
+        x: [puntoResaltado.PC1],
+        y: [puntoResaltado.PC2],
+        marker: { color: "#E63946", size: 16, opacity: 1, line: { width: 2, color: "#FFFFFF" } },
+        customdata: [[puntoResaltado.IDPERSONA, puntoResaltado.CARGO_ACTUAL ?? "-", puntoResaltado.VIGENTE_MOSTRAR ? "Si" : "No", puntoResaltado.NOMBRE_COMPLETO]],
+        hovertemplate: "%{customdata[3]}<br>%{customdata[1]}<br>Vigente: %{customdata[2]}<extra></extra>",
+      });
+    }
+    return base;
+  }, [mapaQuery.data, puntoResaltado, idResaltado]);
+
+  const leyendaItems = useMemo(() => {
+    const relevantes = puntoResaltado ? traces.slice(0, -1) : traces;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return relevantes.map((t: any) => ({ nombre: t.name as string, color: t.marker.color as string }));
+  }, [traces, puntoResaltado]);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
+        <p className="text-xs text-slate-400">
+          Clustering calculado por separado dentro de cada rama, en el mismo espacio (
+          {tipoClustering === "estructurado" ? "variables estructuradas" : "embeddings de texto"}) que
+          su versión combinada, pero sin mezclar Administrativo con Docente. Los IDs de cluster y el
+          mapa PCA aquí no son comparables entre ramas ni con la vista combinada.
+        </p>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Rama</p>
+          <div className="flex gap-2">
+            {(["ADMINISTRATIVO", "DOCENTE"] as Rama[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => cambiarRama(r)}
+                className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                  rama === r
+                    ? "bg-espol-blue text-white border-espol-blue"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {r === "ADMINISTRATIVO" ? "Administrativo" : "Docente"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            Perfiles a mostrar (opcional)
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {perfiles.map((p) => (
+              <button
+                key={p.CLUSTER_RAMA}
+                onClick={() => togglePerfil(p.CLUSTER_RAMA)}
+                title={p.DESCRIPCION}
+                className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                  perfilesFiltro.includes(p.CLUSTER_RAMA)
+                    ? "text-white border-transparent"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                }`}
+                style={perfilesFiltro.includes(p.CLUSTER_RAMA) ? { backgroundColor: p.COLOR } : undefined}
+              >
+                {p.PERFIL_NOMBRE}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            Ubicar una persona en el mapa
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="relative w-64">
+              <input
+                type="text"
+                value={nombreBuscado}
+                onChange={(e) => setNombreBuscado(e.target.value)}
+                placeholder="Escribe un nombre..."
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-espol-blue"
+              />
+              {sugerenciasNombre.length > 0 && (
+                <ul className="absolute z-10 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                  {sugerenciasNombre.map((s) => (
+                    <li key={s.idPersona}>
+                      <button
+                        onClick={() => resaltarPersona(s.idPersona, s.nombre)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-espol-blue hover:text-white transition-colors"
+                      >
+                        {s.nombre}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {idResaltado !== null && (
+              <button
+                onClick={limpiarResaltado}
+                className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Quitar marca
+              </button>
+            )}
+          </div>
+          {idResaltado !== null && (
+            <p className="text-xs text-slate-500 mt-1.5">
+              {nombreResaltado} resaltada en rojo — el resto de puntos se mantiene visible.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        {mapaQuery.isLoading ? (
+          <LoadingBlock label="Cargando mapa..." />
+        ) : mapaQuery.error || !mapaQuery.data ? (
+          <ErrorBlock message="No se pudo cargar el mapa." />
+        ) : (
+          <>
+            <Plot
+              data={traces}
+              layout={{
+                height: 640,
+                showlegend: false,
+                margin: { l: 50, r: 20, t: 20, b: 50 },
+                font: { size: 12, color: "#334155" },
+                plot_bgcolor: "#FFFFFF",
+                paper_bgcolor: "#FFFFFF",
+                xaxis: { title: { text: "PC1" }, showgrid: true, gridcolor: "#EEF1F5", zeroline: false, showline: true, linecolor: "#CBD5E1" },
+                yaxis: { title: { text: "PC2" }, showgrid: true, gridcolor: "#EEF1F5", zeroline: false, showline: true, linecolor: "#CBD5E1" },
+                dragmode: "pan",
+              }}
+              config={{
+                displayModeBar: true,
+                displaylogo: false,
+                scrollZoom: true,
+                responsive: true,
+                modeBarButtonsToRemove: ["lasso2d", "select2d"],
+              }}
+              style={{ width: "100%" }}
+              useResizeHandler
+              onClick={(e) => {
+                const point = e.points[0];
+                const idp = (point.customdata as [number, ...unknown[]])[0];
+                setIdSel(Number(idp));
+              }}
+            />
+            <LeyendaMapa items={leyendaItems} />
+            <p className="text-xs text-slate-500 mt-1">
+              {mapaQuery.data.n_mostrados.toLocaleString()} personas de la rama{" "}
+              {rama === "ADMINISTRATIVO" ? "Administrativo" : "Docente"} mostradas de{" "}
+              {mapaQuery.data.total_modelo.toLocaleString()} en el modelo. Usa la rueda del mouse o el
+              pad para hacer zoom; arrastra para desplazarte.
+            </p>
+          </>
+        )}
+      </div>
+
+      {idSel === null ? (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-sm px-4 py-3">
+          Haz clic en un punto del gráfico para ver la ficha de esa persona.
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <PersonaFicha idPersona={idSel} mostrarClusterPerfil={false} />
+        </div>
+      )}
     </div>
   );
 }
@@ -82,17 +371,26 @@ function MapaEstatico() {
   const [nombreResaltado, setNombreResaltado] = useState("");
 
   const resumenQuery = useQuery({ queryKey: ["resumen"], queryFn: getResumen });
+  const resumenK5Query = useQuery({ queryKey: ["resumen_k5"], queryFn: getResumenK5, enabled: modo === "k5" });
   const mapaQuery = useQuery({
     queryKey: ["mapa", tipoFiltro, perfilesFiltro, modo],
-    queryFn: () => getMapa(tipoFiltro, perfilesFiltro, modo),
+    queryFn: () => getMapa(tipoFiltro, perfilesFiltro, modo === "k5" ? "rama" : modo),
+    enabled: modo !== "k5",
+  });
+  const mapaK5Query = useQuery({
+    queryKey: ["mapa_k5", perfilesFiltro],
+    queryFn: () => getMapaK5(perfilesFiltro),
+    enabled: modo === "k5",
   });
 
   const perfiles = resumenQuery.data?.perfiles ?? [];
+  const perfilesK5 = resumenK5Query.data?.perfiles ?? [];
 
   const puntoResaltado = useMemo(() => {
     if (idResaltado === null) return null;
+    if (modo === "k5") return mapaK5Query.data?.puntos.find((p) => p.IDPERSONA === idResaltado) ?? null;
     return mapaQuery.data?.puntos.find((p) => p.IDPERSONA === idResaltado) ?? null;
-  }, [idResaltado, mapaQuery.data]);
+  }, [idResaltado, mapaQuery.data, mapaK5Query.data, modo]);
 
   const hayBusquedaCargo = modo === "cargo_real" && terminosCargo.length > 0;
 
@@ -123,7 +421,7 @@ function MapaEstatico() {
   }, [cargosDisponibles, terminoCargoActual]);
 
   const sugerenciasNombre = useMemo(() => {
-    const puntosFuente = mapaQuery.data?.puntos;
+    const puntosFuente = modo === "k5" ? mapaK5Query.data?.puntos : mapaQuery.data?.puntos;
     if (!nombreBuscado.trim() || !puntosFuente) return [];
     const vistos = new Set<number>();
     const resultado: { idPersona: number; nombre: string }[] = [];
@@ -133,7 +431,7 @@ function MapaEstatico() {
       resultado.push({ idPersona: p.IDPERSONA, nombre: p.NOMBRE_COMPLETO });
     }
     return resultado.slice(0, 20);
-  }, [mapaQuery.data, nombreBuscado]);
+  }, [mapaQuery.data, mapaK5Query.data, modo, nombreBuscado]);
 
   // Combinaciones "Mixto (A + B)" reales: para cada par de cargos seleccionados, busca si
   // existe al menos una persona Mixto cuyos cargos concurrentes sean EXACTAMENTE esos dos
@@ -172,6 +470,41 @@ function MapaEstatico() {
   }
 
   const traces = useMemo(() => {
+    if (modo === "k5") {
+      if (!mapaK5Query.data) return [];
+      const porGrupo = new Map<string, typeof mapaK5Query.data.puntos>();
+      for (const p of mapaK5Query.data.puntos) {
+        if (!porGrupo.has(p.GRUPO_COLOR)) porGrupo.set(p.GRUPO_COLOR, []);
+        porGrupo.get(p.GRUPO_COLOR)!.push(p);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const baseK5: any[] = Array.from(porGrupo.entries())
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([, pts]) => ({
+          type: "scattergl" as const,
+          mode: "markers" as const,
+          name: pts[0].PERFIL_NOMBRE_K5 ?? `Cluster ${pts[0].CLUSTER_K5}`,
+          x: pts.map((p) => p.PC1),
+          y: pts.map((p) => p.PC2),
+          marker: { color: pts[0].COLOR, size: 6, opacity: idResaltado === null ? 0.7 : 0.25, line: { width: 0 } },
+          customdata: pts.map((p) => [p.IDPERSONA, p.CARGO_ACTUAL ?? "-", p.TIPOEMPLEADO_ACTUAL_DESC, p.VIGENTE_MOSTRAR ? "Si" : "No", p.NOMBRE_COMPLETO]),
+          hovertemplate: "%{customdata[4]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}<extra></extra>",
+        }));
+      if (puntoResaltado && "CLUSTER_K5" in puntoResaltado) {
+        baseK5.push({
+          type: "scattergl" as const,
+          mode: "markers" as const,
+          name: puntoResaltado.NOMBRE_COMPLETO,
+          x: [puntoResaltado.PC1],
+          y: [puntoResaltado.PC2],
+          marker: { color: "#E63946", size: 16, opacity: 1, line: { width: 2, color: "#FFFFFF" } },
+          customdata: [[puntoResaltado.IDPERSONA, puntoResaltado.CARGO_ACTUAL ?? "-", puntoResaltado.TIPOEMPLEADO_ACTUAL_DESC, puntoResaltado.VIGENTE_MOSTRAR ? "Si" : "No", puntoResaltado.NOMBRE_COMPLETO]],
+          hovertemplate: "%{customdata[4]}<br>%{customdata[2]} - %{customdata[1]}<br>Vigente: %{customdata[3]}<extra></extra>",
+        });
+      }
+      return baseK5;
+    }
+
     if (!mapaQuery.data) return [];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -269,7 +602,7 @@ function MapaEstatico() {
         });
     }
 
-    if (puntoResaltado) {
+    if (puntoResaltado && "ES_MIXTO" in puntoResaltado) {
       base.push({
         type: "scattergl" as const,
         mode: "markers" as const,
@@ -295,7 +628,7 @@ function MapaEstatico() {
 
     return base;
   }, [
-    mapaQuery.data, puntoResaltado, idResaltado, modo,
+    mapaQuery.data, mapaK5Query.data, puntoResaltado, idResaltado, modo,
     hayBusquedaCargo, terminosCargo, combinacionesMixtoDetectadas, colorPorCargo,
   ]);
 
@@ -382,6 +715,7 @@ function MapaEstatico() {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             {modo === "rama" && "Administrativo / Docente / Mixto (3 colores)."}
+            {modo === "k5" && "K-Means directo sobre las 102 variables, sin separar antes por Administrativo/Docente — un corte más grueso que Cargos agrupados."}
             {modo === "cargo" && "Las 13 categorías de cargo agrupadas + Mixto (14 colores)."}
             {modo === "cargo_real" && "Cada cargo real tiene su propio color (238 cargos distintos). Usa el buscador para ubicar uno."}
           </p>
@@ -403,6 +737,32 @@ function MapaEstatico() {
                   }`}
                 >
                   {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Solo en modo "5 grupos": botones de los 5 clusters del K global. */}
+        {modo === "k5" && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+              Grupos a mostrar (opcional)
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {perfilesK5.map((p) => (
+                <button
+                  key={p.CLUSTER_K5}
+                  onClick={() => togglePerfil(p.CLUSTER_K5)}
+                  title={p.PERFIL_NOMBRE_K5}
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                    perfilesFiltro.includes(p.CLUSTER_K5)
+                      ? "text-white border-transparent"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                  style={perfilesFiltro.includes(p.CLUSTER_K5) ? { backgroundColor: p.COLOR } : undefined}
+                >
+                  {p.PERFIL_NOMBRE_K5}
                 </button>
               ))}
             </div>
@@ -563,68 +923,69 @@ function MapaEstatico() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        {mapaQuery.isLoading ? (
-          <LoadingBlock label="Cargando mapa..." />
-        ) : mapaQuery.error || !mapaQuery.data ? (
-          <ErrorBlock message="No se pudo cargar el mapa." />
-        ) : (
-          <>
-            <Plot
-              data={traces}
-              layout={{
-                height: 640,
-                // Leyenda nativa de Plotly desactivada: con muchas entradas (13-14
-                // categorías) no hace wrap real a varias filas ni siquiera con
-                // orientation:"h", y las etiquetas terminan superpuestas. Se reemplaza por
-                // <LeyendaMapa> (HTML + flex-wrap) debajo del gráfico — mismo criterio en
-                // "cargo_real" (238 cargos): ahí ya no se mostraba leyenda, se usa el
-                // buscador de texto y el hover para identificar un cargo.
-                showlegend: false,
-                margin: { l: 50, r: 20, t: 20, b: 50 },
-                font: { size: 12, color: "#334155" },
-                plot_bgcolor: "#FFFFFF",
-                paper_bgcolor: "#FFFFFF",
-                xaxis: {
-                  title: { text: "PC1" },
-                  showgrid: true,
-                  gridcolor: "#EEF1F5",
-                  zeroline: false,
-                  showline: true,
-                  linecolor: "#CBD5E1",
-                },
-                yaxis: {
-                  title: { text: "PC2" },
-                  showgrid: true,
-                  gridcolor: "#EEF1F5",
-                  zeroline: false,
-                  showline: true,
-                  linecolor: "#CBD5E1",
-                },
-                dragmode: "pan",
-              }}
-              config={{
-                displayModeBar: true,
-                displaylogo: false,
-                scrollZoom: true,
-                responsive: true,
-                modeBarButtonsToRemove: ["lasso2d", "select2d"],
-              }}
-              style={{ width: "100%" }}
-              useResizeHandler
-              onClick={(e) => {
-                const point = e.points[0];
-                const idp = (point.customdata as [number, ...unknown[]])[0];
-                setIdSel(Number(idp));
-              }}
-            />
-            {modo !== "cargo_real" && <LeyendaMapa items={leyendaItems} />}
-            <p className="text-xs text-slate-500 mt-1">
-              {mapaQuery.data.n_mostrados.toLocaleString()} personas mostradas de{" "}
-              {mapaQuery.data.total_modelo.toLocaleString()} en el modelo. Usa la rueda del mouse o el
-              pad para hacer zoom; arrastra para desplazarte.
-            </p>
-          </>
-        )}
+        {(() => {
+          const activa = modo === "k5" ? mapaK5Query : mapaQuery;
+          if (activa.isLoading) return <LoadingBlock label="Cargando mapa..." />;
+          if (activa.error || !activa.data) return <ErrorBlock message="No se pudo cargar el mapa." />;
+          return (
+            <>
+              <Plot
+                data={traces}
+                layout={{
+                  height: 640,
+                  // Leyenda nativa de Plotly desactivada: con muchas entradas (13-14
+                  // categorías) no hace wrap real a varias filas ni siquiera con
+                  // orientation:"h", y las etiquetas terminan superpuestas. Se reemplaza por
+                  // <LeyendaMapa> (HTML + flex-wrap) debajo del gráfico — mismo criterio en
+                  // "cargo_real" (238 cargos): ahí ya no se mostraba leyenda, se usa el
+                  // buscador de texto y el hover para identificar un cargo.
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 50 },
+                  font: { size: 12, color: "#334155" },
+                  plot_bgcolor: "#FFFFFF",
+                  paper_bgcolor: "#FFFFFF",
+                  xaxis: {
+                    title: { text: "PC1" },
+                    showgrid: true,
+                    gridcolor: "#EEF1F5",
+                    zeroline: false,
+                    showline: true,
+                    linecolor: "#CBD5E1",
+                  },
+                  yaxis: {
+                    title: { text: "PC2" },
+                    showgrid: true,
+                    gridcolor: "#EEF1F5",
+                    zeroline: false,
+                    showline: true,
+                    linecolor: "#CBD5E1",
+                  },
+                  dragmode: "pan",
+                }}
+                config={{
+                  displayModeBar: true,
+                  displaylogo: false,
+                  scrollZoom: true,
+                  responsive: true,
+                  modeBarButtonsToRemove: ["lasso2d", "select2d"],
+                }}
+                style={{ width: "100%" }}
+                useResizeHandler
+                onClick={(e) => {
+                  const point = e.points[0];
+                  const idp = (point.customdata as [number, ...unknown[]])[0];
+                  setIdSel(Number(idp));
+                }}
+              />
+              {modo !== "cargo_real" && <LeyendaMapa items={leyendaItems} />}
+              <p className="text-xs text-slate-500 mt-1">
+                {activa.data.n_mostrados.toLocaleString()} personas mostradas de{" "}
+                {activa.data.total_modelo.toLocaleString()} en el modelo. Usa la rueda del mouse o el
+                pad para hacer zoom; arrastra para desplazarte.
+              </p>
+            </>
+          );
+        })()}
       </div>
 
       {idSel === null ? (
@@ -643,9 +1004,9 @@ function MapaEstatico() {
 type ModoSemantico = "rama" | "cluster_semantico" | "cargo_real";
 
 const MODOS_SEMANTICO: { value: ModoSemantico; label: string }[] = [
-  { value: "rama", label: "Rama" },
+  { value: "rama", label: "Tipo Cargo" },
   { value: "cluster_semantico", label: "Cluster semántico" },
-  { value: "cargo_real", label: "Cargo real (todos)" },
+  { value: "cargo_real", label: "Todos los cargos" },
 ];
 
 function MapaSemantico() {
@@ -868,9 +1229,9 @@ function MapaSemantico() {
 
         <p className="text-xs text-slate-400">
           Clustering independiente sobre el espacio de embeddings (texto de trayectoria/formación/
-          docencia/investigación), no sobre las variables estructuradas del clustering estático — los
+          docencia/investigación), no sobre las variables estructuradas del Clustering estructurado — los
           IDs de cluster aquí no corresponden a las categorías de la otra pestaña. Rama y Cargo real
-          son los mismos atributos de persona que en el clustering estático, proyectados sobre este
+          son los mismos atributos de persona que en el Clustering estructurado, proyectados sobre este
           espacio para comparar ambas técnicas.
         </p>
 
@@ -894,7 +1255,7 @@ function MapaSemantico() {
             ))}
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            {modo === "rama" && "Administrativo / Docente / Mixto (3 colores) — mismo criterio que el clustering estático."}
+            {modo === "rama" && "Administrativo / Docente / Mixto (3 colores) — mismo criterio que el Clustering estructurado."}
             {modo === "cluster_semantico" && "Los clusters descubiertos en el espacio de embeddings."}
             {modo === "cargo_real" && "Cada cargo real tiene su propio color. Usa el buscador para ubicar uno."}
           </p>

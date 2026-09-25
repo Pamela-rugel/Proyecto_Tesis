@@ -1,0 +1,23 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+
+dashboard_react/frontend/node_modules/
+dashboard_react/frontend/dist/
+dashboard_react/backend/__pycache__/
+
+context/
+presentacion/
+logs_rerun/
+
+notebooks/**/*.ipynb
+notebooks/**/__pycache__/
+
+*.tar
+data/embeddings/embeddings_items_investigacion.csv
+data/embeddings/items_investigacion.csv
+
+# data/ se copia selectivamente desde los Dockerfiles (ver stack/docker/api.Dockerfile);
+# no excluir data/ por completo aqui porque esos COPY puntuales la necesitan disponible
+# en el build context.

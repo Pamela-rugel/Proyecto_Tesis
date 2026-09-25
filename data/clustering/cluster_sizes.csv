@@ -1,4 +1,5 @@
 CLUSTER,GRUPO_PRINCIPAL,SUBGRUPO,N_PERSONAS,PCT_POBLACION,NOMBRE_PERFIL
+-1,SIN_CARGO_ESTRUCTURAL,CONTRATO_PUNTUAL,719,22.5,Personal por contrato puntual / prestación de servicios (sin cargo estructural)
 0,ADMINISTRATIVO,ASISTENCIA_SECRETARIAL_OFICINA,178,5.57,Asistencia secretarial / oficina
 1,DOCENTE,AUTORIDAD_ACADEMICA_SUPERIOR,36,1.13,Autoridad académica (Rector/Vicerrector/Decano/Subdecano)
 2,ADMINISTRATIVO,AUTORIDAD_ADMINISTRATIVA_SUPERIOR,38,1.19,Autoridad administrativa (Gerente/Director)

@@ -1,0 +1,34 @@
+1. Exportar las 3 imágenes a archivos .tar:
+
+
+cd stack
+docker save perfiles-espol-api:latest -o perfiles-espol-api.tar
+docker save perfiles-espol-web:latest -o perfiles-espol-web.tar
+docker save perfiles-espol-nginx:latest -o perfiles-espol-nginx.tar
+docker save empaqueta la imagen completa (capas + metadata) en un .tar, sin necesitar un registry (Docker Hub, ECR, etc.).
+
+2. Copiar al servidor (junto con docker-compose.yml, .env, y stack/nginx/):
+
+
+scp perfiles-espol-*.tar docker-compose.yml .env usuario@servidor:/ruta/destino/
+3. En el servidor, cargar las imágenes:
+
+
+docker load -i perfiles-espol-api.tar
+docker load -i perfiles-espol-web.tar
+docker load -i perfiles-espol-nginx.tar
+docker load reconstruye las imágenes en el Docker local del servidor, listas para usar sin rebuild.
+
+4. Levantar el stack:
+
+
+docker compose up -d
+Como las imágenes ya existen localmente con el mismo nombre/tag que referencia el docker-compose.yml (perfiles-espol-api, etc.), Compose no intenta reconstruir, solo crea los contenedores.
+
+Consideraciones importantes
+VITE_API_URL ya está horneado en la imagen web (es un build-arg de Vite, se compila al JS). Si el dominio/path del servidor de pruebas usa un basePath distinto a /perfiles, tendrías que rebuildear web ahí, no basta con portear el .tar.
+El puerto de nginx (NGINX_HTTP_PORT en .env) y el binding (NGINX_BIND_ADDRESS) deben ajustarse según cómo el servidor exponga el dominio (ej. si hay otro nginx/reverse proxy delante en el servidor apuntando al dominio, quizás quieras bindear solo a 127.0.0.1 en vez de 0.0.0.0).
+Los .tar van a pesar varios GB (la imagen api incluye PyTorch + modelo de embeddings descargado). Verifica ancho de banda/tiempo de transferencia.
+Arquitectura de CPU: si el servidor es una arquitectura distinta (ej. tu Windows/WSL es x86_64 pero el servidor es ARM), las imágenes no van a correr — en ese caso mejor rebuildear en el servidor directamente en vez de portear el .tar.
+Datos: las imágenes api ya tienen los CSV de data/ copiados adentro (según vi en api.Dockerfile), así que no necesitas portear datos aparte — pero si esos datos cambian, hay que rebuildear y volver a exportar.
+Después de cargar, correr docker images en el servidor para confirmar que los tags coinciden exactamente con lo que pide docker-compose.yml.

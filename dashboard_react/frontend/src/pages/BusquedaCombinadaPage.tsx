@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { buscarAvanzada, getEquipos } from "../api/client";
+import { buscarAvanzada, getEquipos, getSeccionesBusqueda } from "../api/client";
 import { LoadingBlock, ErrorBlock } from "../components/LoadingBlock";
 import PersonaFicha from "../components/PersonaFicha";
 import FiltrosEstructurados from "../components/FiltrosEstructurados";
@@ -27,6 +27,7 @@ export default function BusquedaCombinadaPage() {
   const [minDuracionMediana, setMinDuracionMediana] = useState(0);
   const [minCargosEspol, setMinCargosEspol] = useState(0);
   const [maxCargosEspol, setMaxCargosEspol] = useState(0);
+  const [seccionesSel, setSeccionesSel] = useState<string[]>([]);
 
   // Reutiliza /api/equipos solo para poblar las opciones de tipo/nivel del bloque de
   // filtros (mismas listas que "Formar equipos") — no dispara la búsqueda combinada.
@@ -35,12 +36,18 @@ export default function BusquedaCombinadaPage() {
     minExpAdmin: 0, maxIrregularidad: 0, minDuracionMediana: 0, minCargosEspol: 0, maxCargosEspol: 0,
   }) });
 
+  const seccionesQuery = useQuery({ queryKey: ["secciones-busqueda"], queryFn: getSeccionesBusqueda });
+
+  function toggleSeccion(clave: string) {
+    setSeccionesSel((prev) => (prev.includes(clave) ? prev.filter((s) => s !== clave) : [...prev, clave]));
+  }
+
   const mutation = useMutation({
     mutationFn: () =>
       buscarAvanzada({
         consulta, topN, vigencia, tipo: tipoSel, nivel: nivelSel,
         minPublicaciones: minPub, minExpAdmin, maxIrregularidad, minDuracionMediana,
-        minCargosEspol, maxCargosEspol,
+        minCargosEspol, maxCargosEspol, secciones: seccionesSel,
       }),
     onSuccess: () => setSeleccion(null),
   });
@@ -57,10 +64,11 @@ export default function BusquedaCombinadaPage() {
           Describe el conocimiento o experiencia que buscas, y aplica filtros estructurados
         </h3>
         <p className="text-sm text-slate-500 mb-2">
-          A diferencia de "Búsqueda semántica" (solo texto) o "Formar equipos" (solo filtros), aquí
-          se combinan ambos: primero se filtra por los criterios de abajo (cargos, permanencia,
-          vigencia...) y luego se ordena por afinidad al texto SOLO entre quienes cumplen esos
-          filtros — nadie que cumple los filtros se pierde por baja afinidad de texto.
+          A diferencia de "Formar equipos" (solo filtros), aquí describes libremente el conocimiento
+          o experiencia que buscas y además aplicas filtros estructurados: primero se filtra por los
+          criterios de abajo (cargos, permanencia, vigencia...) y luego se ordena por afinidad al
+          texto SOLO entre quienes cumplen esos filtros — nadie que cumple los filtros se pierde por
+          baja afinidad de texto.
         </p>
         <p className="text-xs text-slate-400 mb-3">
           Ejemplos: {EJEMPLOS.map((e) => `"${e}"`).join(" · ")}
@@ -94,6 +102,38 @@ export default function BusquedaCombinadaPage() {
             className="w-40"
           />
           <span className="text-xs text-slate-600">{topN}</span>
+        </div>
+
+        <div className="mt-3">
+          <label className="text-xs font-semibold text-slate-500 block mb-1.5">
+            Buscar en (vacío = todo el perfil)
+          </label>
+          <p className="text-xs text-slate-400 mb-2">
+            Sin nada seleccionado, se compara contra el perfil completo — si alguien tiene una
+            trayectoria larga, un tema puntual (ej. "investigación en IA") puede diluirse entre el
+            resto de su historial. Elige una o más secciones para comparar solo contra ese texto
+            específico; con varias, se promedia la afinidad entre ellas.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {seccionesQuery.data?.secciones.map((s) => {
+              const activo = seccionesSel.includes(s.clave);
+              return (
+                <button
+                  key={s.clave}
+                  type="button"
+                  onClick={() => toggleSeccion(s.clave)}
+                  title={`${s.n_personas} personas tienen esta sección`}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                    activo
+                      ? "bg-espol-navy text-white border-espol-navy"
+                      : "bg-white text-slate-600 border-slate-300 hover:border-espol-blue"
+                  }`}
+                >
+                  {s.etiqueta}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

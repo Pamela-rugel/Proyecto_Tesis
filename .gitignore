@@ -26,3 +26,13 @@ dashboard_react/frontend/node_modules/
 dashboard_react/frontend/dist/
 dashboard_react/frontend/.env
 dashboard_react/backend/__pycache__/
+
+# Stack Docker
+stack/.env
+# Imagenes Docker exportadas (docker save): se regeneran con docker compose build
+stack/*.tar
+*.tar
+
+# Embeddings y documentos semanticos: se regeneran localmente con
+# notebooks/07_embeddings/07_embeddings.ipynb (pesados, no versionar)
+data/embeddings/

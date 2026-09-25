@@ -1,0 +1,36 @@
+name: perfiles-espol
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: stack/docker/api.Dockerfile
+    expose:
+      - "80"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: stack/docker/web.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/perfiles}
+    expose:
+      - "80"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: nginx
+      dockerfile: Dockerfile
+    ports:
+      - "${NGINX_BIND_ADDRESS:-0.0.0.0}:${NGINX_HTTP_PORT:-9095}:80"
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+    restart: unless-stopped

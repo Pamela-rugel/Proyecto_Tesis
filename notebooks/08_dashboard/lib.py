@@ -47,6 +47,7 @@ import _preprocesamiento_comun as pc  # noqa: E402 (import tras sys.path.insert,
 # Confirmado con el usuario: Rector/Vicerrector/Decano/Subdecano tienen TIPOEMPLEADO=DOCENTE
 # en el dato institucional (se eligen desde el escalafon docente) y se mantienen ahi.
 PERFIL_NOMBRES = {
+    -1: "Personal por contrato puntual / prestación de servicios (sin cargo estructural)",
     0: "Asistencia secretarial / oficina",
     1: "Autoridad académica (Rector/Vicerrector/Decano/Subdecano)",
     2: "Autoridad administrativa (Gerente/Director)",
@@ -63,6 +64,15 @@ PERFIL_NOMBRES = {
 }
 
 PERFIL_DESCRIPCIONES = {
+    -1: (
+        "719 personas (22.5%), el segundo grupo más numeroso de toda la población. No tienen "
+        "CATEGORIA_CARGO_ACTUAL ni TIPOEMPLEADO_ACTUAL_DESC (por eso quedan fuera de las 13 "
+        "categorías de cargo estructural del clustering) — su vínculo con ESPOL es por "
+        "contrato puntual o prestación de servicios, no un cargo estructural continuo (ver "
+        "CATEGORIAS_PUNTUALES/DEC-004). Predominan 'Servicios Profesionales - Ejecución de "
+        "Actividades' (46%) y 'Prestación Servicios Profesionales' (36%) como cargo más "
+        "frecuente en su historial. Solo 15% vigente actualmente."
+    ),
     0: (
         "173 personas (7.8%). Titulación de bachillerato por sobre el promedio, ninguna "
         "facultad asociada de forma distintiva. 62% vigente."
@@ -97,7 +107,7 @@ PERFIL_DESCRIPCIONES = {
     ),
     7: (
         "5 personas (0.2%), el grupo más pequeño — cargos administrativos que no encajaron en "
-        "ninguna categoría de rol definida (ver `CATEGORIA_CARGO` en DEC-004). 80% vigente."
+        "ninguna categoría de rol definida. 80% vigente."
     ),
     8: (
         "294 personas (13.3%), uno de los grupos administrativos más numerosos. Baja "
@@ -128,6 +138,7 @@ PERFIL_DESCRIPCIONES = {
 # las de raiz docente - referencial (algunas categorias mezclan ambas ramas, ver nota arriba),
 # para que el mapa de puntos se lea de un vistazo sin ser una regla estricta de particion.
 PERFIL_COLORES = {
+    -1: "#94A3B8",  # sin cargo estructural (contrato puntual/prestacion de servicios)
     0: "#F4A261",   # asistencia secretarial/oficina
     1: "#1D3557",   # autoridad academica (docente)
     2: "#E76F51",   # autoridad administrativa
@@ -164,6 +175,12 @@ PERFIL_COLORES_SEMANTICO = [
     "#118AB2", "#EF476F", "#06D6A0", "#FFD166", "#7209B7", "#F3722C", "#4361EE", "#843B62",
     "#2A9D8F", "#E76F51", "#8338EC", "#3A86FF",
 ]
+
+# Paleta para el corte K=5 GLOBAL (KMeans directo sobre X_modelado, sin el paso de 2
+# niveles admin/docente de DEC-008) - distinta de PERFIL_COLORES (13 grupos) y de
+# PERFIL_COLORES_SEMANTICO (embeddings) para que las tres vistas nunca se confundan
+# visualmente aunque se muestren una tras otra en el mismo dashboard.
+PERFIL_COLORES_K5 = ["#D62828", "#003049", "#F77F00", "#606C38", "#6A4C93"]
 
 # Subconjunto curado de `dataset_personas_features.csv` para tarjetas de
 # persona / comparaciones rapidas (evita saturar la UI con las 85 columnas).
@@ -262,12 +279,46 @@ def load_pca_personas() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Clustering ESTRUCTURAL GLOBAL, K=5 (DEC-001/DEC-007) - el K-Means directo sobre TODA la
+# matriz X_modelado (102 features), SIN el paso de 2 niveles (DEC-008) que separa Admin/
+# Docente antes de sub-clusterizar. Los 13 grupos de "Categoria" son el resultado final
+# vigente del pipeline (DEC-008 reemplazo a DEC-007); este K=5 es un corte alternativo mas
+# grueso sobre las mismas features, pedido explicito del usuario para comparar ambos
+# niveles de granularidad - NO es historico exacto de DEC-001/007 (esos K=5 se corrieron
+# sobre poblaciones/matrices de features distintas, ya sobreescritas por el pipeline
+# actual); es el mismo procedimiento (KMeans, K=5, n_init=10, random_state=42) reaplicado
+# sobre los datos de HOY. Sin nombre de perfil curado a mano (igual criterio que el
+# clustering semantico): titulo automatico por tipo de empleado + rasgo distintivo.
+# ---------------------------------------------------------------------------
+
+def load_cluster_resumen_k5() -> pd.DataFrame:
+    return _read_csv(DASHBOARD_DIR / "cluster_perfiles_resumen_k5.csv")
+
+
+def load_cluster_top_features_k5() -> pd.DataFrame:
+    return _read_csv(DASHBOARD_DIR / "cluster_top_features_k5.csv")
+
+
+def load_clusters_personas_k5() -> pd.DataFrame:
+    return _read_csv(CLUSTERING_DIR / "clusters_personas_k5.csv")
+
+
+def load_pca_personas_k5() -> pd.DataFrame:
+    """Proyeccion PCA de 2 componentes propia de este corte K=5 (mismo X_modelado que el
+    PCA de los 13 grupos, pero PCA se recalcula porque no cambia la matriz en si, solo se
+    reutiliza para mapear a 2D - en la practica coincide con load_pca_personas())."""
+    return _read_csv(CLUSTERING_DIR / "pca_personas_k5.csv")
+
+
+# ---------------------------------------------------------------------------
 # Clustering SEMANTICO (en espacio de embeddings) - capa de comparacion/validacion nueva,
 # ver notebooks/07b_clustering_semantico/07b_clustering_semantico.ipynb. Independiente del
-# clustering estructural de arriba: distinto espacio (embeddings de 768 dim del documento
-# semantico general, no X_modelado), distinto numero de clusters (K propio, no forzado a 13),
-# y sin nombres de perfil interpretados a mano todavia (PERFIL_NOMBRE_SEMANTICO es generico,
-# "Perfil semantico N" + descripcion automatica por variables estructuradas).
+# clustering estructural de arriba: distinto espacio (embeddings de 1024 dim del documento
+# semantico general, BAAI/bge-m3, DEC-028, no X_modelado), distinto numero de clusters (K
+# propio, no forzado a 13). PERFIL_NOMBRE_SEMANTICO se construye priorizando evidencia
+# TEXTUAL (cargo/unidad extraidos de los documentos mas cercanos al centroide de cada
+# cluster, ver CARGO_TEXTUAL_PREDOMINANTE/UNIDAD_TEXTUAL_PREDOMINANTE/EJEMPLOS_TEXTO) sobre
+# metadata tabular, que solo se usa como fallback.
 # ---------------------------------------------------------------------------
 
 def load_cluster_resumen_semantico() -> pd.DataFrame:
@@ -287,6 +338,40 @@ def load_pca_personas_semantico() -> pd.DataFrame:
     X_modelado) - PC1/PC2 aqui no son comparables con los de `load_pca_personas()` (distinto
     espacio de origen, distinta escala)."""
     return _read_csv(CLUSTERING_DIR / "pca_personas_semantico.csv")
+
+
+# ---------------------------------------------------------------------------
+# Clustering POR RAMA - tanto el clustering estructural global (13 grupos / K=5) como el
+# semantico mezclan ADMINISTRATIVO y DOCENTE en el mismo espacio de features antes de
+# agrupar, asi que en la practica el eje que mas domina la separacion de clusters es esa
+# rama, no matices dentro de cada rama. Este bloque corre KMeans por separado dentro de
+# cada rama (mismo espacio de features/embeddings que su version global, pero SIN mezclar
+# ambas ramas), con su propio K elegido por rama (silhouette + estabilidad ARI, excluyendo
+# K bajos triviales) y su propio PCA 2D (no comparable entre ramas ni con las vistas
+# globales). CLUSTER_RAMA es un id local a la rama (0..K-1), unico junto con RAMA.
+# ---------------------------------------------------------------------------
+
+def load_cluster_resumen_por_rama() -> pd.DataFrame:
+    """Nombres/descripciones curados a mano de los clusters por rama, para AMBOS tipos de
+    clustering (columna TIPO_CLUSTERING: 'estructurado' o 'semantico'). Filtrar por
+    TIPO_CLUSTERING y RAMA para obtener el resumen de una vista especifica."""
+    return _read_csv(DASHBOARD_DIR / "cluster_perfiles_resumen_por_rama.csv")
+
+
+def load_clusters_personas_estructurado_por_rama() -> pd.DataFrame:
+    return _read_csv(CLUSTERING_DIR / "clusters_personas_estructurado_por_rama.csv")
+
+
+def load_pca_personas_estructurado_por_rama() -> pd.DataFrame:
+    return _read_csv(CLUSTERING_DIR / "pca_personas_estructurado_por_rama.csv")
+
+
+def load_clusters_personas_semantico_por_rama() -> pd.DataFrame:
+    return _read_csv(CLUSTERING_DIR / "clusters_personas_semantico_por_rama.csv")
+
+
+def load_pca_personas_semantico_por_rama() -> pd.DataFrame:
+    return _read_csv(CLUSTERING_DIR / "pca_personas_semantico_por_rama.csv")
 
 
 def load_feature_dictionary() -> pd.DataFrame:
@@ -319,6 +404,41 @@ def load_embeddings_trayectoria() -> tuple[np.ndarray, np.ndarray]:
     personas con al menos un tramo de rol estructural (ver CATEGORIAS_PUNTUALES/DEC-004),
     un subconjunto mas chico que `load_embeddings()`."""
     df = _read_csv(EMBEDDINGS_DIR / "embeddings_trayectoria.csv")
+    ids = df["IDPERSONA"].to_numpy()
+    matrix = df.drop(columns=["IDPERSONA"]).to_numpy(dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return ids, matrix / norms
+
+
+# Archivo por seccion (ver construir_documentos_por_seccion en _embeddings_comun.py): un
+# embedding INDEPENDIENTE calculado solo sobre el texto de esa seccion, sin el resto del
+# perfil - evita que temas especificos (ej. "IA" en Investigacion) se diluyan en personas
+# con trayectoria extensa y variada, mismo razonamiento que ya aplicaba
+# load_embeddings_trayectoria pero generalizado a las demas secciones. TRAYECTORIA aqui usa
+# un archivo con nombre distinto (embeddings_por_seccion_trayectoria.csv) para no confundirse
+# con embeddings_trayectoria.csv, que es semanticamente distinto (documento de TRAYECTORIA
+# PROFESIONAL consolidado - cargo/unidad/permanencia/estabilidad -, no solo el bloque de
+# texto "Trayectoria: ..." del documento general).
+ARCHIVO_EMBEDDING_SECCION = {
+    "TRAYECTORIA": "embeddings_por_seccion_trayectoria.csv",
+    "FORMACION": "embeddings_formacion.csv",
+    "DOCENCIA": "embeddings_docencia.csv",
+    "INVESTIGACION": "embeddings_investigacion.csv",
+    "VINCULACION": "embeddings_vinculacion.csv",
+    "CAPACITACION": "embeddings_capacitacion.csv",
+    "IDIOMAS": "embeddings_idiomas.csv",
+    "RECONOCIMIENTOS": "embeddings_reconocimientos.csv",
+}
+
+
+def load_embeddings_por_seccion(seccion: str) -> tuple[np.ndarray, np.ndarray]:
+    """Devuelve (ids, matriz normalizada L2) del embedding de UNA sola seccion (ver
+    ARCHIVO_EMBEDDING_SECCION). `seccion` debe ser una de sus claves; lanza KeyError si no.
+    Cubre solo a las personas que tienen esa seccion con informacion real (un subconjunto
+    mas chico que `load_embeddings()`, tamano distinto por seccion)."""
+    archivo = ARCHIVO_EMBEDDING_SECCION[seccion]
+    df = _read_csv(EMBEDDINGS_DIR / archivo)
     ids = df["IDPERSONA"].to_numpy()
     matrix = df.drop(columns=["IDPERSONA"]).to_numpy(dtype=np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -418,6 +538,28 @@ def load_documento_trayectoria() -> pd.DataFrame:
     analogo a `load_documento_semantico()` pero con el texto de cargo/unidad/permanencia/
     movilidad en vez del documento general."""
     return _read_csv(EMBEDDINGS_DIR / "documento_trayectoria_persona.csv")
+
+
+# Texto puro de UNA sola seccion por persona (ver construir_documentos_por_seccion en
+# _embeddings_comun.py), columnas IDPERSONA/DOCUMENTO_TEXTO/N_PALABRAS - usado como fuente
+# de "evidencia" cuando la busqueda semantica se hace por seccion (ver
+# ARCHIVO_EMBEDDING_SECCION), analogo a `load_documento_trayectoria()` pero generalizado.
+ARCHIVO_DOCUMENTO_SECCION = {
+    "TRAYECTORIA": "documento_por_seccion_trayectoria.csv",
+    "FORMACION": "documento_formacion.csv",
+    "DOCENCIA": "documento_docencia.csv",
+    "INVESTIGACION": "documento_investigacion.csv",
+    "VINCULACION": "documento_vinculacion.csv",
+    "CAPACITACION": "documento_capacitacion.csv",
+    "IDIOMAS": "documento_idiomas.csv",
+    "RECONOCIMIENTOS": "documento_reconocimientos.csv",
+}
+
+
+def load_documento_por_seccion(seccion: str) -> pd.DataFrame:
+    """Documento de texto puro de UNA sola seccion (ver ARCHIVO_DOCUMENTO_SECCION).
+    `seccion` debe ser una de sus claves; lanza KeyError si no."""
+    return _read_csv(EMBEDDINGS_DIR / ARCHIVO_DOCUMENTO_SECCION[seccion])
 
 
 def load_tramos_cargo_unidad() -> pd.DataFrame:
@@ -586,12 +728,12 @@ def motivo_sin_perfil(id_persona: int) -> str | None:
     cat, cargo = ultima["CATEGORIA_CARGO"], ultima["CARGO"]
     if cat in pc.CATEGORIAS_PUNTUALES:
         etiqueta = _ETIQUETAS_CATEGORIAS_PUNTUALES.get(cat, cat.replace("_", " ").lower())
-        return (f"Su contrato más reciente (\"{cargo}\") es de tipo **{etiqueta}** — por diseño "
-                "(ver DEC-004), este tipo de contrato puntual/por proyecto no se considera un cargo "
+        return (f"Su contrato más reciente (\"{cargo}\") es de tipo **{etiqueta}** — por diseño, "
+                "este tipo de contrato puntual/por proyecto no se considera un cargo "
                 "estructural continuo, aunque esté vigente.")
     if cat == "SIN_TIPOEMPLEADO":
         return (f"Su contrato más reciente (\"{cargo}\") es de tipo **contrato civil** (sin relación "
-                "de dependencia, ver DEC-012) — no corresponde a personal docente ni administrativo "
+                "de dependencia) — no corresponde a personal docente ni administrativo "
                 "en el sentido institucional.")
     if cat == "SIN_DATO":
         return "Su contrato más reciente no tiene un cargo (`CARGO`) registrado en el sistema origen."
