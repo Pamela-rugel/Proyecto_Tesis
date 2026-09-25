@@ -36,3 +36,10 @@ stack/*.tar
 # Embeddings y documentos semanticos: se regeneran localmente con
 # notebooks/07_embeddings/07_embeddings.ipynb (pesados, no versionar)
 data/embeddings/
+
+# Diagnosticos y experimentos puntuales (no forman parte del pipeline)
+diag_trayectoria.csv
+gen_items_investigacion.py
+*.log
+
+Entregable_Stack_Plan_Perfiles_ESPOL.docx
