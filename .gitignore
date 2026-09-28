@@ -37,6 +37,12 @@ stack/*.tar
 # notebooks/07_embeddings/07_embeddings.ipynb (pesados, no versionar)
 data/embeddings/
 
+# Trayectorias y evidencias: se regeneran localmente con
+# notebooks/04_trayectorias/04_trayectorias.ipynb y evidencias/trayectoria/evidencias_trayectoria.ipynb
+# (derivados de datos institucionales, no versionar)
+data/trayectorias/
+data/evidencias/
+
 # Diagnosticos y experimentos puntuales (no forman parte del pipeline)
 diag_trayectoria.csv
 gen_items_investigacion.py

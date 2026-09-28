@@ -49,6 +49,36 @@ def leer_csv(nombre_archivo: str, **kwargs) -> pd.DataFrame:
     raise ultimo_error
 
 
+# --- Personas excluidas de todo analisis (2026-09-28, decision del usuario, DEC-030) ---
+# `data/raw/defunciones_identificadas.txt`: una columna IDPERSONA con personas identificadas
+# en defuncion. No deben considerarse en ningun analisis (trayectoria, evidencias, clustering,
+# embeddings). Se filtran al definir la poblacion (07_datos_personales_ultimos_5anios), de
+# donde heredan todos los notebooks posteriores, y quedan registradas con su motivo en
+# `data/processed/personas_excluidas.csv`.
+ARCHIVO_DEFUNCIONES = RAW_DIR / "defunciones_identificadas.txt"
+MOTIVO_DEFUNCION = "identificada en defunción"
+
+
+def cargar_ids_defunciones() -> set[int]:
+    """IDPERSONA identificados en defuncion (vacio si el archivo no existe)."""
+    if not ARCHIVO_DEFUNCIONES.exists():
+        return set()
+    ids = pd.read_csv(ARCHIVO_DEFUNCIONES)["IDPERSONA"]
+    return set(pd.to_numeric(ids, errors="coerce").dropna().astype(int))
+
+
+def excluir_defunciones(df: pd.DataFrame, columna: str = "IDPERSONA") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Quita de `df` a las personas identificadas en defuncion. Devuelve (df_filtrado,
+    excluidas) con `excluidas` = una fila por persona excluida (IDPERSONA, MOTIVO)."""
+    defunciones = cargar_ids_defunciones()
+    mascara = df[columna].isin(defunciones)
+    excluidas = pd.DataFrame({
+        "IDPERSONA": sorted(df.loc[mascara, columna].astype(int).unique()),
+    })
+    excluidas["MOTIVO"] = MOTIVO_DEFUNCION
+    return df[~mascara].copy(), excluidas
+
+
 def limpiar_strings(df: pd.DataFrame, columnas=None) -> pd.DataFrame:
     """Recorta espacios y convierte celdas vacias/"nan" a NA en columnas de texto."""
     df = df.copy()
@@ -165,6 +195,149 @@ def decodificar_experiencia_externa(df: pd.DataFrame) -> pd.DataFrame:
     if "ROLACADEMICO" in df.columns:
         df["ROLACADEMICO_DESC"] = df["ROLACADEMICO"].map(ROL_ACADEMICO_EXPERIENCIA)
     return df
+
+
+# --- Limpieza de reglas de negocio de experiencia externa (2026-09-27, pedido del usuario) ---
+# Valores que no son un cargo/institucion real sino relleno de captura (comparacion en
+# mayusculas, texto completo). Ademas se trata como relleno cualquier texto compuesto
+# solo por digitos/puntuacion (p.ej. ".", "-", "0").
+VALORES_RELLENO_EXPERIENCIA = {
+    "NAN", "NULL", "NONE", "N/A", "NA", "N.A.", "N/D", "ND", "S/N", "SN", "S/D", "SD",
+    "X", "XX", "XXX", "NINGUNO", "NINGUNA", "NO APLICA", "SIN CARGO", "SIN DATO", "SIN DATOS",
+    "OTRO", "OTROS", "DESCONOCIDO", "DESCONOCIDA", "PENDIENTE", "VARIOS", "CARGO",
+    "INSTITUCION", "INSTITUCIÓN", "EMPRESA",
+}
+INSTITUCION_DESCONOCIDA = "DESCONOCIDA"
+
+# Viñetas/simbolos de lista pegados al inicio (texto copiado de un CV) y puntuacion
+# colgante al final. No se toca un punto final (abreviaturas como "S.A.") ni guiones o
+# parentesis que forman parte del nombre (p.ej. "ASTINAVE EP-").
+_PATRON_VINETA_INICIO = re.compile(r"^[\s•▪◦●■□►▸‣⁃·*\-–—>]+")
+_PATRON_PUNTUACION_FINAL = re.compile(r"[\s,;:]+$")
+
+
+def _normalizar_texto_experiencia(serie: pd.Series) -> pd.Series:
+    """Quita viñetas iniciales, puntuacion colgante final y colapsa espacios (incluye
+    tabs y saltos de linea) sin alterar el contenido del texto."""
+    s = serie.astype("object").where(serie.notna())
+    s = s.map(lambda v: v if pd.isna(v) else re.sub(r"\s+", " ", str(v)).strip())
+    s = s.map(lambda v: v if pd.isna(v) else _PATRON_PUNTUACION_FINAL.sub("", _PATRON_VINETA_INICIO.sub("", v)).strip())
+    return s.map(lambda v: pd.NA if pd.isna(v) or v == "" else v)
+
+
+def _es_relleno_experiencia(serie: pd.Series) -> pd.Series:
+    up = serie.fillna("").astype(str).str.strip().str.upper()
+    return serie.notna() & (up.isin(VALORES_RELLENO_EXPERIENCIA) | up.str.fullmatch(r"[\W\d_]+"))
+
+
+def _fusionar_solapados_experiencia(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Une registros de la MISMA persona con el MISMO cargo en la MISMA institucion
+    (comparacion sin distinguir mayusculas) cuyos periodos se solapan: queda un solo
+    registro con el inicio mas temprano y el fin mas tardio (sin fin si alguno de los
+    fusionados no tiene fin - misma convencion que los tramos de ESPOL). Se conserva la
+    fila con el IDHISTORIALABORAL menor como base y los IDs fusionados en
+    `IDS_HISTORIALABORAL_FUSIONADOS` (trazabilidad). Registros con institucion
+    DESCONOCIDA no se fusionan: no hay forma de saber si es el mismo empleador."""
+    df = df.sort_values(["IDPERSONA", "FECHADESDE", "IDHISTORIALABORAL"]).copy()
+    df["IDS_HISTORIALABORAL_FUSIONADOS"] = df["IDHISTORIALABORAL"].astype(str)
+    fusionable = df["INSTITUCION"] != INSTITUCION_DESCONOCIDA
+    clave = [df["IDPERSONA"], df["CARGO"].str.upper(), df["INSTITUCION"].str.upper()]
+
+    filas_finales, n_fusionados = [], 0
+    for _, g in df[fusionable].groupby(clave, sort=False):
+        actual = None
+        for r in g.to_dict("records"):
+            if actual is not None:
+                fin_act = actual["FECHAHASTA"]
+                if pd.isna(fin_act) or r["FECHADESDE"] <= fin_act:
+                    if pd.isna(r["FECHAHASTA"]) or pd.isna(fin_act):
+                        actual["FECHAHASTA"] = pd.NaT
+                    else:
+                        actual["FECHAHASTA"] = max(fin_act, r["FECHAHASTA"])
+                    ids = sorted(int(i) for i in f"{actual['IDS_HISTORIALABORAL_FUSIONADOS']},{r['IDHISTORIALABORAL']}".split(","))
+                    actual["IDHISTORIALABORAL"] = ids[0]
+                    actual["IDS_HISTORIALABORAL_FUSIONADOS"] = ",".join(map(str, ids))
+                    n_fusionados += 1
+                    continue
+                filas_finales.append(actual)
+            actual = r
+        filas_finales.append(actual)
+
+    resultado = pd.concat([pd.DataFrame(filas_finales, columns=df.columns), df[~fusionable]], ignore_index=True)
+    return resultado.sort_values(["IDPERSONA", "FECHADESDE"]).reset_index(drop=True), n_fusionados
+
+
+def limpiar_experiencia_externa(df: pd.DataFrame, fechas_nacimiento: pd.Series) -> tuple[pd.DataFrame, dict]:
+    """Reglas de limpieza de experiencia externa definidas por el usuario (2026-09-27).
+    Requiere `df` con fechas ya casteadas (`castear_fechas`) y `fechas_nacimiento` como
+    Series indexada por IDPERSONA. Devuelve (df_limpio, reporte con conteos por regla).
+
+    Textos (CARGO, INSTITUCION):
+    1. Se quitan viñetas iniciales, puntuacion colgante final y espacios repetidos.
+    2. Se eliminan los registros con CARGO nulo o de relleno (no son una experiencia
+       describible).
+    3. INSTITUCION nula, de relleno o identica al CARGO -> "DESCONOCIDA".
+    4. Un mismo CARGO escrito con distinta capitalizacion se unifica en MAYUSCULAS
+       (solo para los textos que tienen mas de una escritura). Las instituciones no se
+       unifican (ni variantes de nombre ni entidades ESPOL): se dejan tal cual.
+    Fechas:
+    5. Se eliminan los registros sin FECHADESDE.
+    6. Se eliminan los registros que inician antes del nacimiento de la persona (solo
+       evaluable si se conoce su fecha de nacimiento).
+    6b. FECHAHASTA anterior a FECHADESDE se deja vacia (no se intercambian las fechas).
+    Duplicados:
+    7. Se eliminan duplicados exactos (mismo contenido; se ignoran IDHISTORIALABORAL y
+       las referencias a archivos, que son distintas por cada carga).
+    8. Se fusionan registros del mismo cargo en la misma institucion con fechas
+       solapadas (`_fusionar_solapados_experiencia`).
+    """
+    df = df.copy()
+    reporte = {"filas_iniciales": len(df)}
+
+    for col in ("CARGO", "INSTITUCION"):
+        antes = df[col].copy()
+        df[col] = _normalizar_texto_experiencia(df[col])
+        reporte[f"{col.lower()}_textos_normalizados"] = int((antes.notna() & (antes.astype(str) != df[col].astype(str))).sum())
+
+    cargo_relleno = _es_relleno_experiencia(df["CARGO"])
+    reporte["eliminados_cargo_nulo"] = int(df["CARGO"].isna().sum())
+    reporte["eliminados_cargo_relleno"] = int(cargo_relleno.sum())
+    df = df[df["CARGO"].notna() & ~cargo_relleno]
+
+    inst_nula = df["INSTITUCION"].isna()
+    inst_relleno = _es_relleno_experiencia(df["INSTITUCION"])
+    inst_igual_cargo = df["INSTITUCION"].fillna("").str.upper() == df["CARGO"].str.upper()
+    reporte["institucion_nula_a_desconocida"] = int(inst_nula.sum())
+    reporte["institucion_relleno_a_desconocida"] = int(inst_relleno.sum())
+    reporte["institucion_igual_cargo_a_desconocida"] = int((inst_igual_cargo & ~inst_nula).sum())
+    df.loc[inst_nula | inst_relleno | inst_igual_cargo, "INSTITUCION"] = INSTITUCION_DESCONOCIDA
+
+    escrituras = df.groupby(df["CARGO"].str.upper())["CARGO"].transform("nunique")
+    unificar = (escrituras > 1) & (df["CARGO"] != df["CARGO"].str.upper())
+    reporte["cargo_capitalizacion_unificada"] = int(unificar.sum())
+    df.loc[unificar, "CARGO"] = df.loc[unificar, "CARGO"].str.upper()
+
+    reporte["eliminados_sin_fecha_inicio"] = int(df["FECHADESDE"].isna().sum())
+    df = df[df["FECHADESDE"].notna()]
+    nacimiento = df["IDPERSONA"].map(fechas_nacimiento)
+    antes_de_nacer = nacimiento.notna() & (df["FECHADESDE"] < nacimiento)
+    reporte["eliminados_inicio_antes_de_nacer"] = int(antes_de_nacer.sum())
+    df = df[~antes_de_nacer].copy()
+    # Fin anterior al inicio: error de captura sin forma de saber cual fecha es la correcta.
+    # Se conserva el registro y se deja FECHAHASTA vacia (= sin fecha de salida registrada).
+    fin_invertido = df["FECHAHASTA"].notna() & (df["FECHAHASTA"] < df["FECHADESDE"])
+    reporte["fecha_fin_anterior_al_inicio_a_vacia"] = int(fin_invertido.sum())
+    df.loc[fin_invertido, "FECHAHASTA"] = pd.NaT
+
+    ignorar = {"IDHISTORIALABORAL", "REFEVIDENCIA", "REFEVALUACIONES"}
+    columnas_contenido = [c for c in df.columns if c not in ignorar]
+    reporte["eliminados_duplicados_exactos"] = int(df.duplicated(subset=columnas_contenido).sum())
+    df = df.sort_values("IDHISTORIALABORAL").drop_duplicates(subset=columnas_contenido)
+
+    df, n_fusionados = _fusionar_solapados_experiencia(df)
+    reporte["fusionados_mismo_cargo_institucion_solapados"] = n_fusionados
+    reporte["filas_finales"] = len(df)
+    return df, reporte
 
 
 def detectar_outliers_iqr(df: pd.DataFrame, columna: str, factor: float = 1.5):
@@ -438,6 +611,18 @@ def calcular_fecha_fin_efectiva(df: pd.DataFrame) -> pd.Series:
     si no `FECHAFINCONTRATO`, si ninguna existe el contrato esta vigente (NaT) — salvo la
     correccion por `ESTADOCONTRATO` descrita abajo.
 
+    Validacion de `FECHADESVINCULACION` (decision del usuario, 2026-09-27): solo se usa
+    cuando cae dentro del contrato (cierre anticipado real, 472 casos en puntuales). Si es
+    ANTERIOR a `FECHAINICIOCONTRATO` se ignora y se usa `FECHAFINCONTRATO` (69 contratos
+    en todo el historial); si es POSTERIOR a `FECHAFINCONTRATO` no extiende el contrato y
+    tambien se usa `FECHAFINCONTRATO` (501 contratos, mediana de 273 dias de extension
+    que antes se contaban como trabajados).
+
+    `FECHAFINCONTRATO` anterior a `FECHAINICIOCONTRATO` (27 contratos, todos FF; error de
+    captura) se trata como fecha inexistente: se usa la desvinculacion si es valida y, si
+    no hay ninguna fecha valida, aplica la regla de contrato FF sin fecha de cierre
+    (descrita abajo). Nunca se intercambian las fechas.
+
     Si `ESTADOCONTRATO` existe en `df`, se sobreescribe a NaT (vigente) cuando el
     contrato esta en un estado abierto en el sistema origen (`_ESTADOS_CONTRATO_ABIERTOS`:
     AA=ACTIVO, PE=POR EJECUTARSE), sin importar si `FECHAFINCONTRATO`/
@@ -469,8 +654,16 @@ def calcular_fecha_fin_efectiva(df: pd.DataFrame) -> pd.Series:
         if "FECHADESVINCULACION" in df.columns
         else pd.Series(pd.NaT, index=df.index)
     )
-    if "FECHAFINCONTRATO" in df.columns:
-        fin_efectivo = fin_efectivo.fillna(df["FECHAFINCONTRATO"])
+    fin_contrato = (
+        df["FECHAFINCONTRATO"].copy()
+        if "FECHAFINCONTRATO" in df.columns
+        else pd.Series(pd.NaT, index=df.index)
+    )
+    if "FECHAINICIOCONTRATO" in df.columns:
+        fin_efectivo = fin_efectivo.mask(fin_efectivo < df["FECHAINICIOCONTRATO"])
+        fin_contrato = fin_contrato.mask(fin_contrato < df["FECHAINICIOCONTRATO"])
+    fin_efectivo = fin_efectivo.mask(fin_efectivo > fin_contrato)
+    fin_efectivo = fin_efectivo.fillna(fin_contrato)
     if "ESTADOCONTRATO" in df.columns:
         fin_efectivo = fin_efectivo.mask(df["ESTADOCONTRATO"].isin(_ESTADOS_CONTRATO_ABIERTOS))
         if "IDPERSONA" in df.columns and "FECHAINICIOCONTRATO" in df.columns:
@@ -896,6 +1089,18 @@ def construir_tramos_rol(df: pd.DataFrame) -> pd.DataFrame:
     return resultado[columnas].reset_index(drop=True)
 
 
+def marcar_tramos_un_dia(tramos_rol: pd.DataFrame) -> pd.DataFrame:
+    """Agrega `ES_TRAMO_UN_DIA`: tramo de cargo estructural que empieza y termina el mismo
+    dia (decision del usuario, 2026-09-27: son ruido, tipicamente actos administrativos de
+    un dia - reasignaciones o recategorizaciones - que no describen un cargo ejercido).
+    Solo marca: el tramo se conserva en `tramos_rol.csv` porque puede dar continuidad a
+    otros tramos del mismo cargo; la capa de evidencias no toma como evidencia un periodo
+    consolidado de un solo dia."""
+    tramos_rol = tramos_rol.copy()
+    tramos_rol["ES_TRAMO_UN_DIA"] = tramos_rol["TRAMO_FIN"].notna() & (tramos_rol["TRAMO_FIN"] == tramos_rol["TRAMO_INICIO"])
+    return tramos_rol
+
+
 def construir_tramos_unidad(df: pd.DataFrame) -> pd.DataFrame:
     """Colapsa contratos consecutivos de `NOMBRE_UNIDAD` identica (dentro de la misma
     persona) en "tramos de unidad" — mismo algoritmo exacto que `construir_tramos_rol`
@@ -1318,6 +1523,11 @@ def procesar_registro_autoridades(
     df["ES_RUIDO_CALIDAD_DATOS"] = df["FECHAHASTA"].notna() & (df["FECHAHASTA"] < df["FECHADESDE"])
     df["ES_REPRESENTANTE_ESTUDIANTIL"] = df["TIPOAUTORIDAD"].str.contains("estudiantes", case=False, na=False)
     df["ES_SUBROGACION"] = df["TIPOSIGLAS"] == "SR"
+    # Designacion de un solo dia que NO es subrogacion (decision del usuario, 2026-09-27):
+    # ruido. Las subrogaciones de un dia si se conservan (encargos reales y frecuentes).
+    df["ES_DESIGNACION_UN_DIA"] = (
+        df["FECHAHASTA"].notna() & (df["FECHAHASTA"] == df["FECHADESDE"]) & ~df["ES_SUBROGACION"]
+    )
     df["ES_RUIDO_FUERA_DE_POBLACION"] = (
         ~df["IDPERSONA"].isin(poblacion_ids) if poblacion_ids is not None else False
     )
@@ -1400,7 +1610,7 @@ def procesar_registro_autoridades(
         "NIVEL_FUNCION", "DETALLE_NIVEL_FUNCION",
         "FECHA_DESDE", "FECHA_HASTA", "DURACION_DIAS",
         "ES_REPRESENTANTE_ESTUDIANTIL", "ES_RUIDO_CALIDAD_DATOS", "ES_DUPLICADO_EXACTO",
-        "ES_RUIDO_FUERA_DE_POBLACION",
+        "ES_RUIDO_FUERA_DE_POBLACION", "ES_DESIGNACION_UN_DIA",
         "TIPOEMPLEADO_CONTRATO_DURANTE", "CATEGORIA_CARGO_CONTRATO_DURANTE", "ES_COINCIDENTE_CONTRATO",
     ]
     return df[columnas].sort_values(["IDPERSONA", "FECHA_DESDE"], kind="stable").reset_index(drop=True)
