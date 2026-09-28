@@ -63,6 +63,21 @@ def texto_limpio(v) -> str | None:
     return s
 
 
+def normalizar_para_comparar(texto) -> str:
+    """Mayusculas, sin tildes ni signos, espacios simples - solo para COMPARAR textos."""
+    import unicodedata
+    if valor_nulo(texto):
+        return ""
+    s = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode("ascii").upper()
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", s)).strip()
+
+
+def limpiar_para_mostrar(texto) -> str | None:
+    """Texto para mostrar: espacios (incluidos saltos de linea) colapsados; None si vacio."""
+    t = texto_limpio(texto)
+    return re.sub(r"\s+", " ", t).strip() if t else None
+
+
 def es_vigente(fin, fecha_corte: pd.Timestamp) -> bool:
     """Regla del proyecto: vigente si la fecha fin no existe o aun no ha ocurrido."""
     return valor_nulo(fin) or pd.Timestamp(fin) > fecha_corte
@@ -168,9 +183,12 @@ _PATRON_MARCADOR = re.compile(r"\b(?:DESCONOCIDA|nan|None|NaT)\b")
 
 
 def validar_evidencias(df: pd.DataFrame, tipos_validos: set[str], poblacion: set[int],
-                       fecha_corte: pd.Timestamp | None = None) -> pd.DataFrame:
+                       fecha_corte: pd.Timestamp | None = None,
+                       exigir_fecha_inicio: bool = True) -> pd.DataFrame:
     """Chequeos de integridad del dataset de evidencias. Devuelve una fila por chequeo con
-    el numero de evidencias que lo incumplen (0 = OK). No corrige nada."""
+    el numero de evidencias que lo incumplen (0 = OK). No corrige nada.
+    `exigir_fecha_inicio=False` para secciones cuya fuente no tiene fecha de inicio
+    (p.ej. formacion: solo existe la fecha de graduacion)."""
 
     def _json_invalido(s):
         try:
@@ -189,7 +207,7 @@ def validar_evidencias(df: pd.DataFrame, tipos_validos: set[str], poblacion: set
         "persona_fuera_de_poblacion": int((~df["persona_id"].isin(poblacion)).sum()),
         "tipo_id_invalido": int((~df["tipo_id"].isin(tipos_validos)).sum()),
         "atributos_json_invalido": int(invalido.sum()),
-        "fecha_inicio_nula": int(ini.isna().sum()),
+        "fecha_inicio_nula": int(ini.isna().sum()) if exigir_fecha_inicio else 0,
         "fechas_invertidas_sin_marcar": int(((ini > fin) & ~marcadas).sum()),
         "fecha_inicio_futura": int((ini > (fecha_corte or hoy())).sum()),
         "texto_vacio": int((texto.str.strip() == "").sum()),
