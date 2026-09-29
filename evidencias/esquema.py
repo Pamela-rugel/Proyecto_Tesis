@@ -78,6 +78,32 @@ def limpiar_para_mostrar(texto) -> str | None:
     return re.sub(r"\s+", " ", t).strip() if t else None
 
 
+_ESPOL = re.compile(r"\b(?:ESCUELA\s+SUPERIOR\s+POLIT[EÉ]CNICA\s+DEL\s+LITORAL|ESPOL)\b", re.IGNORECASE)
+_CONECTOR_INICIO = re.compile(r"^(?:LA|EL|Y|E|&|DE)\s+", re.IGNORECASE)
+_CONECTOR_FIN = re.compile(r"\s+(?:LA|EL|Y|E|&|DE)$", re.IGNORECASE)
+
+
+def quitar_espol(texto) -> str | None:
+    """Para el TEXTO de una evidencia (regla: sin 'ESPOL'): quita ESPOL o su nombre largo de
+    una institucion y deja el resto ("CISE - ESPOL" -> "CISE", "CRUZ ROJA ECUATORIANA Y
+    ESPOL" -> "CRUZ ROJA ECUATORIANA"). None si solo era ESPOL."""
+    t = limpiar_para_mostrar(texto)
+    if not t or not _ESPOL.search(t):
+        return t  # sin ESPOL: el texto no se toca
+    s = _ESPOL.sub("", t)
+    s = re.sub(r"\(\s*\)", "", s)
+    s = re.sub(r"\s+([,;])", r"\1", s)
+    s = re.sub(r"\s*[-–—/]\s*(?=[,;]|$)", "", s)
+    s = re.sub(r"(^|[,;(])\s*[-–—/,;]+\s*", r"\1", s)
+    s = re.sub(r"\s*[-–—/]\s*[-–—/]\s*", " - ", s)
+    s = re.sub(r"\s{2,}", " ", s).strip(" -–—/,;.")
+    previo = None
+    while previo != s:
+        previo = s
+        s = _CONECTOR_FIN.sub("", _CONECTOR_INICIO.sub("", s)).strip(" -–—/,;.")
+    return s or None
+
+
 def es_vigente(fin, fecha_corte: pd.Timestamp) -> bool:
     """Regla del proyecto: vigente si la fecha fin no existe o aun no ha ocurrido."""
     return valor_nulo(fin) or pd.Timestamp(fin) > fecha_corte
@@ -179,7 +205,9 @@ def fechas_de_atributos(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return ini, fin
 
 
-_PATRON_MARCADOR = re.compile(r"\b(?:DESCONOCIDA|nan|None|NaT)\b")
+# Un marcador de nulo ocupando un valor completo del texto ("…, nan, …", "País: None"); no
+# una palabra dentro de un nombre ("PERDIDA DESCONOCIDA DE INVENTARIOS")
+_PATRON_MARCADOR = re.compile(r"(?:^|[,:;(]\s*)(?:DESCONOCIDA|nan|None|NaT)\s*(?:$|[,;)])")
 
 
 def validar_evidencias(df: pd.DataFrame, tipos_validos: set[str], poblacion: set[int],
@@ -213,7 +241,8 @@ def validar_evidencias(df: pd.DataFrame, tipos_validos: set[str], poblacion: set
         "texto_vacio": int((texto.str.strip() == "").sum()),
         "texto_con_marcador_nulo": int(texto.str.contains(_PATRON_MARCADOR).sum()),
         "texto_contiene_persona_id": int(sum(
-            bool(re.search(rf"\b{p}\b", t)) for p, t in zip(df["persona_id"], texto)
+            # numero suelto: no parte de "ISO 9001:2008" ni de una fecha o codigo
+            bool(re.search(rf"(?<![\w\-:/.]){p}(?![\w\-:/.])", t)) for p, t in zip(df["persona_id"], texto)
         )),
     }
     return pd.DataFrame(

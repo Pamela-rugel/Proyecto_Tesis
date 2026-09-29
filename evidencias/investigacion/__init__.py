@@ -1,7 +1,10 @@
 """Evidencias individuales de la seccion INVESTIGACION Y PRODUCCION ACADEMICA.
 
 - proyecto_investigacion.py -> PROYECTO_INVESTIGACION
-(pendientes: PROYECTO_VINCULACION, PUBLICACION, TESIS_DIRIGIDA, PONENCIA)
+- proyecto_vinculacion.py   -> PROYECTO_VINCULACION
+- publicacion.py            -> PUBLICACION
+- tesis_dirigida.py         -> TESIS_DIRIGIDA
+- ponencia.py               -> PONENCIA
 
 Todos producen el esquema comun de `evidencias/esquema.py`; `construir.py` los orquesta.
 """

@@ -14,15 +14,21 @@ import json
 import pandas as pd
 
 from evidencias import esquema as es
-from evidencias.investigacion import proyecto_investigacion, proyecto_vinculacion
+from evidencias.investigacion import (
+    ponencia, proyecto_investigacion, proyecto_vinculacion, publicacion, tesis_dirigida,
+)
 from evidencias.investigacion.fuentes import (
-    SALIDA_DIR, cargar_mapa_siglas, cargar_poblacion, cargar_proyectos, cargar_vinculacion,
+    SALIDA_DIR, cargar_mapa_siglas, cargar_poblacion, cargar_ponencias, cargar_proyectos,
+    cargar_publicaciones, cargar_tesis, cargar_vinculacion,
 )
 
 # Carpeta de salida y nombre de archivo por tipo: data/evidencias/<carpeta>/evidencias_<nombre>.csv
 SALIDAS = {
     proyecto_investigacion.TIPO_ID: (SALIDA_DIR.parent / "investigacion", "investigacion"),
     proyecto_vinculacion.TIPO_ID: (SALIDA_DIR.parent / "vinculacion", "vinculacion"),
+    publicacion.TIPO_ID: (SALIDA_DIR.parent / "publicaciones", "publicaciones"),
+    tesis_dirigida.TIPO_ID: (SALIDA_DIR.parent / "tesis_dirigidas", "tesis_dirigidas"),
+    ponencia.TIPO_ID: (SALIDA_DIR.parent / "ponencias", "ponencias"),
 }
 TIPOS = set(SALIDAS)
 
@@ -38,8 +44,12 @@ def construir_evidencias_investigacion(
         cargar_proyectos(poblacion), cargar_mapa_siglas(), fecha_corte
     )
     ev_vin, rep_vin, nc_vin = proyecto_vinculacion.construir(cargar_vinculacion(poblacion), fecha_corte)
+    ev_pub, rep_pub, nc_pub = publicacion.construir(cargar_publicaciones(poblacion))
+    mapa_siglas = cargar_mapa_siglas()
+    ev_tes, rep_tes, nc_tes = tesis_dirigida.construir(*cargar_tesis(poblacion), mapa_siglas)
+    ev_pon, rep_pon, nc_pon = ponencia.construir(cargar_ponencias(poblacion), fecha_corte)
 
-    evidencias = pd.concat([ev_pry, ev_vin], ignore_index=True).sort_values(
+    evidencias = pd.concat([ev_pry, ev_vin, ev_pub, ev_tes, ev_pon], ignore_index=True).sort_values(
         ["persona_id", "tipo_id", "evidencia_id"], kind="stable"
     ).reset_index(drop=True)
     # Sin exigir fecha de inicio: los proyectos de vinculacion sin fechas se conservan
@@ -56,6 +66,7 @@ def construir_evidencias_investigacion(
     no_considerados = pd.concat([
         _no_considerados(nc_pry, proyecto_investigacion.TIPO_ID, "NOMBRE"),
         _no_considerados(nc_vin, proyecto_vinculacion.TIPO_ID, "NOMBREPROYECTO"),
+        nc_pub, nc_tes, nc_pon,  # ya vienen en el formato final
     ], ignore_index=True)
 
     reporte = {
@@ -67,6 +78,9 @@ def construir_evidencias_investigacion(
         "subtipos": {
             proyecto_investigacion.TIPO_ID: {**rep_pry, "personas": int(ev_pry["persona_id"].nunique())},
             proyecto_vinculacion.TIPO_ID: {**rep_vin, "personas": int(ev_vin["persona_id"].nunique())},
+            publicacion.TIPO_ID: {**rep_pub, "personas": int(ev_pub["persona_id"].nunique())},
+            tesis_dirigida.TIPO_ID: {**rep_tes, "personas": int(ev_tes["persona_id"].nunique())},
+            ponencia.TIPO_ID: {**rep_pon, "personas": int(ev_pon["persona_id"].nunique())},
         },
         "validacion_ok": bool(validacion["ok"].all()),
     }
