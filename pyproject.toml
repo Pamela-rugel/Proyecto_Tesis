@@ -1,0 +1,38 @@
+# Paquetes Python del proyecto.
+#
+# Las carpetas llevan un número para mostrar el orden del pipeline (01_ → 04_), pero Python no
+# puede importar nombres que empiezan con un dígito. Aquí se asocia cada nombre de paquete con
+# su carpeta numerada, así el código sigue usando `from evidencias import ...` y
+# `python -m perfiles.construir`.
+#
+# Instalación (una sola vez por entorno, desde la raíz del proyecto; modo editable: los cambios
+# en el código se ven sin reinstalar):
+#     python -m pip install -e . --no-deps
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "perfiles-espol"
+version = "0.1.0"
+description = "Perfiles del personal de ESPOL: evidencias, clustering multivista y búsqueda semántica"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = [
+    "evidencias",
+    "evidencias.capacitacion",
+    "evidencias.docencia",
+    "evidencias.formacion",
+    "evidencias.idiomas",
+    "evidencias.investigacion",
+    "evidencias.reconocimientos",
+    "evidencias.trayectoria",
+    "perfiles",
+    "busqueda",
+]
+
+[tool.setuptools.package-dir]
+evidencias = "02_evidencias"
+perfiles = "03_perfiles"
+busqueda = "04_busqueda_semantica"

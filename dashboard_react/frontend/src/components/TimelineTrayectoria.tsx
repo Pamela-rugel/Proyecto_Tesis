@@ -1,261 +1,151 @@
 import Plot from "react-plotly.js";
-import type { EventoTrayectoria } from "../api/types";
-import { paletaPorTextos } from "../lib/color";
+import { useQuery } from "@tanstack/react-query";
+import { getTrayectoria, type TramoTrayectoria } from "../api/client";
 
-interface Props {
-  eventos: EventoTrayectoria[];
-  etiquetaTipoEvento: Record<string, string>;
-}
-
-const MESES = [
-  "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+const ORDEN_CARRIL = [
+  "Cargo de planta en ESPOL",
+  "Contrato ocasional en ESPOL",
+  "Función adicional",
+  "Subrogación",
+  "Experiencia externa (Ecuador)",
+  "Experiencia externa (exterior)",
 ];
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DIA = 86400000;
+const fecha = (d: Date) => `${MESES[d.getMonth()]} ${d.getFullYear()}`;
 
-function formatMesAnio(iso: string): string {
-  const d = new Date(iso);
-  return `${MESES[d.getMonth()]} ${d.getFullYear()}`;
+// Un color por cargo de la persona (tonos equiespaciados): el mismo cargo siempre con el mismo
+// color, para ver de un vistazo si volvió a un cargo que ya tuvo.
+function paleta(textos: string[]): Map<string, string> {
+  const unicos = Array.from(new Set(textos));
+  return new Map(unicos.map((t, i) => [t, `hsl(${Math.round((i * 360) / Math.max(unicos.length, 1)) % 360}, 62%, ${i % 2 ? 42 : 52}%)`]));
 }
 
-interface EventoPreparado {
-  evento: EventoTrayectoria;
-  lane: string;
-  tipoNormalizado: string;
+interface Preparado {
+  t: TramoTrayectoria;
   inicio: Date;
-  finEfectiva: Date;
-  detalle: string;
-  rango: string;
+  fin: Date;
+  fila: number;
 }
 
-/** Empaqueta eventos que se solapan en fecha dentro de la MISMA lane en sub-filas
- * distintas (0, 1, 2...), para que dos contratos simultaneos (ej. dos cargos de grado a
- * la vez) se dibujen en barras separadas verticalmente en vez de superpuestas - pedido
- * explicito del usuario 2026-09-10 ("siento que ahora se mezcla todo"). Algoritmo greedy
- * de intervalos: dentro de cada lane, ordenado por fecha de inicio, cada evento se asigna
- * a la primera sub-fila cuyo ultimo evento ya haya terminado antes de que este empiece;
- * si ninguna esta libre, abre una sub-fila nueva. Misma logica que
- * `_asignar_subfilas` en notebooks/08_dashboard/app.py (Streamlit) - mantener ambas en
- * sync si se ajusta el criterio. */
-function asignarSubfilas(porLane: Map<string, EventoPreparado[]>): Map<EventoPreparado, number> {
-  const subfila = new Map<EventoPreparado, number>();
-  for (const grupo of porLane.values()) {
-    const ordenado = [...grupo].sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
-    const finPorSubfila: Date[] = [];
-    for (const item of ordenado) {
-      let asignada = -1;
-      for (let i = 0; i < finPorSubfila.length; i++) {
-        if (item.inicio.getTime() >= finPorSubfila[i].getTime()) {
-          asignada = i;
-          break;
-        }
+// Tramos de un mismo carril que se solapan van en sub-filas distintas (algoritmo voraz).
+function ubicar(tramos: TramoTrayectoria[], hoy: Date) {
+  const carriles = ORDEN_CARRIL.filter((c) => tramos.some((t) => t.carril === c));
+  const preparados: Preparado[] = [];
+  const ticks: { y: number; texto: string; desde: number; hasta: number }[] = [];
+  let base = 0;
+  for (const carril of carriles) {
+    const finPorSubfila: number[] = [];
+    const del = tramos.filter((t) => t.carril === carril).sort((a, b) => a.inicio.localeCompare(b.inicio));
+    for (const t of del) {
+      const inicio = new Date(t.inicio);
+      let fin = t.fin ? new Date(t.fin) : t.estado === "actual" ? hoy : new Date(inicio.getTime() + 60 * DIA);
+      if (fin.getTime() - inicio.getTime() < 20 * DIA) fin = new Date(inicio.getTime() + 20 * DIA);
+      let sub = finPorSubfila.findIndex((f) => inicio.getTime() >= f);
+      if (sub === -1) {
+        sub = finPorSubfila.length;
+        finPorSubfila.push(0);
       }
-      if (asignada === -1) {
-        asignada = finPorSubfila.length;
-        finPorSubfila.push(item.finEfectiva);
-      } else {
-        finPorSubfila[asignada] = item.finEfectiva;
-      }
-      subfila.set(item, asignada);
+      finPorSubfila[sub] = fin.getTime();
+      preparados.push({ t, inicio, fin, fila: base + sub });
     }
+    const alto = Math.max(1, finPorSubfila.length);
+    ticks.push({ y: base + (alto - 1) / 2, texto: carril, desde: base - 0.5, hasta: base + alto - 0.5 });
+    base += alto;
   }
-  return subfila;
+  return { preparados, ticks, filas: base };
 }
 
-export default function TimelineTrayectoria({ eventos, etiquetaTipoEvento }: Props) {
-  if (eventos.length === 0) {
-    return (
-      <p className="text-sm text-slate-400">
-        No hay eventos de trayectoria (cargos, funciones, experiencia externa) registrados para
-        esta persona.
-      </p>
-    );
-  }
+export default function TimelineTrayectoria({ personaId }: { personaId: number }) {
+  const { data, isLoading } = useQuery({ queryKey: ["trayectoria", personaId], queryFn: () => getTrayectoria(personaId) });
+  if (isLoading) return <p className="text-xs text-slate-500">Cargando trayectoria…</p>;
+  if (!data || data.tramos.length === 0) return <p className="text-xs text-slate-400">No hay trayectoria laboral registrada.</p>;
 
   const hoy = new Date();
+  const { preparados, ticks, filas } = ubicar(data.tramos, hoy);
+  const colores = paleta(preparados.map((p) => p.t.titulo));
+  const texto = (p: Preparado) =>
+    `<b>${p.t.titulo}</b>${p.t.lugar ? `<br>${p.t.lugar}` : ""}<br>${fecha(p.inicio)} – ` +
+    (p.t.estado === "actual" ? "actualidad" : p.t.estado === "sin_fin" ? "sin fecha de fin registrada" : fecha(new Date(p.t.fin!)));
+
+  // `base` es un atributo válido de las barras de Plotly que sus tipos de TypeScript no declaran
+  const traza = (lista: Preparado[], extra: Partial<Plotly.PlotData>): Plotly.Data => ({
+    type: "bar",
+    orientation: "h",
+    // con eje de fechas, la longitud de la barra va en milisegundos
+    base: lista.map((p) => p.inicio.toISOString().slice(0, 10)) as unknown as number[],
+    x: lista.map((p) => p.fin.getTime() - p.inicio.getTime()),
+    y: lista.map((p) => p.fila),
+    width: 0.7,
+    text: lista.map(texto),
+    hovertemplate: "%{text}<extra></extra>",
+    textposition: "none",
+    showlegend: false,
+    ...extra,
+  }) as Plotly.Data;
+  const normales = preparados.filter((p) => p.t.estado !== "sin_fin");
+  const sinFin = preparados.filter((p) => p.t.estado === "sin_fin");
   const hoyIso = hoy.toISOString().slice(0, 10);
-
-  const sorted = [...eventos].sort(
-    (a, b) => new Date(a.FECHA_INICIO ?? 0).getTime() - new Date(b.FECHA_INICIO ?? 0).getTime()
-  );
-
-  const preparados: EventoPreparado[] = sorted.map((e) => {
-    const inicio = e.FECHA_INICIO ? new Date(e.FECHA_INICIO) : hoy;
-    let finEfectiva = e.FECHA_FIN ? new Date(e.FECHA_FIN) : hoy;
-    if (finEfectiva <= inicio) {
-      finEfectiva = new Date(inicio.getTime() + 30 * 86400000);
-    }
-    const detalle = e.DESCRIPCION + (e.UNIDAD ? ` — ${e.UNIDAD}` : "");
-    const rango = e.FECHA_INICIO
-      ? `${formatMesAnio(e.FECHA_INICIO)} - ${e.ES_VIGENTE ? "actualidad" : e.FECHA_FIN ? formatMesAnio(e.FECHA_FIN) : ""}`
-      : "";
-    // Grado y Posgrado se muestran como una sola fila "Cargo en ESPOL" (pedido explícito
-    // del usuario 2026-09-16: "creo que esta dificil separa cargos grado postgrado...
-    // quiero unificar cargo grado y cargo postgrado") - Función adicional/Subrogación
-    // siguen siendo filas propias, no se tocan.
-    const tipoNormalizado =
-      e.TIPO_EVENTO === "CARGO_ESPOL_GRADO" || e.TIPO_EVENTO === "CARGO_ESPOL_POSGRADO"
-        ? "CARGO_ESPOL"
-        : e.TIPO_EVENTO;
-    return {
-      evento: e,
-      lane: etiquetaTipoEvento[tipoNormalizado] ?? tipoNormalizado,
-      tipoNormalizado,
-      inicio,
-      finEfectiva,
-      detalle,
-      rango,
-    };
-  });
-
-  // Orden visual de lanes (de arriba a abajo) por prioridad fija, no por primera aparición
-  // cronológica (pedido explícito del usuario 2026-09-16): Cargo en ESPOL, Función
-  // adicional, Subrogación, Experiencia externa.
-  function prioridadTipoEvento(tipo: string): number {
-    if (tipo === "CARGO_ESPOL") return 1;
-    if (tipo === "FUNCION_ADICIONAL") return 2;
-    if (tipo === "SUBROGACION") return 3;
-    return 4; // EXPERIENCIA_EXTERNA_ECUADOR / EXPERIENCIA_EXTERNA_EXTERIOR
-  }
-  const lanePorTipoNormalizado = new Map<string, string>();
-  for (const p of preparados) {
-    if (!lanePorTipoNormalizado.has(p.lane)) lanePorTipoNormalizado.set(p.lane, p.tipoNormalizado);
-  }
-  const ordenLanes = Array.from(new Set(preparados.map((p) => p.lane))).sort(
-    (a, b) => prioridadTipoEvento(lanePorTipoNormalizado.get(a) ?? "") - prioridadTipoEvento(lanePorTipoNormalizado.get(b) ?? "")
-  );
-
-  const porLane = new Map<string, EventoPreparado[]>();
-  for (const p of preparados) {
-    if (!porLane.has(p.lane)) porLane.set(p.lane, []);
-    porLane.get(p.lane)!.push(p);
-  }
-  const subfilaPorEvento = asignarSubfilas(porLane);
-
-  // Cada lane ocupa tantas filas visuales como su maximo de sub-filas simultaneas (1 si
-  // nunca hay solape); las lanes se apilan de arriba a abajo en `ordenLanes`.
-  const altoPorLane = new Map<string, number>();
-  for (const [lane, grupo] of porLane) {
-    const maxSubfila = Math.max(...grupo.map((p) => subfilaPorEvento.get(p) ?? 0));
-    altoPorLane.set(lane, maxSubfila + 1);
-  }
-  const offsetPorLane = new Map<string, number>();
-  let acumulado = 0;
-  for (const lane of ordenLanes) {
-    offsetPorLane.set(lane, acumulado);
-    acumulado += altoPorLane.get(lane) ?? 1;
-  }
-  const totalFilas = acumulado;
-
-  const filaYPorEvento = new Map<EventoPreparado, number>();
-  for (const p of preparados) {
-    filaYPorEvento.set(p, (offsetPorLane.get(p.lane) ?? 0) + (subfilaPorEvento.get(p) ?? 0));
-  }
-
-  // Etiquetas del eje Y: una por lane, centrada en sus sub-filas (si tiene 2 sub-filas en
-  // las posiciones 3 y 4, la etiqueta se centra en 3.5) - las sub-filas no llevan
-  // etiqueta propia, siguen leyendose como "la misma categoria".
-  const tickvals = ordenLanes.map(
-    (lane) => (offsetPorLane.get(lane) ?? 0) + ((altoPorLane.get(lane) ?? 1) - 1) / 2
-  );
-
-  // Color por cargo real (DESCRIPCION), no por tipo de evento: el mismo cargo siempre
-  // tiene el mismo color, sin importar cuándo aparece en la línea de tiempo — así se ve
-  // de un vistazo si la persona volvió a un cargo que ya había tenido antes (pedido
-  // explícito del usuario 2026-09-16, "identificar cambios de cargo y antes lo tenia y
-  // luego volvio"). Paleta equiespaciada sobre los cargos DE ESTA PERSONA (no un hash
-  // independiente por texto) para garantizar separación mínima de tono entre cargos
-  // vecinos en la misma línea de tiempo — con un hash simple, dos cargos distintos podían
-  // caer en hues casi iguales y verse indistinguibles ("si están muy justo los colores no
-  // deben parecerse"). Sin leyenda (un color por cargo distinto sería una lista enorme);
-  // el nombre del cargo ya se ve en el eje Y (lane) y en el hover.
-  const paletaCargos = paletaPorTextos(preparados.map((p) => p.evento.DESCRIPCION));
-  const traces = [
-    {
-      type: "bar" as const,
-      orientation: "h" as const,
-      base: preparados.map((p) => p.inicio.toISOString().slice(0, 10)),
-      x: preparados.map((p) => p.finEfectiva.getTime() - p.inicio.getTime()),
-      y: preparados.map((p) => filaYPorEvento.get(p) ?? 0),
-      showlegend: false,
-      marker: {
-        color: preparados.map((p) => paletaCargos.get(p.evento.DESCRIPCION) ?? "#94A3B8"),
-        line: { width: 0 },
-      },
-      customdata: preparados.map((p) => [p.detalle, p.rango]),
-      hovertemplate: "<b>%{customdata[0]}</b><br>%{customdata[1]}<extra></extra>",
-      width: 0.7,
-    },
-  ];
-
-  const hayVigentes = preparados.some((p) => p.evento.ES_VIGENTE);
-  const lanesVigentes = Array.from(new Set(preparados.filter((p) => p.evento.ES_VIGENTE).map((p) => p.lane)));
+  // rango: desde el primer tramo hasta hoy (o el ultimo fin), con un pequeño margen
+  const minimo = Math.min(...preparados.map((p) => p.inicio.getTime()));
+  const maximo = Math.max(hoy.getTime(), ...preparados.map((p) => p.fin.getTime()));
+  const margen = (maximo - minimo) * 0.03 + 90 * DIA;
+  const rango = [new Date(minimo - margen).toISOString().slice(0, 10), new Date(maximo + margen).toISOString().slice(0, 10)];
+  // franjas alternas para separar visualmente cada tipo (carril)
+  const franjas: Partial<Plotly.Shape>[] = ticks.map((t, i) => ({
+    type: "rect", xref: "paper", x0: 0, x1: 1, y0: t.desde, y1: t.hasta, layer: "below", line: { width: 0 },
+    fillcolor: i % 2 ? "#ffffff" : "#f1f5f9",
+  }));
 
   return (
     <div>
       <Plot
-        data={traces}
+        data={[
+          traza(normales, { marker: { color: normales.map((p) => colores.get(p.t.titulo)!) } }),
+          traza(sinFin, {
+            marker: {
+              color: sinFin.map((p) => colores.get(p.t.titulo)!),
+              opacity: 0.35,
+              line: { color: "#64748b", width: 1 },
+              pattern: { shape: "/", fgcolor: "#64748b", size: 5 },
+            },
+          }),
+        ]}
         layout={{
-          height: 190 + 42 * totalFilas,
+          height: 70 + 30 * filas,
           barmode: "overlay",
-          showlegend: false,
-          margin: { l: 160, r: 30, t: 24, b: 44 },
-          font: { size: 12, color: "#334155" },
-          plot_bgcolor: "#FFFFFF",
-          paper_bgcolor: "#FFFFFF",
-          xaxis: {
-            type: "date",
-            title: { text: "" },
-            showgrid: true,
-            gridcolor: "#EEF1F5",
-            showline: true,
-            linecolor: "#CBD5E1",
-            tickfont: { size: 11, color: "#475569" },
+          margin: { l: 10, r: 10, t: 18, b: 30 },
+          font: { size: 11, color: "#334155" },
+          plot_bgcolor: "#fff",
+          paper_bgcolor: "#fff",
+          // grafico fijo: sin zoom ni arrastre, solo tooltip al pasar sobre una barra
+          dragmode: false,
+          hovermode: "closest",
+          hoverdistance: 4,
+          xaxis: { type: "date", range: rango, fixedrange: true, showgrid: true, gridcolor: "#e2e8f0", tickfont: { size: 10 }, zeroline: false },
+          yaxis: {
+            range: [filas - 0.5, -0.5],
+            fixedrange: true,
+            tickmode: "array",
+            tickvals: ticks.map((t) => t.y),
+            ticktext: ticks.map((t) => t.texto.replace(" en ESPOL", "").replace("Experiencia externa", "Exp. externa")),
+            tickfont: { size: 11, color: "#1E293B" },
             automargin: true,
+            showgrid: false,
             zeroline: false,
           },
-          yaxis: {
-            autorange: "reversed",
-            title: { text: "" },
-            showgrid: false,
-            showline: true,
-            linecolor: "#CBD5E1",
-            tickfont: { size: 12, color: "#1E293B" },
-            automargin: true,
-            tickmode: "array",
-            tickvals,
-            ticktext: ordenLanes,
-          },
-          shapes: [
-            {
-              type: "line",
-              x0: hoyIso,
-              x1: hoyIso,
-              y0: 0,
-              y1: 1,
-              yref: "paper",
-              line: { color: "#E63946", width: 1.5, dash: "dot" },
-            },
-          ],
-          annotations: [
-            {
-              x: hoyIso,
-              y: 1,
-              yref: "paper",
-              text: "Hoy",
-              showarrow: false,
-              font: { color: "#E63946", size: 11 },
-              yanchor: "bottom",
-            },
-          ],
+          shapes: [...franjas, { type: "line", x0: hoyIso, x1: hoyIso, y0: 0, y1: 1, yref: "paper", line: { color: "#E63946", width: 1.5, dash: "dot" } }],
+          annotations: [{ x: hoyIso, y: 1, yref: "paper", text: "Hoy", showarrow: false, yanchor: "bottom", font: { color: "#E63946", size: 10 } }],
+          hoverlabel: { bgcolor: "#fff", bordercolor: "#cbd5e1", font: { size: 12, color: "#0f172a" }, align: "left" },
         }}
-        config={{ displayModeBar: false, responsive: true }}
+        config={{ displayModeBar: false, responsive: true, scrollZoom: false, doubleClick: false }}
         style={{ width: "100%" }}
         useResizeHandler
       />
-      {hayVigentes && (
-        <p className="text-xs text-slate-500 mt-1">
-          Vigente hasta la actualidad: {lanesVigentes.join(", ")} (línea punteada roja = hoy).
-        </p>
-      )}
+      <p className="text-[11px] text-slate-400">
+        Cada barra es un periodo; el mismo cargo conserva su color. Pasa el cursor para ver el detalle.
+        {sinFin.length > 0 && " Las barras rayadas no tienen fecha de fin registrada y la persona ya no está vigente."}
+      </p>
     </div>
   );
 }

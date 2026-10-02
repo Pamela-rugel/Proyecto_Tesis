@@ -38,7 +38,7 @@ stack/*.tar
 data/embeddings/
 
 # Trayectorias y evidencias: se regeneran localmente con
-# notebooks/04_trayectorias/04_trayectorias.ipynb y evidencias/trayectoria/evidencias_trayectoria.ipynb
+# 01_preprocesamiento_features/04_trayectorias.ipynb y 02_evidencias/trayectoria/evidencias_trayectoria.ipynb
 # (derivados de datos institucionales, no versionar)
 data/trayectorias/
 data/evidencias/
@@ -49,3 +49,17 @@ gen_items_investigacion.py
 *.log
 
 Entregable_Stack_Plan_Perfiles_ESPOL.docx
+
+# Instalacion editable del proyecto (pip install -e .), se regenera
+*.egg-info/
+
+# Derivados con identificadores de personas (se regeneran): perfiles y búsqueda
+data/perfiles/
+data/busqueda/
+
+# Paquete de despliegue (imágenes Docker exportadas)
+despliegue/
+
+# Túnel: credenciales de acceso (no versionar)
+stack/nginx/htpasswd_tunel
+stack/nginx/clave_tunel.txt

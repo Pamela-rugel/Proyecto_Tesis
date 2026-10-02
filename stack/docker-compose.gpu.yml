@@ -1,0 +1,21 @@
+# Solo para la laptop con GPU NVIDIA: la API usa PyTorch con CUDA y la GPU (búsqueda en ~3–5 s
+# en vez de 20–90 s en CPU). Construye una imagen aparte (perfiles-espol-api-gpu); la imagen del
+# servidor (perfiles-espol-api, CPU) no cambia.
+#
+# Uso (desde la raíz del proyecto):
+#   docker compose -f stack/docker-compose.yml -f stack/docker-compose.gpu.yml --env-file stack/.env up -d --build api
+# Con túnel y contraseña, agregar también  -f stack/docker-compose.tunel.yml
+services:
+  api:
+    image: perfiles-espol-api-gpu
+    build:
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu124
+        TORCH_VERSION: 2.6.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

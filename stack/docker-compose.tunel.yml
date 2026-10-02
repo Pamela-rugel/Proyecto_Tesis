@@ -1,0 +1,10 @@
+# Solo para compartir por túnel (Cloudflare) desde esta laptop: agrega usuario y contraseña en nginx.
+# Uso:
+#   docker compose -f stack/docker-compose.yml -f stack/docker-compose.tunel.yml --env-file stack/.env up -d nginx
+#   cloudflared tunnel --url http://localhost:9095
+# La clave está en stack/nginx/clave_tunel.txt (no se versiona).
+services:
+  nginx:
+    volumes:
+      - ./nginx/nginx.tunel.conf:/etc/nginx/conf.d/app.conf:ro
+      - ./nginx/htpasswd_tunel:/etc/nginx/htpasswd_tunel:ro

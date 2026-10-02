@@ -11,13 +11,23 @@ context/
 presentacion/
 logs_rerun/
 
-notebooks/**/*.ipynb
-notebooks/**/__pycache__/
+01_preprocesamiento_features/
+**/*.ipynb
+**/__pycache__/
+03_perfiles/img/
+04_busqueda_semantica/img/
+*.egg-info/
 
 *.tar
-data/embeddings/embeddings_items_investigacion.csv
-data/embeddings/items_investigacion.csv
 
 # data/ se copia selectivamente desde los Dockerfiles (ver stack/docker/api.Dockerfile);
 # no excluir data/ por completo aqui porque esos COPY puntuales la necesitan disponible
 # en el build context.
+
+# Datos que la imagen NO necesita (crudo: solo el historial laboral, del que se extraen 3 columnas)
+data/raw/*
+!data/raw/historialaboralpersonas.csv
+data/busqueda/
+data/features/
+data/trayectorias/
+data/modeling/
