@@ -84,7 +84,10 @@ export interface FichaCluster {
   evidencias_compartidas: { tipo: string; texto: string; integrantes: number; prop: number }[];
   terminos_distintivos: string[];
   unidades: { unidad: string; prop: number }[];
-  representante: { persona_id: number; nombre: string; cargo_actual: string | null; unidad_actual: string | null; vigente: boolean };
+  /** medoide elegido solo entre personas vigentes; null si el grupo no tiene vigentes */
+  representante: { persona_id: number; nombre: string; cargo_actual: string | null; unidad_actual: string | null; vigente: boolean } | null;
+  microarquetipos?: number[];
+  microarquetipo?: number;
   subdivision: Subdivision | null;
 }
 
@@ -147,10 +150,12 @@ export interface Integrante {
   sub_perfil_mixto: boolean;
   es_subrepresentante: boolean;
   similitud_subrepresentante: number | null;
+  vigente: boolean;
 }
 
 export interface DetalleCluster {
   ambito: Ambito;
+  solo_vigentes: boolean;
   ficha: FichaCluster;
   integrantes: Integrante[];
   mixtos_desde_otros_clusters: { persona_id: number; nombre: string; cargo_actual: string | null; unidad_actual: string | null; cluster: number; pertenencia_1: number; pertenencia_2: number }[];
@@ -167,8 +172,8 @@ export interface Persona {
     pertenencia: number;
     perfil_mixto: boolean;
     es_representante: boolean;
-    representante_id: number;
-    representante_nombre: string;
+    representante_id: number | null;
+    representante_nombre: string | null;
     similitud_representante: number;
     coseno_v1_representante: number;
     coseno_v2_representante: number;
@@ -185,11 +190,19 @@ export interface Persona {
     segundo_subpatron: string;
     pertenencia_2: number;
     es_representante: boolean;
-    representante_id: number;
-    representante_nombre: string;
+    representante_id: number | null;
+    representante_nombre: string | null;
     similitud_representante: number;
     estabilidad_ari: number;
   } | null;
+  /** microarquetipo EXCLUSIVO (referencia estructural) */
+  microarquetipo: {
+    id: number; nombre: string; grupo: number; descripcion: string; afinidad: number; perfil_mixto: boolean;
+    segundo: string | null; afinidad_2: number; representante_id: number | null; representante_nombre: string | null;
+    similitud_representante: number | null;
+  } | null;
+  /** afinidades DERIVADAS (soft, no probabilidades) con todos los microarquetipos del ámbito, de mayor a menor */
+  afinidades_microarquetipos: { id: number; nombre: string; grupo: number; afinidad: number }[];
   pertenencias: { cluster: number; etiqueta: string; pertenencia: number }[];
   cluster_por_vista: { vista: string; nombre: string; cluster: number; etiqueta: string; coincide: boolean }[];
   rasgos: (Rasgo & { z_persona: number; comparte: boolean })[];
@@ -203,8 +216,8 @@ export const getAmbitos = async () => (await api.get<Ambitos>("/api/clustering/a
 export const getResumen = async (a: Ambito) => (await api.get<ResumenClustering>(`/api/clustering/${a}`)).data;
 export const getMapa = async (a: Ambito, soloVigentes: boolean) =>
   (await api.get<Mapa>(`/api/clustering/${a}/mapa`, { params: { solo_vigentes: soloVigentes } })).data;
-export const getDetalleCluster = async (a: Ambito, c: number) =>
-  (await api.get<DetalleCluster>(`/api/clustering/${a}/clusters/${c}`)).data;
+export const getDetalleCluster = async (a: Ambito, c: number, soloVigentes: boolean) =>
+  (await api.get<DetalleCluster>(`/api/clustering/${a}/clusters/${c}`, { params: { solo_vigentes: soloVigentes } })).data;
 export const getPersona = async (id: number, a: Ambito) =>
   (await api.get<Persona>(`/api/personas/${id}`, { params: { ambito: a } })).data;
 

@@ -301,6 +301,35 @@ calcula en `calcular_periodos_continuos` con estas reglas:
 
 ---
 
+## Paso 10 · Microarquetipos y afinidades (caracterización soft)
+
+- **Qué son.** Un microarquetipo es cada hoja de la jerarquía: un subgrupo, o un grupo que no se
+  subdividió. Se usa la subdivisión del Paso 7 tal cual, sin imponer otro número, y cada ámbito se
+  calcula por separado.
+- **Nombres neutrales.** Se llaman "Grupo n" y "Microarquetipo n". La descripción sale de las
+  estadísticas del Paso 8 comparadas con el ámbito; no es una categoría laboral.
+- **Asignación exclusiva.** Cada persona pertenece a un solo microarquetipo, que sirve de referencia.
+- **Afinidad derivada.** Para cada microarquetipo se calcula la afinidad media de la persona con
+  sus integrantes en la red fusionada del ámbito y luego se normaliza para que todas sumen 1:
+  - Es una medida de cercanía relativa, **no una probabilidad**.
+  - Una persona puede tener afinidad relevante con varios microarquetipos.
+  - Es "perfil mixto" si su segunda afinidad es ≥ 0,8 × la primera.
+- **Representante.** Es el medoide, una persona real, elegido **solo entre vigentes**. Si el
+  microarquetipo no tiene vigentes, queda vacío. El centroide (promedio de los vectores V1/V2) es
+  otra cosa y se guarda en `centroides_micro_v*.npy`.
+
+| Ámbito | Microarquetipos | Perfiles mixtos | Afinidad máxima media | Afinidad máxima = su microarquetipo | Sin vigentes |
+|---|---|---|---|---|---|
+| Todo el personal | 19 | 506 | 0,350 | 79,8 % | 1 |
+| Administrativos | 9 | 351 | 0,342 | 79,8 % | 0 |
+| Docentes | 9 | 200 | 0,439 | 89,0 % | 0 |
+
+En alrededor del 20 % de las personas, la afinidad más alta no coincide con su microarquetipo. La
+razón es que la hoja se calculó con una SNF local al grupo y la afinidad con la red del ámbito
+completo. Por eso la asignación exclusiva y la afinidad se muestran por separado.
+
+---
+
 ## Resultados de la versión actual
 
 | Ámbito | Personas (vigentes) | Grupos (k) | Estabilidad (ARI) | Entre dos grupos | Subgrupos: tamaño del grupo → k (ARI) |

@@ -63,3 +63,4 @@ despliegue/
 # Túnel: credenciales de acceso (no versionar)
 stack/nginx/htpasswd_tunel
 stack/nginx/clave_tunel.txt
+data/api.err

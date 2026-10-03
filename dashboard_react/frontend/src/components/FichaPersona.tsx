@@ -62,11 +62,17 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
               <strong>Es la persona representante de este grupo.</strong>
             ) : (
               <>
-                Parecido con el representante (
-                <button className="underline text-espol-blue" onClick={() => onPersona(c.representante_id)}>
-                  {c.representante_nombre}
-                </button>
-                ): {pct(c.similitud_representante)}
+                {c.representante_id !== null ? (
+                  <>
+                    Parecido con el representante (
+                    <button className="underline text-espol-blue" onClick={() => onPersona(c.representante_id!)}>
+                      {c.representante_nombre}
+                    </button>
+                    ): {pct(c.similitud_representante)}
+                  </>
+                ) : (
+                  "El grupo no tiene personas vigentes que lo representen."
+                )}
               </>
             )}
           </p>
@@ -80,7 +86,7 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
 
         {s && (
           <div className="rounded-md p-3 mt-2" style={{ background: `${colorSub(s.subpatron)}14`, borderLeft: `4px solid ${colorSub(s.subpatron)}` }}>
-            <p className="text-[11px] uppercase text-slate-500">Subgrupo</p>
+            <p className="text-[11px] uppercase text-slate-500">Microarquetipo</p>
             <p className="text-sm font-medium text-slate-800">{s.etiqueta}</p>
             <p className="text-xs text-slate-600 mt-1">{s.descripcion}</p>
             <p className="text-xs text-slate-600 mt-1">
@@ -88,11 +94,17 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
                 <strong>Es la persona representante de este subgrupo.</strong>
               ) : (
                 <>
-                  Parecido con su representante (
-                  <button className="underline text-espol-blue" onClick={() => onPersona(s.representante_id)}>
-                    {s.representante_nombre}
-                  </button>
-                  ): {pct(s.similitud_representante)}
+                  {s.representante_id !== null ? (
+                    <>
+                      Parecido con su representante (
+                      <button className="underline text-espol-blue" onClick={() => onPersona(s.representante_id!)}>
+                        {s.representante_nombre}
+                      </button>
+                      ): {pct(s.similitud_representante)}
+                    </>
+                  ) : (
+                    "Sin personas vigentes que lo representen."
+                  )}
                 </>
               )}
             </p>
@@ -104,6 +116,31 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
           </div>
         )}
       </Seccion>
+
+      {data.microarquetipo && (
+        <Seccion titulo="Afinidad con los microarquetipos">
+          <p className="text-xs text-slate-600 mb-2">
+            Asignación exclusiva: <strong>{data.microarquetipo.nombre}</strong> (Grupo {data.microarquetipo.grupo + 1}).
+            {data.microarquetipo.perfil_mixto && (
+              <span className="text-amber-700"> Perfil mixto: también muy cercana a {data.microarquetipo.segundo}.</span>
+            )}
+          </p>
+          {data.afinidades_microarquetipos.slice(0, 5).map((m) => (
+            <div key={m.id} className="flex items-center gap-2 text-xs mb-1">
+              <span className={`w-36 truncate ${m.id === data.microarquetipo!.id ? "font-semibold" : ""}`}>{m.nombre}</span>
+              <div className="flex-1 bg-slate-100 h-2 rounded">
+                <div className="h-2 rounded bg-slate-500" style={{ width: `${m.afinidad * 100}%` }} />
+              </div>
+              <span className="w-10 text-right">{pct(m.afinidad)}</span>
+            </div>
+          ))}
+          <p className="text-[11px] text-slate-400 mt-1">
+            Afinidad derivada de la red de similitud (no es una probabilidad): suma 100 % entre los{" "}
+            {data.afinidades_microarquetipos.length} microarquetipos del ámbito. La asignación exclusiva es la referencia; una
+            persona puede tener afinidad relevante con más de uno.
+          </p>
+        </Seccion>
+      )}
 
       <Seccion titulo="Cuánto se parece a cada grupo">
         {data.pertenencias.map((p) => (

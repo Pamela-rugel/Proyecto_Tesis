@@ -6,6 +6,7 @@ import { colorCluster, colorSub, pct } from "../lib/colores";
 interface Props {
   ambito: Ambito;
   cluster: number;
+  soloVigentes: boolean;
   etiquetas: Record<string, string>;
   subpatron: number | null;
   onSubpatron: (s: number | null) => void;
@@ -45,8 +46,8 @@ const Titulo = ({ children }: { children: React.ReactNode }) => (
 );
 
 // Vista "grupo" del panel derecho: resumen, personas, características y subgrupos.
-export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSubpatron, onPersona, onVolver }: Props) {
-  const { data, isLoading } = useQuery({ queryKey: ["cluster", ambito, cluster], queryFn: () => getDetalleCluster(ambito, cluster) });
+export default function PanelGrupo({ ambito, cluster, soloVigentes, etiquetas, subpatron, onSubpatron, onPersona, onVolver }: Props) {
+  const { data, isLoading } = useQuery({ queryKey: ["cluster", ambito, cluster, soloVigentes], queryFn: () => getDetalleCluster(ambito, cluster, soloVigentes) });
   const [pestana, setPestana] = useState<Pestana>("personas");
   const [filtro, setFiltro] = useState("");
   const [verMas, setVerMas] = useState(false);
@@ -71,10 +72,12 @@ export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSu
       : data.integrantes
   ).filter((p) => !q || `${p.nombre} ${p.cargo_actual ?? ""} ${p.unidad_actual ?? ""}`.toLowerCase().includes(q));
 
+  const cuentaSubgrupo = (id: number) => data.integrantes.filter((p) => p.subpatron === id && (!soloVigentes || p.vigente)).length;
+  const totalPersonas = subSel ? cuentaSubgrupo(subSel.cluster) : data.integrantes.length;
   const pestanas: { id: Pestana; texto: string }[] = [
-    { id: "personas", texto: `Personas (${f.tamano_vigentes})` },
+    { id: "personas", texto: `Personas (${totalPersonas})` },
     { id: "caracteristicas", texto: "Características" },
-    ...(sub ? [{ id: "subgrupos" as Pestana, texto: `Subgrupos (${sub.k})` }] : []),
+    ...(sub ? [{ id: "subgrupos" as Pestana, texto: `Microarquetipos (${sub.k})` }] : []),
   ];
 
   return (
@@ -91,10 +94,13 @@ export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSu
         </button>
         <p className="text-xs text-slate-500 mt-2">
           Representante:{" "}
-          <button className="underline text-espol-blue" onClick={() => onPersona(f.representante.persona_id)}>
-            {f.representante.nombre}
-          </button>
-          {!f.representante.vigente && " (ya no vigente)"}
+          {f.representante ? (
+            <button className="underline text-espol-blue" onClick={() => onPersona(f.representante!.persona_id)}>
+              {f.representante.nombre}
+            </button>
+          ) : (
+            <span className="text-slate-400">sin personas vigentes en este grupo</span>
+          )}
         </p>
       </header>
 
@@ -128,7 +134,7 @@ export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSu
                   className={`text-[11px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${subpatron === s.cluster ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-600"}`}
                 >
                   <span className="w-2 h-2 rounded-full" style={{ background: colorSub(s.cluster) }} />
-                  {s.etiqueta.length > 34 ? `${s.etiqueta.slice(0, 33)}…` : s.etiqueta} ({s.tamano_vigentes})
+                  {s.etiqueta.length > 34 ? `${s.etiqueta.slice(0, 33)}…` : s.etiqueta} ({cuentaSubgrupo(s.cluster)})
                 </button>
               ))}
             </div>
@@ -140,7 +146,7 @@ export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSu
             className="w-full border rounded-md px-2.5 py-1.5 text-xs"
           />
           <p className="text-[11px] text-slate-400">
-            {personas.length} personas vigentes, de la más a la menos parecida a la representante{subSel ? " del subgrupo" : ""}.
+            {personas.length} personas {soloVigentes ? "vigentes" : "(vigentes y no vigentes)"}, de la más a la menos parecida a la representante{subSel ? " del subgrupo" : ""}.
           </p>
           <ul className="divide-y">
             {personas.map((p) => (
@@ -227,7 +233,8 @@ export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSu
       {pestana === "subgrupos" && sub && (
         <div className="px-5 py-4 space-y-2">
           <p className="text-[11px] text-slate-500">
-            Grupos más pequeños dentro de este grupo, comparados con el grupo completo. Elige uno para verlo en el mapa.
+            Microarquetipos: grupos más finos dentro de este grupo, descritos frente al grupo completo. Sus nombres son
+            neutrales (no son categorías laborales). Elige uno para verlo en el mapa.
           </p>
           {sub.subpatrones.map((s) => {
             const activo = subpatron === s.cluster;
@@ -240,7 +247,7 @@ export default function PanelGrupo({ ambito, cluster, etiquetas, subpatron, onSu
                 >
                   <p className="text-sm font-medium">{s.etiqueta}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {s.tamano_vigentes} personas vigentes · representante: {s.representante.nombre}
+                    {cuentaSubgrupo(s.cluster)} personas {soloVigentes ? "vigentes" : "(vigentes y no vigentes)"} · representante: {s.representante?.nombre ?? "sin vigentes"}
                   </p>
                 </button>
                 {activo && (

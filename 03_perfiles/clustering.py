@@ -93,7 +93,20 @@ def pertenencias(w: np.ndarray, etiquetas: np.ndarray, k: int) -> np.ndarray:
         suma = w[:, miembros].sum(axis=1)
         n_miembros = miembros.sum() - miembros.astype(int)  # sin contarse a si misma
         m[:, c] = suma / np.maximum(n_miembros, 1)
-    return m / m.sum(axis=1, keepdims=True)
+    m = np.clip(m, 0.0, None)
+    total = m.sum(axis=1, keepdims=True)
+    # persona sin afinidad con nadie (caso límite): afinidad uniforme, nunca NaN
+    return np.where(total > 0, m / np.where(total > 0, total, 1.0), 1.0 / k)
+
+
+def validar_afinidades(m: np.ndarray, tol: float = 1e-6) -> None:
+    """Afinidades derivadas: finitas, no negativas y que suman 1 por persona (no son probabilidades)."""
+    if not np.isfinite(m).all():
+        raise ValueError("afinidades no finitas")
+    if (m < -tol).any():
+        raise ValueError("afinidades negativas")
+    if not np.allclose(m.sum(axis=1), 1.0, atol=tol):
+        raise ValueError("afinidades que no suman 1")
 
 
 def cluster_por_vista(p_vistas: list[np.ndarray], etiquetas: np.ndarray, k: int) -> np.ndarray:
@@ -106,18 +119,34 @@ def cluster_por_vista(p_vistas: list[np.ndarray], etiquetas: np.ndarray, k: int)
     return salida
 
 
-def medoides(w: np.ndarray, etiquetas: np.ndarray, k: int) -> np.ndarray:
-    idx = np.zeros(k, dtype=int)
+def medoides(w: np.ndarray, etiquetas: np.ndarray, k: int, elegibles: np.ndarray | None = None) -> np.ndarray:
+    """Medoide de cada cluster: el integrante con mayor afinidad total con el resto del cluster.
+    Con `elegibles` (máscara booleana, p. ej. vigentes) solo se elige entre ellos; si el cluster no
+    tiene ningún elegible se devuelve -1 (representante vacío explícito, nunca uno no elegible)."""
+    idx = np.full(k, -1, dtype=int)
     for c in range(k):
         miembros = np.flatnonzero(etiquetas == c)
-        sub = w[np.ix_(miembros, miembros)]
-        idx[c] = miembros[sub.sum(axis=1).argmax()]
+        if not len(miembros):
+            continue
+        centralidad = w[np.ix_(miembros, miembros)].sum(axis=1)
+        if elegibles is not None:
+            ok = elegibles[miembros]
+            if not ok.any():
+                continue
+            centralidad = np.where(ok, centralidad, -np.inf)
+        idx[c] = miembros[int(np.argmax(centralidad))]
     return idx
 
 
 def centroides(x: np.ndarray, etiquetas: np.ndarray, k: int) -> np.ndarray:
-    c = np.vstack([x[etiquetas == i].mean(axis=0) for i in range(k)])
-    return c / np.linalg.norm(c, axis=1, keepdims=True)
+    """Centroide semántico (vector, no persona) normalizado de cada cluster; falla si queda vacío o
+    no finito."""
+    c = np.vstack([x[etiquetas == i].mean(axis=0) if (etiquetas == i).any() else np.full(x.shape[1], np.nan)
+                   for i in range(k)])
+    c = c / np.linalg.norm(c, axis=1, keepdims=True)
+    if not np.isfinite(c).all():
+        raise ValueError("centroide vacío o no finito")
+    return c
 
 
 def tsne(w: np.ndarray) -> np.ndarray:

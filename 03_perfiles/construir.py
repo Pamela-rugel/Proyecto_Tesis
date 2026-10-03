@@ -46,12 +46,35 @@ def huella_entradas() -> dict:
             "modelo_embeddings": manifest_emb["modelo"], "parametros": PARAMETROS}
 
 
+def _ficha_persona(p: pd.DataFrame, i: int) -> dict | None:
+    if i < 0:
+        return None
+    r = p.iloc[i]
+    return {"persona_id": int(r["persona_id"]), "cargo_actual": r["cargo_actual"], "unidad_actual": r["unidad_actual"],
+            "vigente": bool(r["vigente"])}
+
+
+def _representantes(w: np.ndarray, etiquetas: np.ndarray, k: int, vigente: np.ndarray):
+    """Representante = medoide elegido SOLO entre vigentes (-1 si el grupo no tiene vigentes) y
+    medoide estructural (cualquier integrante, referencia del método). Devuelve
+    (med_vigente, med_estructural, rep_por_persona, similitud_al_representante)."""
+    med_vig = cl.medoides(w, etiquetas, k, elegibles=vigente)
+    med_est = cl.medoides(w, etiquetas, k)
+    rep = med_vig[etiquetas]
+    filas = np.arange(len(w))
+    tiene = rep >= 0
+    afin = np.where(tiene, w[filas, np.where(tiene, rep, 0)], np.nan)
+    maximo = pd.Series(afin).groupby(etiquetas).transform("max").to_numpy()
+    sim = np.where(filas == rep, 1.0, afin / np.maximum(np.nan_to_num(maximo, nan=0.0), 1e-12))
+    return med_vig, med_est, rep, np.where(tiene, sim, np.nan)
+
+
 def _subdividir(p: pd.DataFrame, fichas: list[dict], etiquetas: np.ndarray, v1: np.ndarray, v2: np.ndarray,
                 x: pd.DataFrame, ev: pd.DataFrame) -> None:
-    """Segundo nivel: dentro de cada patron con >= MIN_SUBDIVIDIR personas se recalcula SNF con las
-    mismas tres vistas (escalas de afinidad y estandarizacion LOCALES al patron) y se agrupa con
-    clustering espectral (k por eigengap entre 2 y 8). Los subpatrones se describen frente a su
-    patron padre. Modifica `p` (columnas sub*) y agrega `subdivision` a cada ficha."""
+    """Segundo nivel: dentro de cada grupo con >= MIN_SUBDIVIDIR personas se recalcula SNF con las
+    mismas tres vistas (escalas de afinidad y estandarizacion LOCALES al grupo) y se agrupa con
+    clustering espectral (k por eigengap entre 2 y 8). Modifica `p` (columnas sub*) y agrega
+    `subdivision` a cada ficha. Los nombres neutrales se asignan en `_microarquetipos`."""
     p["subpatron"] = -1
     p["subpatron_id"] = None
     for col in ("sub_pertenencia_1", "sub_pertenencia_2", "similitud_subrepresentante"):
@@ -76,12 +99,11 @@ def _subdividir(p: pd.DataFrame, fichas: list[dict], etiquetas: np.ndarray, v1: 
         lab = cl.espectral(ws, k_s)
         estab = cl.estabilidad(ws, lab, k_s)
         memb = cl.pertenencias(ws, lab, k_s)
-        med = cl.medoides(ws, lab, k_s)
+        cl.validar_afinidades(memb)
+        sub = p.iloc[pos]
+        med_vig, med_est, rep, sim = _representantes(ws, lab, k_s, sub["vigente"].to_numpy())
         orden = np.argsort(-memb, axis=1)
         filas = np.arange(len(pos))
-        rep = med[lab]
-        afin_rep = ws[filas, rep]
-        max_afin = pd.Series(afin_rep).groupby(lab).transform("max").to_numpy()
         idx = p.index[pos]
         p.loc[idx, "subpatron"] = lab
         p.loc[idx, "subpatron_id"] = [f"{c}.{s}" for s in lab]
@@ -89,25 +111,97 @@ def _subdividir(p: pd.DataFrame, fichas: list[dict], etiquetas: np.ndarray, v1: 
         p.loc[idx, "sub_cluster_2"] = orden[:, 1]
         p.loc[idx, "sub_pertenencia_2"] = memb[filas, orden[:, 1]]
         p.loc[idx, "sub_perfil_mixto"] = memb[filas, orden[:, 1]] >= cl.UMBRAL_MIXTO * memb[filas, orden[:, 0]]
-        p.loc[idx, "subrepresentante_id"] = p["persona_id"].to_numpy()[pos][rep]
+        p.loc[idx, "subrepresentante_id"] = np.where(rep >= 0, sub["persona_id"].to_numpy()[np.maximum(rep, 0)], -1)
         p.loc[idx, "es_subrepresentante"] = filas == rep
-        p.loc[idx, "similitud_subrepresentante"] = np.where(filas == rep, 1.0, afin_rep / np.maximum(max_afin, 1e-12))
+        p.loc[idx, "similitud_subrepresentante"] = sim
 
         sub = p.iloc[pos]
         fichas_sub = interpretacion.describir(sub[["persona_id", "tipo_empleado"]], lab, zs, xs, ev, k_s, referencia="grupo")
         for fs in fichas_sub:
             s = fs["cluster"]
-            r = sub.iloc[med[s]]
             fs["subpatron_id"] = f"{c}.{s}"
-            fs["representante"] = {"persona_id": int(r["persona_id"]), "cargo_actual": r["cargo_actual"],
-                                   "unidad_actual": r["unidad_actual"], "vigente": bool(r["vigente"])}
+            fs["representante"] = _ficha_persona(sub, int(med_vig[s]))
+            fs["medoide_estructural"] = _ficha_persona(sub, int(med_est[s]))
             m = sub[sub["subpatron"] == s]
             fs["tamano_vigentes"] = int(m["vigente"].sum())
             fs["perfiles_mixtos"] = int(m["sub_perfil_mixto"].sum())
             fs["cohesion"] = round(float(m["sub_pertenencia_1"].mean()), 3)
         f["subdivision"] = {"k": k_s, "seleccion_k": sel_s, "estabilidad_ari": round(estab, 3),
-                            "nota": "subpatrones descritos frente a su patrón padre (no frente al ámbito)",
+                            "nota": "subgrupos descritos frente a su grupo (no frente al ámbito)",
                             "subpatrones": fichas_sub}
+
+
+def _microarquetipos(p: pd.DataFrame, fichas: list[dict], w: np.ndarray, v1: np.ndarray, v2: np.ndarray,
+                     x_z: pd.DataFrame, x: pd.DataFrame, ev: pd.DataFrame) -> tuple[list[dict], dict, dict]:
+    """Microarquetipos del ámbito = hojas de la jerarquía: cada subgrupo de un grupo subdividido y
+    cada grupo no subdividido. Se reutiliza la subdivisión existente (no se impone un número).
+
+    - Etiqueta exclusiva (la hoja) como referencia estructural.
+    - Afinidad DERIVADA (no probabilidad) con cada microarquetipo del ámbito: afinidad media en la
+      MISMA red fusionada del ámbito con sus integrantes, normalizada (finita, >= 0, suma 1).
+    - Perfil mixto: la 2.ª afinidad >= UMBRAL_MIXTO x la 1.ª.
+    - Representante: medoide entre VIGENTES (o vacío); centroide semántico V1/V2 aparte.
+    - Nombres NEUTRALES ("Microarquetipo n", "Grupo n"); la descripción sale de estadísticas frente
+      al ámbito (tipos de evidencia, rasgos, términos, unidades) y no del cargo predominante."""
+    hoja = list(zip(p["cluster"].astype(int), p["subpatron"].astype(int)))
+    claves = sorted(set(hoja))
+    pos_clave = {kv: i for i, kv in enumerate(claves)}
+    lab = np.array([pos_clave[h] for h in hoja])
+    m = len(claves)
+    memb = cl.pertenencias(w, lab, m)
+    cl.validar_afinidades(memb)
+    vig = p["vigente"].to_numpy()
+    med_vig, med_est, rep, sim = _representantes(w, lab, m, vig)
+    cent_v1, cent_v2 = cl.centroides(v1, lab, m), cl.centroides(v2, lab, m)
+
+    orden = np.argsort(-memb, axis=1)
+    filas = np.arange(len(p))
+    p["microarquetipo"] = lab
+    p["micro_afinidad_1"] = memb[filas, orden[:, 0]]
+    p["micro_2"] = orden[:, 1] if m > 1 else -1
+    p["micro_afinidad_2"] = memb[filas, orden[:, 1]] if m > 1 else 0.0
+    p["micro_mixto"] = p["micro_afinidad_2"] >= cl.UMBRAL_MIXTO * p["micro_afinidad_1"]
+    p["micro_afinidades"] = [json.dumps([round(float(v), 4) for v in fila]) for fila in memb]
+    p["microrepresentante_id"] = np.where(rep >= 0, p["persona_id"].to_numpy()[np.maximum(rep, 0)], -1)
+    p["similitud_microrepresentante"] = sim
+
+    nombre = {i: f"Microarquetipo {i + 1}" for i in range(m)}
+    fichas_m = interpretacion.describir(p[["persona_id", "tipo_empleado"]], lab, x_z, x, ev, m)
+    for f in fichas_m:
+        i = f["cluster"]
+        c, s = claves[i]
+        f["id"] = i
+        f["nombre"] = nombre[i]
+        f["etiqueta_descriptiva"] = f.pop("etiqueta")  # trazabilidad; la interfaz no la usa como nombre
+        f["etiqueta"] = nombre[i]
+        f["grupo"] = int(c)
+        f["subgrupo"] = int(s)
+        f["representante"] = _ficha_persona(p, int(med_vig[i]))
+        f["medoide_estructural"] = _ficha_persona(p, int(med_est[i]))
+        integrantes = p[lab == i]
+        f["tamano_vigentes"] = int(integrantes["vigente"].sum())
+        f["perfiles_mixtos"] = int(integrantes["micro_mixto"].sum())
+        f["afinidad_media_propia"] = round(float(integrantes["micro_afinidad_1"].mean()), 3)
+
+    # nombres neutrales también en los grupos y subgrupos (misma numeración que las hojas)
+    for f in fichas:
+        c = f["cluster"]
+        f["etiqueta_descriptiva"] = f["etiqueta"]
+        f["etiqueta"] = f"Grupo {c + 1}"
+        f["microarquetipos"] = [pos_clave[kv] for kv in claves if kv[0] == c]
+        for fs in (f.get("subdivision") or {}).get("subpatrones", []):
+            fs["etiqueta_descriptiva"] = fs["etiqueta"]
+            fs["etiqueta"] = nombre[pos_clave[(c, fs["cluster"])]]
+            fs["microarquetipo"] = pos_clave[(c, fs["cluster"])]
+
+    metricas = {
+        "n_microarquetipos": m,
+        "perfiles_mixtos": int(p["micro_mixto"].sum()),
+        "afinidad_maxima_media": round(float(p["micro_afinidad_1"].mean()), 3),
+        "proporcion_afinidad_maxima_igual_a_etiqueta": round(float((orden[:, 0] == lab).mean()), 3),
+        "microarquetipos_sin_vigentes": int((med_vig < 0).sum()),
+    }
+    return fichas_m, {"centroides_micro_v1": cent_v1, "centroides_micro_v2": cent_v2}, metricas
 
 
 def _analizar(ambito: str, personas: pd.DataFrame, sem: dict, x_crudo: pd.DataFrame, ev: pd.DataFrame,
@@ -126,7 +220,7 @@ def _analizar(ambito: str, personas: pd.DataFrame, sem: dict, x_crudo: pd.DataFr
     estab = cl.estabilidad(w, etiquetas, k)
     memb = cl.pertenencias(w, etiquetas, k)
     por_vista = cl.cluster_por_vista(p_vistas, etiquetas, k)
-    med = cl.medoides(w, etiquetas, k)
+    cl.validar_afinidades(memb)
     cent_v1, cent_v2 = cl.centroides(v1, etiquetas, k), cl.centroides(v2, etiquetas, k)
     xy = cl.tsne(w)
     vec_idx, vec_af = cl.vecinos(w)
@@ -141,14 +235,14 @@ def _analizar(ambito: str, personas: pd.DataFrame, sem: dict, x_crudo: pd.DataFr
     p["pertenencias"] = [json.dumps([round(float(v), 4) for v in fila]) for fila in memb]
     for j, nombre in enumerate(NOMBRES_VISTAS):
         p[f"cluster_{nombre}"] = por_vista[:, j]
-    rep = med[etiquetas]
-    afin_rep = w[np.arange(len(p)), rep]
-    max_afin = pd.Series(afin_rep).groupby(etiquetas).transform("max").to_numpy()
-    p["representante_id"] = p["persona_id"].to_numpy()[rep]
+    med_vig, med_est, rep, sim = _representantes(w, etiquetas, k, p["vigente"].to_numpy())
+    tiene = rep >= 0
+    rep0 = np.maximum(rep, 0)
+    p["representante_id"] = np.where(tiene, p["persona_id"].to_numpy()[rep0], -1)
     p["es_representante"] = np.arange(len(p)) == rep
-    p["similitud_representante"] = np.where(p["es_representante"], 1.0, afin_rep / np.maximum(max_afin, 1e-12))
-    p["coseno_v1_representante"] = (v1 * v1[rep]).sum(axis=1)
-    p["coseno_v2_representante"] = (v2 * v2[rep]).sum(axis=1)
+    p["similitud_representante"] = sim
+    p["coseno_v1_representante"] = np.where(tiene, (v1 * v1[rep0]).sum(axis=1), np.nan)
+    p["coseno_v2_representante"] = np.where(tiene, (v2 * v2[rep0]).sum(axis=1), np.nan)
     p["coseno_v1_centroide"] = (v1 * cent_v1[etiquetas]).sum(axis=1)
     p["coseno_v2_centroide"] = (v2 * cent_v2[etiquetas]).sum(axis=1)
     p["tsne_x"], p["tsne_y"] = xy[:, 0], xy[:, 1]
@@ -158,14 +252,14 @@ def _analizar(ambito: str, personas: pd.DataFrame, sem: dict, x_crudo: pd.DataFr
     fichas = interpretacion.describir(p[["persona_id", "tipo_empleado"]], etiquetas, x_z, x, ev, k)
     for f in fichas:
         c = f["cluster"]
-        r = p.iloc[med[c]]
-        f["representante"] = {"persona_id": int(r["persona_id"]), "cargo_actual": r["cargo_actual"],
-                              "unidad_actual": r["unidad_actual"], "vigente": bool(r["vigente"])}
+        f["representante"] = _ficha_persona(p, int(med_vig[c]))
+        f["medoide_estructural"] = _ficha_persona(p, int(med_est[c]))
         miembros = p[p["cluster"] == c]
         f["tamano_vigentes"] = int(miembros["vigente"].sum())
         f["perfiles_mixtos"] = int(miembros["perfil_mixto"].sum())
         f["cohesion"] = round(float(miembros["pertenencia_1"].mean()), 3)
     _subdividir(p, fichas, etiquetas, v1, v2, x, ev)
+    fichas_micro, cent_micro, met_micro = _microarquetipos(p, fichas, w, v1, v2, x_z, x, ev)
     vecinos = pd.DataFrame({
         "persona_id": np.repeat(p["persona_id"].to_numpy(), vec_idx.shape[1]),
         "vecino_id": p["persona_id"].to_numpy()[vec_idx.ravel()],
@@ -178,8 +272,9 @@ def _analizar(ambito: str, personas: pd.DataFrame, sem: dict, x_crudo: pd.DataFr
         "perfiles_mixtos": int(p["perfil_mixto"].sum()),
         "variables_estructuradas_usadas": list(x_z.columns),
         "vistas": NOMBRES_VISTAS, "segundos": round(time.time() - t0, 1), "clusters": fichas,
+        "microarquetipos": fichas_micro, "metricas_microarquetipos": met_micro,
     }
-    return p, resumen, {"centroides_v1": cent_v1, "centroides_v2": cent_v2, "vecinos": vecinos}
+    return p, resumen, {"centroides_v1": cent_v1, "centroides_v2": cent_v2, "vecinos": vecinos, **cent_micro}
 
 
 def construir() -> dict:
@@ -215,8 +310,11 @@ def construir() -> dict:
         (d / "clusters.json").write_text(json.dumps(resumen, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         np.save(d / "centroides_v1.npy", extra["centroides_v1"])
         np.save(d / "centroides_v2.npy", extra["centroides_v2"])
+        np.save(d / "centroides_micro_v1.npy", extra["centroides_micro_v1"])
+        np.save(d / "centroides_micro_v2.npy", extra["centroides_micro_v2"])
         extra["vecinos"].to_parquet(d / "vecinos.parquet", index=False)
-        resumenes[ambito] = {k: resumen[k] for k in ("n_personas", "n_vigentes", "k", "estabilidad_ari", "perfiles_mixtos", "segundos")}
+        resumenes[ambito] = {**{k: resumen[k] for k in ("n_personas", "n_vigentes", "k", "estabilidad_ari", "perfiles_mixtos", "segundos")},
+                             "microarquetipos": resumen["metricas_microarquetipos"]}
         print(ambito, json.dumps(resumenes[ambito], ensure_ascii=False))
 
     manifest = {
@@ -229,6 +327,11 @@ def construir() -> dict:
             "v3_estructurada": "variables agregadas de los atributos de las evidencias (perfiles/vistas.py)",
         },
         "metodo": "Similarity Network Fusion + clustering espectral; pertenencia derivada de la red fusionada; medoide como representante; t-SNE sobre la red fusionada solo para visualizar",
+        "microarquetipos": ("hojas de la jerarquía grupo/subgrupo (subdivisión existente, sin k impuesto); afinidad DERIVADA "
+                            "(no probabilidad) con cada microarquetipo en la red fusionada del ámbito, normalizada a suma 1; "
+                            f"perfil mixto si 2.ª >= {cl.UMBRAL_MIXTO} x 1.ª; representante = medoide entre VIGENTES (vacío si no hay); "
+                            "centroide semántico V1/V2 aparte; nombres neutrales; ámbitos independientes"),
+        "semilla": cl.SEMILLA,
     }
     (carpeta / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     (CLUSTERING_DIR / "actual.json").write_text(json.dumps({"version": version, "huella": huella}, indent=2), encoding="utf-8")

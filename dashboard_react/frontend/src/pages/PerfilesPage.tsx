@@ -168,6 +168,7 @@ export default function PerfilesPage() {
             <PanelGrupo
               ambito={ambito}
               cluster={cluster}
+              soloVigentes={soloVigentes}
               etiquetas={etiquetas}
               subpatron={subpatron}
               onSubpatron={setSubpatron}
@@ -190,7 +191,12 @@ export default function PerfilesPage() {
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorCluster(c.cluster) }} />
-                        <span className="text-sm text-slate-800 flex-1 leading-snug">{c.etiqueta}</span>
+                        <span className="text-sm text-slate-800 flex-1 leading-snug">
+                          {c.etiqueta}
+                          <span className="block text-[11px] text-slate-500 overflow-hidden" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                            {c.descripcion.replace(/^\d+ personas \([^)]*\)\. /, "")}
+                          </span>
+                        </span>
                         <span className="text-xs text-slate-500 shrink-0">{c.tamano_vigentes}</span>
                         <span className="text-slate-300 group-hover:text-slate-500">›</span>
                       </div>

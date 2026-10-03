@@ -70,10 +70,12 @@ def _enriquecer(ambito: str, ficha: dict) -> dict:
     p = repo.personas(ambito)
     crudo = repo.vista_estructurada()
     miembros = p.loc[p["cluster"] == ficha["cluster"], "persona_id"]
-    ficha["representante"]["nombre"] = repo.nombre(ficha["representante"]["persona_id"])
+    if ficha.get("representante"):
+        ficha["representante"]["nombre"] = repo.nombre(ficha["representante"]["persona_id"])
     ficha["rasgos_legibles"] = legible.rasgos(ficha["rasgos_estructurados"], crudo, miembros, p["persona_id"])
     for sp in (ficha.get("subdivision") or {}).get("subpatrones", []):
-        sp["representante"]["nombre"] = repo.nombre(sp["representante"]["persona_id"])
+        if sp.get("representante"):
+            sp["representante"]["nombre"] = repo.nombre(sp["representante"]["persona_id"])
         del_sub = p.loc[(p["cluster"] == ficha["cluster"]) & (p["subpatron"] == sp["cluster"]), "persona_id"]
         sp["rasgos_legibles"] = legible.rasgos(sp["rasgos_estructurados"], crudo, del_sub, miembros)
     return ficha
@@ -129,7 +131,7 @@ def mapa(ambito: str, solo_vigentes: bool = Query(True)) -> dict:
         p = p[p["vigente"] | p["es_representante"] | p["es_subrepresentante"]]
     columnas = ["persona_id", "tsne_x", "tsne_y", "cluster", "cluster_2", "pertenencia_1", "pertenencia_2",
                 "perfil_mixto", "vigente", "es_representante", "cargo_actual", "unidad_actual", "tipo_empleado",
-                "subpatron", "es_subrepresentante"]
+                "subpatron", "es_subrepresentante"] + [c for c in ("microarquetipo", "micro_mixto") if c in p.columns]
     return {"ambito": ambito, "solo_vigentes": solo_vigentes, "etiquetas": repo.etiquetas(ambito),
             "puntos": repo.as_records(repo.con_nombres(p[columnas].round(4)))}
 
@@ -175,10 +177,10 @@ def buscar(ambito: str, q: str = Query(..., min_length=2), solo_vigentes: bool =
 
 
 @app.get("/api/clustering/{ambito}/clusters/{cluster}")
-def detalle_cluster(ambito: str, cluster: int) -> dict:
-    """Ficha del cluster (con sus subpatrones si se subdividio) e integrantes VIGENTES ordenados por
-    similitud al representante, cada uno con su subpatron. Incluye
-    tambien a las personas vigentes de otros clusters con perfil mixto hacia este."""
+def detalle_cluster(ambito: str, cluster: int, solo_vigentes: bool = Query(True)) -> dict:
+    """Ficha del cluster e integrantes ordenados por similitud al representante.
+    Filtra por vigencia solo cuando `solo_vigentes` es verdadero. También incluye
+    subpatrón y personas de otros clusters con perfil mixto hacia este."""
     r = repo.resumen(_ambito(ambito))
     ficha = next((c for c in r["clusters"] if c["cluster"] == cluster), None)
     if ficha is None:
@@ -187,10 +189,15 @@ def detalle_cluster(ambito: str, cluster: int) -> dict:
     columnas = ["persona_id", "cargo_actual", "unidad_actual", "tipo_empleado", "similitud_representante",
                 "coseno_v1_representante", "coseno_v2_representante", "pertenencia_1", "cluster_2",
                 "pertenencia_2", "perfil_mixto", "es_representante", "subpatron", "sub_pertenencia_1",
-                "sub_perfil_mixto", "es_subrepresentante", "similitud_subrepresentante"]
-    integrantes = p[(p["cluster"] == cluster) & p["vigente"]].sort_values("similitud_representante", ascending=False)
-    mixtos = p[(p["cluster"] != cluster) & (p["cluster_2"] == cluster) & p["perfil_mixto"] & p["vigente"]]
-    return {"ambito": ambito, "ficha": _enriquecer(ambito, ficha),
+                "sub_perfil_mixto", "es_subrepresentante", "similitud_subrepresentante", "vigente"]
+    columnas += [c for c in ("microarquetipo", "micro_afinidad_1", "micro_mixto") if c in p.columns]
+    integrantes = p[p["cluster"] == cluster]
+    mixtos = p[(p["cluster"] != cluster) & (p["cluster_2"] == cluster) & p["perfil_mixto"]]
+    if solo_vigentes:
+        integrantes = integrantes[integrantes["vigente"]]
+        mixtos = mixtos[mixtos["vigente"]]
+    integrantes = integrantes.sort_values("similitud_representante", ascending=False)
+    return {"ambito": ambito, "solo_vigentes": solo_vigentes, "ficha": _enriquecer(ambito, ficha),
             "integrantes": repo.as_records(repo.con_nombres(integrantes[columnas].round(4))),
             "mixtos_desde_otros_clusters": repo.as_records(repo.con_nombres(
                 mixtos[["persona_id", "cargo_actual", "unidad_actual", "cluster", "pertenencia_1", "pertenencia_2"]].round(4)))}
@@ -207,10 +214,53 @@ def _subpatron(ficha: dict, f: dict) -> dict | None:
             "descripcion": sp["descripcion"], "pertenencia": f["sub_pertenencia_1"],
             "perfil_mixto": f["sub_perfil_mixto"], "segundo_subpatron": segundo["etiqueta"],
             "pertenencia_2": f["sub_pertenencia_2"], "es_representante": f["es_subrepresentante"],
-            "representante_id": f["subrepresentante_id"],
-            "representante_nombre": repo.nombre(f["subrepresentante_id"]),
+            "representante_id": f["subrepresentante_id"] if f["subrepresentante_id"] >= 0 else None,
+            "representante_nombre": repo.nombre(f["subrepresentante_id"]) if f["subrepresentante_id"] >= 0 else None,
             "similitud_representante": f["similitud_subrepresentante"],
             "estabilidad_ari": sub["estabilidad_ari"]}
+
+
+def _micro_persona(ambito: str, f: dict) -> dict:
+    """Microarquetipo EXCLUSIVO (referencia estructural) y AFINIDADES derivadas con todos los
+    microarquetipos del ámbito (soft; no son probabilidades)."""
+    if "microarquetipo" not in f:
+        return {"microarquetipo": None, "afinidades_microarquetipos": []}
+    micro = repo.resumen(ambito)["microarquetipos"]
+    afin = json.loads(f["micro_afinidades"])
+    lista = sorted(({"id": m["id"], "nombre": m["nombre"], "grupo": m["grupo"], "afinidad": a}
+                    for m, a in zip(micro, afin)), key=lambda x: -x["afinidad"])
+    propio = micro[f["microarquetipo"]]
+    rep = f.get("microrepresentante_id", -1)
+    return {
+        "microarquetipo": {"id": propio["id"], "nombre": propio["nombre"], "grupo": propio["grupo"],
+                           "descripcion": propio["descripcion"], "afinidad": f["micro_afinidad_1"],
+                           "perfil_mixto": bool(f["micro_mixto"]),
+                           "segundo": micro[f["micro_2"]]["nombre"] if f["micro_2"] >= 0 else None,
+                           "afinidad_2": f["micro_afinidad_2"],
+                           "representante_id": rep if rep >= 0 else None,
+                           "representante_nombre": repo.nombre(rep) if rep >= 0 else None,
+                           "similitud_representante": f.get("similitud_microrepresentante")},
+        "afinidades_microarquetipos": lista,
+    }
+
+
+@app.get("/api/clustering/{ambito}/microarquetipos")
+def microarquetipos(ambito: str) -> dict:
+    """Microarquetipos del ámbito (hojas grupo/subgrupo) con su caracterización frente al ámbito."""
+    r = repo.resumen(_ambito(ambito))
+    if "microarquetipos" not in r:
+        raise HTTPException(404, "Esta versión del clustering no tiene microarquetipos")
+    p = repo.personas(ambito)
+    crudo = repo.vista_estructurada()
+    salida = []
+    for m in r["microarquetipos"]:
+        m = copy.deepcopy(m)
+        if m.get("representante"):
+            m["representante"]["nombre"] = repo.nombre(m["representante"]["persona_id"])
+        miembros = p.loc[p["microarquetipo"] == m["id"], "persona_id"]
+        m["rasgos_legibles"] = legible.rasgos(m["rasgos_estructurados"], crudo, miembros, p["persona_id"])
+        salida.append(m)
+    return {"ambito": ambito, "metricas": r.get("metricas_microarquetipos"), "microarquetipos": salida}
 
 
 @app.get("/api/personas/{persona_id}")
@@ -252,13 +302,14 @@ def persona(persona_id: int, ambito: str = Query("todos")) -> dict:
         "estado": {k: f[k] for k in ("tipo_empleado", "vigente", "cargo_actual", "unidad_actual")},
         "cluster": {"cluster": f["cluster"], "etiqueta": et[f["cluster"]], "pertenencia": f["pertenencia_1"],
                     "perfil_mixto": f["perfil_mixto"], "es_representante": f["es_representante"],
-                    "representante_id": f["representante_id"],
-                    "representante_nombre": repo.nombre(f["representante_id"]),
+                    "representante_id": f["representante_id"] if f["representante_id"] >= 0 else None,
+                    "representante_nombre": repo.nombre(f["representante_id"]) if f["representante_id"] >= 0 else None,
                     "similitud_representante": f["similitud_representante"],
                     "coseno_v1_representante": f["coseno_v1_representante"],
                     "coseno_v2_representante": f["coseno_v2_representante"],
                     "coseno_v1_centroide": f["coseno_v1_centroide"], "coseno_v2_centroide": f["coseno_v2_centroide"]},
         "subpatron": _subpatron(ficha, f),
+        **_micro_persona(ambito, f),
         "pertenencias": pertenencias, "cluster_por_vista": por_vista, "rasgos": rasgos,
         "rasgos_legibles": rasgos_legibles,
         "vistas_faltantes": [v for v, falta in (("v1_trayectoria", f["vista_v1_faltante"]),
