@@ -12,6 +12,13 @@ Salida versionada en data/perfiles/clustering/<version>/:
     <ambito>/clusters.json        fichas de los clusters, metricas y seleccion de k
     <ambito>/centroides_v1.npy, centroides_v2.npy   centroide semantico de cada cluster
     <ambito>/vecinos.parquet      30 vecinos mas cercanos de cada persona en la red fusionada
+    <ambito>/dimensiones.parquet  intensidad (percentil 0-100 en el ambito) por dimension de evidencia (DEC-053)
+    dimensiones.json              definicion de dimensiones, componentes y pesos
+    <ambito>/temas_dimension.parquet     proporcion de las evidencias de cada persona en cada tema descubierto (DEC-055)
+    <ambito>/patrones_dimension.parquet  patron de actividad de cada persona en cada dimension (DEC-055)
+    <ambito>/micro_dimensiones.json      fichas de temas y patrones por dimension
+    <ambito>/mapas_dimension.parquet     coordenadas t-SNE (solo visualizacion) por dimension: mapa de patrones y de temas
+    <ambito>/perfil_conjunto_mapa.parquet, perfil_conjunto_vecinos.parquet   perfil completo (todas las dimensiones): t-SNE y vecinos (DEC-056)
 y data/perfiles/clustering/actual.json apunta a la version vigente. Se recalcula cuando cambian
 las evidencias o los embeddings (la huella del manifest deja de coincidir; /api/health lo avisa).
 """
@@ -26,9 +33,10 @@ import pandas as pd
 
 from perfiles import clustering as cl
 from perfiles import embeddings as emb
-from perfiles import interpretacion, snf, vistas
+from perfiles import dimensiones, interpretacion, micro_dimensiones, perfil_conjunto, snf, vistas
 from perfiles.comun import (
-    AMBITOS, ARCHIVO_HISTORIAL_FEATURES, CLUSTERING_DIR, archivos_evidencias, cargar_estado_personas, cargar_evidencias, huella_archivos,
+    AMBITOS, ARCHIVO_HISTORIAL_FEATURES, CLUSTERING_DIR, EMBEDDINGS_TEMA_DIR, archivos_evidencias, cargar_estado_personas, cargar_evidencias, en_ambito,
+    huella_archivos,
     huella_texto,
 )
 
@@ -43,7 +51,19 @@ def huella_entradas() -> dict:
     # el estado de las personas (vigencia, tipo, cargo actual) tambien define la version
     return {"evidencias": huella_archivos(archivos_evidencias()), "estado_personas": huella_archivos([ARCHIVO_HISTORIAL_FEATURES]),
             "embeddings": manifest_emb["huella_textos"],
-            "modelo_embeddings": manifest_emb["modelo"], "parametros": PARAMETROS}
+            "modelo_embeddings": manifest_emb["modelo"], "parametros": PARAMETROS,
+            "dimensiones": dimensiones.definiciones(),
+            "embeddings_tema": emb.cargar(EMBEDDINGS_TEMA_DIR)[2]["huella_textos"],
+            "micro_dimensiones": {"min_personas": micro_dimensiones.MIN_PERSONAS, "min_textos": micro_dimensiones.MIN_TEXTOS,
+                                  "fraccion_tema": micro_dimensiones.FRACCION_TEMA,
+                                  "k_patron": [micro_dimensiones.K_MIN_PATRON, micro_dimensiones.K_MAX_PATRON],
+                                  "proporciones": micro_dimensiones.PROPORCIONES,
+                                  "mapas": "t-SNE perplejidad<=30, PCA a 50 si hace falta"},
+            "perfil_conjunto": {"n_vecinos": perfil_conjunto.N_VECINOS,
+                                "patrones_globales": {"k": [perfil_conjunto.K_MIN_GLOBAL, perfil_conjunto.K_MAX_GLOBAL],
+                                                      "k_micro": [perfil_conjunto.K_MIN_MICRO, perfil_conjunto.K_MAX_MICRO],
+                                                      "min_subdividir": perfil_conjunto.MIN_SUBDIVIDIR,
+                                                      "ari_minimo": perfil_conjunto.ARI_MINIMO}}}
 
 
 def _ficha_persona(p: pd.DataFrame, i: int) -> dict | None:
@@ -296,12 +316,15 @@ def construir() -> dict:
     np.savez_compressed(carpeta / "personas_vistas.npz", persona_id=np.array(personas_ids),
                         v1_trayectoria=sem["v1_trayectoria"]["matriz"], v2_academico=sem["v2_academico"]["matriz"])
     x_crudo.reset_index().to_parquet(carpeta / "vista_estructurada.parquet", index=False)
+    comp_dim, n_ev_dim = dimensiones.componentes_crudos(ev, personas_ids)
+    ev_dim = dimensiones.evidencias_de_dimension(ev)
+    textos_tema, vec_tema, _ = emb.cargar(EMBEDDINGS_TEMA_DIR)
+    pos_tema = dict(zip(textos_tema["clave"], range(len(textos_tema))))
+    (carpeta / "dimensiones.json").write_text(json.dumps(dimensiones.definiciones(), ensure_ascii=False, indent=2), encoding="utf-8")
 
     resumenes = {}
-    tipo = personas["tipo_empleado"]
-    seleccion = {"todos": np.arange(len(personas)),
-                 "administrativos": np.flatnonzero(tipo == "ADMINISTRATIVO"),
-                 "docentes": np.flatnonzero(tipo == "DOCENTE")}
+    # DEC-054: quien tiene hoy contratos activos administrativo y docente entra en ambos ámbitos
+    seleccion = {a: np.flatnonzero(en_ambito(personas["tipo_empleado"], a).to_numpy()) for a in AMBITOS}
     for ambito, idx in seleccion.items():
         p, resumen, extra = _analizar(ambito, personas, sem, x_crudo, ev, idx)
         d = carpeta / ambito
@@ -313,6 +336,28 @@ def construir() -> dict:
         np.save(d / "centroides_micro_v1.npy", extra["centroides_micro_v1"])
         np.save(d / "centroides_micro_v2.npy", extra["centroides_micro_v2"])
         extra["vecinos"].to_parquet(d / "vecinos.parquet", index=False)
+        ids = personas["persona_id"].to_numpy()[idx]
+        dim = dimensiones.intensidades(comp_dim.loc[ids], n_ev_dim.loc[ids])
+        dim.to_parquet(d / "dimensiones.parquet", index=False)
+        t0 = time.time()
+        temas_p, patrones_p, mapas_p, micro_r = micro_dimensiones.construir_ambito(
+            ids, personas["vigente"].to_numpy()[idx], comp_dim, n_ev_dim, ev_dim, pos_tema, vec_tema)
+        temas_p.to_parquet(d / "temas_dimension.parquet", index=False)
+        patrones_p.to_parquet(d / "patrones_dimension.parquet", index=False)
+        mapas_p.to_parquet(d / "mapas_dimension.parquet", index=False)
+        k_pat = {k: (v["patrones"] or {}).get("k", 0) for k, v in micro_r.items()}
+        mapa_c, vecinos_c = perfil_conjunto.construir_ambito(ids, dim, patrones_p, k_pat)
+        mapa_c.to_parquet(d / "perfil_conjunto_mapa.parquet", index=False)
+        vecinos_c.to_parquet(d / "perfil_conjunto_vecinos.parquet", index=False)
+        glob_p, glob_r = perfil_conjunto.patrones_globales(ids, personas["vigente"].to_numpy()[idx], dim, patrones_p, k_pat)
+        glob_p.to_parquet(d / "patrones_globales.parquet", index=False)
+        (d / "patrones_globales.json").write_text(json.dumps(glob_r, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(ambito, "patrones globales:", glob_r["k"], "ARI", glob_r["estabilidad_ari"],
+              "microarquetipos:", glob_r["n_microarquetipos"])
+        (d / "micro_dimensiones.json").write_text(json.dumps(micro_r, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        print(ambito, "temas / patrones por dimensión:",
+              {k: ((v["temas"] or {}).get("k", 0), (v["patrones"] or {}).get("k", 0)) for k, v in micro_r.items()},
+              f"{time.time() - t0:.0f}s")
         resumenes[ambito] = {**{k: resumen[k] for k in ("n_personas", "n_vigentes", "k", "estabilidad_ari", "perfiles_mixtos", "segundos")},
                              "microarquetipos": resumen["metricas_microarquetipos"]}
         print(ambito, json.dumps(resumenes[ambito], ensure_ascii=False))
@@ -320,7 +365,7 @@ def construir() -> dict:
     manifest = {
         "version": version, "huella": huella, "fecha": datetime.now().isoformat(timespec="seconds"),
         "entradas": entradas, "ambitos": resumenes,
-        "fuente_estado_personas": "data/processed/historial_laboral_features.csv (VIGENTE_ACTUALMENTE, TIPOEMPLEADO_ACTUAL_DESC)",
+        "fuente_estado_personas": "data/processed/historial_laboral_features.csv (VIGENTE_ACTUALMENTE, TIPOS_EMPLEADO_ACTUALES)",
         "vistas": {
             "v1_trayectoria": "embeddings (bge-m3) de cargos, contratos, funciones, experiencia externa y actividades de carga",
             "v2_academico": "embeddings (bge-m3) de formación, investigación, publicaciones, tesis, ponencias, vinculación, materias, capacitación y menciones",
@@ -331,6 +376,18 @@ def construir() -> dict:
                             "(no probabilidad) con cada microarquetipo en la red fusionada del ámbito, normalizada a suma 1; "
                             f"perfil mixto si 2.ª >= {cl.UMBRAL_MIXTO} x 1.ª; representante = medoide entre VIGENTES (vacío si no hay); "
                             "centroide semántico V1/V2 aparte; nombres neutrales; ámbitos independientes"),
+        "dimensiones": ("intensidad 0-100 = percentil, dentro del ámbito, de un índice ponderado de componentes "
+                        "normalizados por el máximo del ámbito; 0 sin evidencias; dimensiones independientes (no suman 100); "
+                        "ver dimensiones.json"),
+        "micro_dimensiones": ("sin categorías predefinidas, por dimensión y ámbito: TEMAS = UMAP + HDBSCAN sobre los embeddings "
+                              "del título/nombre de las evidencias (proporción por persona); PATRONES DE ACTIVIDAD = KMeans "
+                              "(k 3-6 por silueta) sobre componentes y proporciones estandarizados; "
+                              f"no se subdivide con menos de {micro_dimensiones.MIN_PERSONAS} personas"),
+        "perfil_conjunto": ("por dimensión, afinidades con sus patrones x intensidad/100 (o solo la intensidad si no tiene "
+                            f"patrones); t-SNE para visualizar y {perfil_conjunto.N_VECINOS} vecinos por distancia euclidiana; sin grupos"),
+        "patrones_globales": ("KMeans sobre el vector de perfil completo; k entre 4 y 8 = mayor silueta entre los k con "
+                              "estabilidad ARI >= 0,9; descritos por dimensiones con intensidad media alta/baja frente al ámbito"),
+        "ambitos_doble_tipo": "quien tiene contratos activos administrativo y docente entra en ambos ámbitos (DEC-054)",
         "semilla": cl.SEMILLA,
     }
     (carpeta / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -12,6 +12,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 EVIDENCIAS_DIR = DATA_DIR / "evidencias"
 PERFILES_DIR = DATA_DIR / "perfiles"
 EMBEDDINGS_DIR = PERFILES_DIR / "embeddings"
+EMBEDDINGS_TEMA_DIR = PERFILES_DIR / "embeddings_tema"
 CLUSTERING_DIR = PERFILES_DIR / "clustering"
 
 # Fuentes ya corregidas para filtrar (no son variables del clustering): DEC-023 dejo la
@@ -58,10 +59,20 @@ def huella_texto(obj) -> str:
 
 
 def cargar_estado_personas() -> pd.DataFrame:
-    """Tipo de empleado actual y vigencia de cada persona (fuente corregida en DEC-023)."""
+    """Tipo de empleado actual y vigencia de cada persona (fuente corregida en DEC-023). El tipo
+    puede ser "ADMINISTRATIVO / DOCENTE" si tiene hoy contratos activos de ambos (DEC-054): esa
+    persona entra en los dos ámbitos (ver `en_ambito`)."""
     f = pd.read_csv(ARCHIVO_HISTORIAL_FEATURES, low_memory=False,
-                    usecols=["IDPERSONA", "TIPOEMPLEADO_ACTUAL_DESC", "VIGENTE_ACTUALMENTE", "CARGO_ACTUAL",
+                    usecols=["IDPERSONA", "TIPOS_EMPLEADO_ACTUALES", "VIGENTE_ACTUALMENTE", "CARGO_ACTUAL",
                              "UNIDAD_ACTUAL_NOMBRE"])
-    return f.rename(columns={"IDPERSONA": "persona_id", "TIPOEMPLEADO_ACTUAL_DESC": "tipo_empleado",
+    return f.rename(columns={"IDPERSONA": "persona_id", "TIPOS_EMPLEADO_ACTUALES": "tipo_empleado",
                              "VIGENTE_ACTUALMENTE": "vigente", "CARGO_ACTUAL": "cargo_actual",
                              "UNIDAD_ACTUAL_NOMBRE": "unidad_actual"})
+
+
+def en_ambito(tipo_empleado: pd.Series, ambito: str) -> pd.Series:
+    """Máscara de pertenencia a un ámbito. Quien es "ADMINISTRATIVO / DOCENTE" está en ambos."""
+    if ambito == "todos":
+        return pd.Series(True, index=tipo_empleado.index)
+    clave = {"administrativos": "ADMINISTRATIVO", "docentes": "DOCENTE"}[ambito]
+    return tipo_empleado.fillna("").str.split(" / ").map(lambda tipos: clave in tipos)

@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { buscarPersonas, type Ambito, type ResultadoBusqueda } from "../api/client";
-import { colorCluster } from "../lib/colores";
+import { buscarPersonas, type Ambito, type PersonaEncontrada } from "../api/client";
 
 interface Props {
   ambito: Ambito;
-  onElegir: (r: ResultadoBusqueda) => void;
+  onElegir: (r: PersonaEncontrada) => void;
 }
 
 // Busca personas vigentes del ámbito por nombre, cargo o unidad.
@@ -56,10 +55,6 @@ export default function BuscadorPersonas({ ambito, onElegir }: Props) {
               <p className="text-xs text-slate-500 truncate">
                 {r.cargo_actual ?? "Sin cargo actual"}
                 {r.unidad_actual ? ` · ${r.unidad_actual}` : ""}
-              </p>
-              <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: colorCluster(r.cluster) }} />
-                Patrón {r.cluster} · {r.etiqueta}
               </p>
             </button>
           ))}

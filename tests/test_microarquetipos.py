@@ -131,9 +131,12 @@ def test_datos_representantes_vigentes_y_centroides(ambito):
 def test_datos_aislamiento_entre_ambitos():
     v = _version()
     tipos = {a: pd.read_parquet(v / a / "personas.parquet")[["persona_id", "tipo_empleado"]] for a in AMBITOS}
-    assert (tipos["administrativos"]["tipo_empleado"] == "ADMINISTRATIVO").all()
-    assert (tipos["docentes"]["tipo_empleado"] == "DOCENTE").all()
-    assert set(tipos["administrativos"]["persona_id"]).isdisjoint(tipos["docentes"]["persona_id"])
+    # DEC-054: solo quien tiene contratos activos de ambos tipos está en los dos ámbitos
+    dobles = "ADMINISTRATIVO / DOCENTE"
+    assert tipos["administrativos"]["tipo_empleado"].isin(["ADMINISTRATIVO", dobles]).all()
+    assert tipos["docentes"]["tipo_empleado"].isin(["DOCENTE", dobles]).all()
+    comunes = set(tipos["administrativos"]["persona_id"]) & set(tipos["docentes"]["persona_id"])
+    assert comunes == set(tipos["todos"].loc[tipos["todos"]["tipo_empleado"] == dobles, "persona_id"])
     for a in AMBITOS:
         r = json.loads((v / a / "clusters.json").read_text(encoding="utf-8"))
         if "microarquetipos" not in r:

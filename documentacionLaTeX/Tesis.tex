@@ -1,0 +1,376 @@
+\documentclass[11pt,a4paper,twoside,openany]{book}
+
+\raggedright %izquierda
+\usepackage[margin=2.54cm]{geometry}
+
+
+%sangria
+\usepackage{indentfirst}
+
+\usepackage{parskip}
+\setlength{\parskip}{0pt} % Sin espacio entre párrafos
+\setlength{\parindent}{1.27cm} % Sangría de 1,27 cm para párrafos
+
+% habilitamos Arial 11 pt en todo el documento (solo fontspec, sin mathptmx/t1enc)
+\usepackage{anyfontsize}
+\usepackage{fontspec}
+\usepackage{url}
+
+\usepackage{chngcntr}
+\counterwithout{figure}{chapter}
+
+\setmainfont{Arial}[
+  Path           = ./fuentes/,
+  UprightFont    = arial.ttf,
+  BoldFont       = arialbd.ttf,
+  ItalicFont     = ariali.ttf,
+  BoldItalicFont = arialbi.ttf
+]
+\setsansfont{Arial}[
+  Path           = ./fuentes/,
+  UprightFont    = arial.ttf,
+  BoldFont       = arialbd.ttf,
+  ItalicFont     = ariali.ttf,
+  BoldItalicFont = arialbi.ttf
+]
+
+%Habilitamos el TOC hasta subsubsection
+\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{3}
+
+\newcommand\tab[1][1cm]{\hspace*{#1}}
+
+\usepackage{setspace}
+\doublespacing % Interlineado doble general; setspace deja notas al pie y flotantes (tablas) en sencillo
+
+\usepackage{afterpage}
+\usepackage{ragged2e}
+\usepackage[none]{hyphenat}
+\usepackage{xpatch}
+\usepackage{blindtext}
+%\usepackage{sectsty}
+\usepackage{appendix}
+
+
+%\def\UrlBreaks{\do\/\do-}
+\usepackage{hyperref}
+%\usepackage{breakurl}
+%\usepackage[breaklinks]{hyperref} % Referencias e índices son enlaces al contenido. La opción hidelinks hace que se vean como texto normal
+
+
+\usepackage{newclude} % Permite usar \include* que es igual que \include pero sin saltos de página adicionales
+%\includeonly{cap01} % con este comando solo se incluirán los archivos mencionados haciendo que la compilación sea mucho más rápida. Referencias a otros capítulos quedarán rotas, se recomienda una compilación limpia cada vez que se cambie esta línea (es decir, borrar ficheros intermedios cuando se descomenta/comenta/cambia el argumento)
+
+%\usepackage[top=3.0cm, bottom=2.0cm,left= 2.5cm,right=2cm]{geometry}
+
+\usepackage{csquotes} % Paquete recomendado por biblatex cuando se usa babel
+
+\usepackage{graphicx}
+\usepackage[format=plain,justification=raggedright]{caption} % Justificación a la izquierda y formato plain
+
+% Configuración para el formato de las figuras
+\captionsetup[figure]{
+  format=plain, % Estilo de formato
+  labelformat=simple, % Formato de la etiqueta
+  labelsep=none, % Sin separador entre la etiqueta y el título
+  font=small, % Tamaño de la fuente
+  justification=raggedright, % Justificación del texto a la izquierda
+  singlelinecheck=false, % Permite justificación en varias líneas
+  labelfont=bf, % Número de la figura en negrita
+  textfont=it, % Título en cursiva
+  skip=12pt, % Espacio entre la figura y la leyenda
+  %parskip=10pt %es
+}
+
+
+% Personalización para que el título aparezca arriba de la figura
+\usepackage{float} % Necesario para la opción [H]
+
+\usepackage{amsmath,amssymb}
+\usepackage{changepage}
+\usepackage{subcaption}
+
+\usepackage[table]{xcolor} % Necesaria la opción table para usar filas de colores en las tablas.
+\usepackage{lipsum} % Para usar texto de relleno, sirve para tener una idea de cómo queda
+
+\usepackage{booktabs} % para los comandos toprule, midrule, cmidrule y bottomrule: líneas horizontales de las tablas
+\usepackage{threeparttable} % Entorno para las notas a pie de tabla
+
+%--- Paquete algorithm y personalizaciones ---%
+\usepackage{algorithm,algorithmic}
+\floatname{algorithm}{Algoritmo}
+\renewcommand{\listalgorithmname}{\'INDICE DE ALGORITMOS}
+
+\usepackage{listings}
+\renewcommand{\lstlistingname}{C\'odigo}% Listing -> Algorithm
+\renewcommand{\lstlistlistingname}{\'INDICE DE CODIGOS DE PROGRAMA}
+
+\usepackage{multirow}
+
+\usepackage{tikz}
+
+%--- Formato de títulos ---
+\usepackage{titlesec} % Librería para cambiar el formato de \chapter, \section, ...
+\titleformat{\chapter}[display]
+{\bfseries\fontsize{11pt}{13.2pt}\selectfont}
+{\centering\chaptertitlename \thechapter}{24pt}{}
+\titlespacing*{\chapter}
+{0pt}{30pt}{40pt}
+\renewcommand{\chaptertitlename}{\fontsize{24pt}{24}\selectfont CAP\'ITULO }
+\newpagestyle{mystyle}{\setfoot[][\thepage][]{}{\thepage}{}}
+\pagestyle{mystyle}
+\titleformat{\paragraph}[runin]{\normalfont\normalsize\itshape}{\theparagraph}{1.5em}{} % formato de \paragraph: fuente y tamaño normales y cursiva. 1em de separación
+\titleformat{\subparagraph}[runin]{\normalfont\normalsize\itshape}{\thesubparagraph}{1.5em}{} % formato de \subparagraph: fuente y tamaño normales y cursiva. 1em de separación
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CONFIGURACIÓN DE LOS TÍTULOS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Configuración del formato de \section
+\titleformat{\section}
+  {\normalfont\bfseries} % Fuente normal, negrita y tamaño grande
+  {\thesection}{1em} % Número de la sección
+  {} % Espacio entre número y título
+
+% Configuración del formato de \subsection
+\titleformat{\subsection}
+  {\normalfont\itshape\bfseries} % Fuente normal, cursiva, negrita y tamaño grande
+  {\thesubsection}{1em} % Número de la subsección
+  {} % Espacio entre número y título
+
+% Configuración de \subsubsection como un título "run-in"
+\titlespacing*{\subsubsection}
+  {2em} % Sangría izquierda para el título
+  {0pt} % Espacio antes del título
+  {1em} % Espacio después del título
+
+\titleformat{\subsubsection}[runin]
+  {\normalfont\bfseries} % Formato del título
+  {\thesubsubsection.} % Definir el número del título
+  {0.5em} % Espacio entre el número y el título
+  {} % Código antes del título
+  
+%Renombrar los epigrafos
+\renewcommand{\tablename}{Tabla}
+\renewcommand{\figurename}{Figura}
+
+%--- AJUSTES MANUALES PARA CODIGOS ---%
+
+\usepackage{listings}
+\usepackage{color}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{frame=tb,
+  language=Java,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\footnotesize\ttfamily\justifying},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+ }
+
+% En el front-end al final de los usepackages
+\usepackage[natbib=true,backend=biber,sorting=nyt,style=apa]{biblatex}
+\renewcommand*{\bibfont}{\normalfont\normalsize} % Arial 11 pt, igual que el cuerpo
+% Sangría francesa explícita de 1,27 cm en cada referencia
+\setlength{\bibhang}{1.27cm}
+\setlength{\bibitemsep}{0pt}
+\AtBeginBibliography{%
+  \setlength{\leftskip}{0pt}%
+  \setlength{\parindent}{0pt}%
+}
+
+% add your references to this file
+% Si pusieron otro nombre al archivo BiBteX usen ese :P
+\addbibresource{referencias.bib}
+
+\renewcommand\maketitle{}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DOCUMENTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+\sloppy 
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TÍTULO, RESUMEN, AGRADECIMIENTOS Y DEDICATORIA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   TÍTULO
+% Página con el título, hay que entrar en title.tex para modificar: nombre del trabajo, autor y fecha
+
+\input{secciones/title}
+%\let\clearpage\relax
+
+% DEDICATORIA,AGRADECIMIENTO,DECLARACION_EXPRESA Y FIRMAS
+% Título centrado con una línea debajo que cubre todo el ancho del texto
+\titleformat{\chapter}[block]
+  {\normalfont\normalsize\filcenter}
+  {}{0pt}{}
+  [\vspace{2pt}\titlerule]
+\input{secciones/adicionales}
+%\let\clearpage\relax
+
+\let\cleardoublepage\clearpage
+\frontmatter
+\pagenumbering{Roman}
+
+% RESUMEN Y ABSTRACT
+% Resumen: solo centrado. Abstract: centrado y en cursiva
+\newcommand{\formatoTituloResumen}[1]{\ifstrequal{#1}{Abstract}{\textit{#1}}{#1}}
+\titleformat{\chapter}[block]
+  {\normalfont\normalsize\filcenter}
+  {}{0pt}{\formatoTituloResumen}
+\input{secciones/resumen}
+%\let\clearpage\relax
+
+% Se restablece el formato anterior de \chapter para los índices
+\titleformat{\chapter}[display]
+{\bfseries\fontsize{11pt}{13.2pt}\selectfont}
+{\centering\chaptertitlename \thechapter}{24pt}{}
+
+%   ÍNDICE
+%  INDICE GENERAL FORMATO
+\renewcommand*{\contentsname}{\'Indice General}
+\phantomsection
+\addcontentsline{toc}{chapter}{\contentsname}
+\tableofcontents  % indice de contenidos
+
+% ABREVIATURAS
+\input{secciones/abreviaturas}
+
+%   INDICE DE FIGURAS, TABLAS Y ALGORITMOS
+\renewcommand*{\listfigurename}{\'Indice de figuras}
+\renewcommand{\thefigure}{\arabic{figure}}
+\counterwithout{figure}{chapter}
+\phantomsection
+\addcontentsline{toc}{chapter}{\listfigurename}
+\listoffigures
+
+%\renewcommand*{\listtablename}{\'INDICE DE TABLAS}
+%\addcontentsline{toc}{chapter}{\listtablename}
+%\listoftables
+
+% Si no hay muchos algoritmos no tiene mucho sentido esta lista
+%\addcontentsline{toc}{chapter}{\listalgorithmname}
+%\listofalgorithms 
+
+%\addcontentsline{toc}{chapter}{\lstlistlistingname}
+%\lstlistoflistings 
+
+%%%%%%%%%%%%%%%% CUERPO DE LA PÁGINA DEL CAPITULO %%%%%%%%%%%%%%%%%%
+\mainmatter
+
+% Configuración del formato del capítulo
+\titleformat{\chapter} % Formato colgante
+  {\bfseries\fontsize{11pt}{13.2pt}\selectfont} % Formato de fuente 
+  {\thechapter.}% Mostrar solo el número del capítulo seguido de un punto
+  {1em}% Espacio entre el número y el título
+  {}% Código antes del título
+
+  
+% TABLAS, FIGURAS, EXPRESIONES MATEMÁTICAS Y ALGORITMOS
+\newpage
+\thispagestyle{empty}
+\vspace*{6cm}
+\begin{center}
+    \fontsize{16pt}{19.2pt}\selectfont
+    \textbf{Cap\'itulo 1}
+\end{center}
+\vspace*{\fill}
+\phantomsection
+\addcontentsline{toc}{chapter}{Cap\'itulo 1}
+
+\include*{capitulos/cap01}
+%\let\clearpage\relax
+
+% CONTENIDOS DEL TFG
+\newpage
+\thispagestyle{empty}
+\vspace*{6cm}
+\begin{center}
+    \fontsize{16pt}{19.2pt}\selectfont
+    \textbf{Cap\'itulo 2}
+\end{center}
+\vspace*{\fill}
+\phantomsection
+\addcontentsline{toc}{chapter}{Cap\'itulo 2}
+
+\include*{capitulos/cap02}
+%\let\clearpage\relax
+
+% REFERENCES
+\newpage
+\thispagestyle{empty}
+\vspace*{6cm}
+\begin{center}
+    \fontsize{16pt}{19.2pt}\selectfont
+    \textbf{Cap\'itulo 3}
+\end{center}
+\vspace*{\fill}
+\phantomsection
+\addcontentsline{toc}{chapter}{Cap\'itulo 3}
+
+%\include*{capitulos/cap03}
+%\let\clearpage\relax
+
+% CONCLUSIONES Y LÍNEAS FUTURAS DE TRABAJO
+\newpage
+\thispagestyle{empty}
+\vspace*{6cm}
+\begin{center}
+    \fontsize{16pt}{19.2pt}\selectfont
+    \textbf{Cap\'itulo 4}
+\end{center}
+\vspace*{\fill}
+\phantomsection
+\addcontentsline{toc}{chapter}{Cap\'itulo 4}
+
+%\include*{capitulos/cap04}
+%\let\clearpage\relax
+% AGREGAR MAS CAPITULO
+%\include{capitulos/cap05}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% BACKMATTER %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\backmatter  
+\titleformat{\chapter}[display]
+{\bfseries\centering\normalsize} 
+{\centering\chaptertitlename \thechapter}{24pt}{}
+\titlespacing*{\chapter}
+{0pt}{30pt}{40pt}
+%%% Bibliografía bibname
+% Referencias y Apéndices sin número de página visible (el contador no se toca)
+\clearpage
+\pagestyle{empty}
+\assignpagestyle{\chapter}{empty}
+\renewcommand{\bibname}{Referencias}
+\phantomsection
+\addcontentsline{toc}{chapter}{Referencias} % Para que salga en el índice general
+%\bibliographystyle{ieeetr}
+%\bibliography{referencias}
+
+\printbibliography{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% APÉNDICES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\appendix
+%\clearpage
+%\renewcommand{\appendixtocname}{Ap\'endices}
+%\renewcommand{\appendixname}{Ap\'endices}
+%\renewcommand{\appendixpagename}{Ap\'endices}
+%\renewcommand{\thesection}{\Alph{section}}
+%\addappheadtotoc
+%\appendixpage
+%\pagestyle{empty}
+
+%\include*{apendices}
+
+
+\end{document}

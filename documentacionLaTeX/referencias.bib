@@ -1,0 +1,464 @@
+% Encoding: UTF-8
+
+%%%%%%%%%%%%%%%%%%%% REFERENCIAS ANTERIORES (de ejemplo, comentadas) %%%%%%%%%%%%%%%%%%%%
+% 
+% @article{Baird1981,
+%   author={Baird, John E.},
+%   journal={IEEE Transactions on Professional Communication}, 
+%   title={How to overcome errors in public speaking}, 
+%   year={1981},
+%   volume={PC-24},
+%   number={2},
+%   pages={94-98},
+%   keywords={Speech;Public speaking;Organizing;TV;Position measurement;Educational institutions;Arrays},
+%   doi={10.1109/TPC.1981.6447846}
+% }
+% 
+% @inproceedings{Ochoa2018,
+%   author = {Ochoa, Xavier and Dom\'{\i}nguez, Federico and Guam\'{a}n, Bruno and Maya, Ricardo and Falcones, Gabriel and Castells, Jaime},
+%   title = {The RAP system: automatic feedback of oral presentation skills using multimodal analysis and low-cost sensors},
+%   year = {2018},
+%   isbn = {9781450364003},
+%   publisher = {Association for Computing Machinery},
+%   address = {New York, NY, USA},
+%   url = {https://doi.org/10.1145/3170358.3170406},
+%   doi = {10.1145/3170358.3170406},
+%   abstract = {Developing communication skills in higher education students could be a challenge to professors due to the time needed to provide formative feedback. This work presents RAP, a scalable system to provide automatic feedback to entry-level students to develop basic oral presentation skills. The system improves the state-of-the-art by analyzing posture, gaze, volume, filled pauses and the slides of the presenters through data captured by very low-cost sensors. The system also provides an off-line feedback report with multimodal recordings of their performance. An initial evaluation of the system indicates that the system's feedback highly agrees with human feedback and that students considered that feedback useful to develop their oral presentation skills.},
+%   booktitle = {Proceedings of the 8th International Conference on Learning Analytics and Knowledge},
+%   pages = {360-364},
+%   numpages = {5},
+%   keywords = {filled-pauses, gaze, multimodal learning analytics, posture},
+%   location = {Sydney, New South Wales, Australia},
+%   series = {LAK '18}
+% }
+% 
+% @article{Rodero2022,
+%   author={Rodero, Emma},
+%   title={Effectiveness, Attractiveness, and Emotional Response to Voice Pitch and Hand Gestures in Public Speaking},
+%   journal={Frontiers in Communication},
+%   volume={7},
+%   year={2022},
+%   url={https://www.frontiersin.org/articles/10.3389/fcomm.2022.869084},
+%   doi={10.3389/fcomm.2022.869084},
+%   issn={2297-900X},
+%   abstract={Some non-verbal cues, such as voice pitch and gestures, can influence the individual's emotional response to different messages. For this reason, non-verbal communication can be understood as the language of emotion, while the content is the language of ideas. But the research question here is what voice pitch and hand gesture strategies are more effective, attractive, and elicit a stronger emotional response. To answer this question, this study analyzes some pitch and hand gesture strategies in public discourses. In the experiment, 120 participants were exposed to different public presentations with three conditions for voice pitch (few, medium, and many variations) and three for hand gestures (smooth, medium, and strong intensity). Then, they rated the effectiveness and attractiveness levels and self-report arousal and valence while their emotional response was registered. Physiological arousal was measured with electrodermal activity (EDA) and valence with facial expression recognition. Participants perceived the medium pitch variations and the medium intensity of gestures as the most effective and attractive strategies with the highest self-reported arousal and valence. The combination that elicited the strongest autonomic arousal was medium pitch variations-strong gestures. Finally, the most positive emotional valence was for many pitch variations and medium gestures and the happiest for the combination many-strong.}
+% }
+% 
+% @inproceedings{Siriak2019,
+%   author={Siriak, Rostyslav and Skarga-Bandurova, Inna and Boltov, Yehor},
+%   booktitle={2019 10th IEEE International Conference on Intelligent Data Acquisition and Advanced Computing Systems: Technology and Applications (IDAACS)}, 
+%   title={Deep Convolutional Network with Long Short-Term Memory Layers for Dynamic Gesture Recognition}, 
+%   year={2019},
+%   volume={1},
+%   pages={158-162},
+%   abstract={The framework based on a convolutional neural network (CNN) with adding long short-term memory layers (LSTM) for recognizing hand gestures from a video stream in real-time is presented. A review and analysis of existing models relating to gesture recognition in deep learning are considered. The task was to perform hand gesture classification using deep convolutional neural networks and obtain a simple, precise and resource-efficient system for visual recognition of letters and digits in sign language. The model is stable to rather wide angles of hand rotation and independent of lighting due to the using of contour patterns. In experiments with CNN, 98.46\% accuracy on the test dataset has been obtained.},
+%   keywords={Gesture recognition;Feature extraction;Training;Convolution;Kernel;Machine learning;Task analysis;convolutional neuron network;long short term memory;deep learning;human gesture recognition},
+%   doi={10.1109/IDAACS.2019.8924381},
+%   month = {9}
+% }
+% 
+% @misc{luo2018lstm,
+%   title={LSTM Pose Machines},
+%   author={Yue Luo and Jimmy Ren and Zhouxia Wang and Wenxiu Sun and Jinshan Pan and Jianbo Liu and Jiahao Pang and Liang Lin},
+%   year={2018},
+%   eprint={1712.06316},
+%   archivePrefix={arXiv},
+%   primaryClass={cs.CV}
+% }
+% 
+% @article{Ullah2018,
+%   author={Ullah, Amin and Ahmad, Jamil and Muhammad, Khan and Sajjad, Muhammad and Baik, Sung Wook},
+%   journal={IEEE Access}, 
+%   title={Action Recognition in Video Sequences using Deep Bi-Directional LSTM With CNN Features}, 
+%   year={2018},
+%   volume={6},
+%   pages={1155-1166},
+%   keywords={Feature extraction;Computer architecture;Streaming media;Visualization;Microprocessors;Logic gates;Shape;Action recognition;deep learning;recurrent neural network;deep bidirectional long short-term memory;convolution neural network},
+%   doi={10.1109/ACCESS.2017.2778011}
+% }
+% 
+% @article{HE2020248,
+%   title={Visual Recognition of traffic police gestures with convolutional pose machine and handcrafted features},
+%   journal={Neurocomputing},
+%   volume={390},
+%   pages={248-259},
+%   year={2020},
+%   issn={0925-2312},
+%   doi={https://doi.org/10.1016/j.neucom.2019.07.103},
+%   url={https://www.sciencedirect.com/science/article/pii/S0925231219314420},
+%   author={Jian He and Cheng Zhang and Xinlin He and Ruihai Dong},
+%   keywords={Gesture recognition, Human–machine interface, Traffic police gestures, Convolutional neural network, Deep learning},
+%   abstract={Autonomous vehicles have become a hot spot of the automotive industry, many cities have claimed that autonomous vehicles should be capable of recognizing gestures used by traffic police. Traditional traffic police gesture recognition methods rely on depth-sensor or wearable-devices, which limits their availability in the domain of the intelligent vehicle. Vision-based methods have fewer requirements for distance, but the modeling process is challenging due to the complexity of the visual scenes. Inspired by the recent success in vision-based pose estimation networks such as Convolutional Pose Machine (CPM), in this paper, we propose a novel vision-based human-machine interface to recognize eight kinds of Chinese traffic police gestures and apply it in the real-time recognition tasks. This method integrates a modified CPM network and two kinds of handcrafted features: Relative Bone Length and Angle with Gravity as spatial domain features, and adopt a Long short-term memory (LSTM) network to extract temporal domain features. To train and validate our method, we create a gestures dataset with two hours of traffic police gesture videos, which has 3354 gesture instances. The experiment results show that the proposed method is capable of recognizing traffic police gestures, and is fast enough for online gesture prediction.}
+% }
+% 
+% @misc{wang2023deep,
+%   title={Deep Neural Networks in Video Human Action Recognition: A Review}, 
+%   author={Zihan Wang and Yang Yang and Zhi Liu and Yifan Zheng},
+%   year={2023},
+%   eprint={2305.15692},
+%   archivePrefix={arXiv},
+%   primaryClass={cs.CV}
+% }
+% 
+% @inproceedings{Ren10270896,
+%   author={Ren, Yu and Li, Chuanming and Bao, Wenxing and Chen, Xu and Jing, Yongjun},
+%   booktitle={2023 8th International Conference on Signal and Image Processing (ICSIP)}, 
+%   title={A Study of Student Action Recognition in Smart Classrooms Based on Improved SlowFast Swin Transformer}, 
+%   year={2023},
+%   pages={59-63},
+%   abstract={Understanding actions in videos remains a significant challenge in computer vision, and Transformer-based methods have emerged as leading approaches for image recognition. In comparison to traditional image recognition, video action recognition is more difficult due to its higher dimensionality and larger dataset. Consequently, we introduce SF-Swin based on the Transformer framework, which incorporates SlowFast’s fast and slow pathways to address spatial structure and temporal events. Additionally, we employ lateral connections to fuse the information from both pathways. We also introduce Smoothed Sample Loss (SSLoss) to handle the long-tail distribution problem. Lastly, we design and created a student action dataset utilizing authentic real college classroom surveillance videos. SF-Swin was evaluated on the Kinetics dataset and our student action dataset, demonstrating improved accuracy without a substantial increase in computational effort.},
+%   keywords={Computer vision;Image recognition;Fuses;Surveillance;Computational modeling;Transformers;Kinetic theory;SF-Swin;SlowFast Swin Transformer;SSLoss;Video Action Recognition;SlowFast;Swin Transformer},
+%   doi={10.1109/ICSIP57908.2023.10270896},
+%   month={7}
+% }
+% 
+% @INPROCEEDINGS{Do2022,
+%   author={Do, Jeonghyeok and Kim, Munchurl},
+%   booktitle={2022 22nd International Conference on Control, Automation and Systems (ICCAS)}, 
+%   title={Multi-modal Transformer for Indoor Human Action Recognition}, 
+%   year={2022},
+%   volume={},
+%   number={},
+%   pages={1155-1160},
+%   keywords={Training;Industries;Correlation;Convolution;Dynamics;Benchmark testing;Transformers;Human action recognition;Multi-Modal Transformer (MMT);multiple data modalities;RGB data;skeleton data},
+%   doi={10.23919/ICCAS55662.2022.10003914}
+% }
+% 
+% @INPROCEEDINGS{Meenak2022,
+%   author={Meenakshisundaram, N and Ramkumar, G.},
+%   booktitle={2022 International Conference on Computer, Power and Communications (ICCPC)}, 
+%   title={An Efficient and Robust Model for Cervical Cancer Risk Classification based on Random Forest Classifier}, 
+%   year={2022},
+%   volume={},
+%   number={},
+%   pages={330-335},
+%   keywords={Computational modeling;Transforms;Organizations;Forestry;Cervical cancer;Random forests;Random Forest;Machine Learning;Pre-processing Data;Cervical Cancer},
+%   doi={10.1109/ICCPC55978.2022.10072264}}
+% 
+% @Article{Ding2021,
+% AUTHOR = {Ding, Xue and Jiang, Ting and Zhong, Yi and Huang, Yan and Li, Zhiwei},
+% TITLE = {Wi-Fi-Based Location-Independent Human Activity Recognition via Meta Learning},
+% JOURNAL = {Sensors},
+% VOLUME = {21},
+% YEAR = {2021},
+% NUMBER = {8},
+% ARTICLE-NUMBER = {2654},
+% URL = {https://www.mdpi.com/1424-8220/21/8/2654},
+% PubMedID = {33918955},
+% ISSN = {1424-8220},
+% DOI = {10.3390/s21082654},
+% ABSTRACT = {Wi-Fi-based device-free human activity recognition has recently become a vital underpinning for various emerging applications, ranging from the Internet of Things (IoT) to Human–Computer Interaction (HCI). Although this technology has been successfully demonstrated for location-dependent sensing, it relies on sufficient data samples for large-scale sensing, which is enormously labor-intensive and time-consuming. However, in real-world applications, location-independent sensing is crucial and indispensable. Therefore, how to alleviate adverse effects on recognition accuracy caused by location variations with the limited dataset is still an open question. To address this concern, we present a location-independent human activity recognition system based on Wi-Fi named WiLiMetaSensing. Specifically, we first leverage a Convolutional Neural Network and Long Short-Term Memory (CNN-LSTM) feature representation method to focus on location-independent characteristics. Then, in order to well transfer the model across different positions with limited data samples, a metric learning-based activity recognition method is proposed. Consequently, not only the generalization ability but also the transferable capability of the model would be significantly promoted. To fully validate the feasibility of the presented approach, extensive experiments have been conducted in an office with 24 testing locations. The evaluation results demonstrate that our method can achieve more than 90\% in location-independent human activity recognition accuracy. More importantly, it can adapt well to the data samples with a small number of subcarriers and a low sampling rate.},
+% }
+% 
+% @INPROCEEDINGS{Rajabi2020,
+%   author={Rajabi, Zahra and Shehu, Amarda and Uzuner, Ozlem},
+%   booktitle={2020 IEEE 14th International Conference on Semantic Computing (ICSC)}, 
+%   title={A Multi-channel BiLSTM-CNN Model for Multilabel Emotion Classification of Informal Text}, 
+%   year={2020},
+%   volume={},
+%   number={},
+%   pages={303-306},
+%   keywords={Psychology;Training;Task analysis;Feature extraction;Testing;Semantics;Predictive models;Sentiment analysis, emotion classification, twitter text, multi-label classification , deep learning.},
+%   doi={10.1109/ICSC.2020.00060}
+% }
+% 
+% @misc{javadi2021faces,
+%       title={The Many Faces of Anger: A Multicultural Video Dataset of Negative Emotions in the Wild (MFA-Wild)}, 
+%       author={Roya Javadi and Angelica Lim},
+%       year={2021},
+%       eprint={2112.05267},
+%       archivePrefix={arXiv},
+%       primaryClass={cs.CV}
+% }
+% 
+% % -----------------------------------------------------------------
+% @PhDThesis{upm56279,
+%           number = {10.20868/UPM.thesis.56279},
+%            title = {Contribution to public health data processing architectures applied to resilient smart cities affected by natural hazards = Contribuci{\'o}n a las arquitecturas de procesamiento de datos de salud p{\'u}blica aplicadas a ciudades inteligentes resilientes afectadas por peligros naturales},
+%           school = {Escuela Técnica Superior de Ingenieros en Telecomunicación},
+%           author = {Washington Vel{\'a}squez Vargas},
+%             year = {2019},
+%         keywords = {Ciudades Inteligentes; Emergencias; Indice de Masa Corporal; Riesgos Naturales; Salud Publica = Smart Cities; Emergencies; Body Mass Index; Natural Hazards; Public Health},
+%              url = {http://oa.upm.es/56279/},
+% }
+% 
+% @book{ref:young2006sears,
+%   title={Sears and Zemansky's university physics},
+%   author={Young, Hugh D and Freedman, Roger A and Ford, Albert Lewis},
+%   volume={1},
+%   year={2006},
+%   publisher={Pearson education}
+% }
+% 
+% @article{velasquez2017relation,
+%   title={Relation between BMI and Exit Time of a Building in an Emergency Situation: Earthquake.},
+%   author={Vel{\'a}squez, Washington and Munoz-Arcentales, Andres and Salvach{\'u}a, Joaqu{\'\i}n},
+%   journal={Engineering Letters},
+%   volume={25},
+%   number={4},
+%   year={2017}
+% }
+% 
+% @INPROCEEDINGS{6469518,
+%   author={Stipaničev, Darko and Šerić, Ljiljana and Braović, Maja and Krstinić, Damir and Jakovčević, Toni and Štula, Maja and Bugarić, Marin and Maras, Josip},
+%   booktitle={2012 3rd International Conference on Image Processing Theory, Tools and Applications (IPTA)}, 
+%   title={Vision based wildfire and natural risk observers}, 
+%   year={2012},
+%   volume={},
+%   number={},
+%   pages={37-42},
+%   doi={10.1109/IPTA.2012.6469518}}
+% 
+
+%%%%%%%%%%%%%%%%%%%% REFERENCIAS DEL MARCO TEÓRICO %%%%%%%%%%%%%%%%%%%%
+
+@article{Alam2026,
+  author  = {Alam, S. and Dong, Z. and Kularatne, I. and Rashid, M. S.},
+  title   = {Exploring approaches to overcome challenges in adopting human resource analytics through stakeholder engagement},
+  journal = {Management Review Quarterly},
+  year    = {2026},
+  volume  = {76},
+  pages   = {729--787},
+  doi     = {10.1007/s11301-025-00491-y}
+}
+
+@article{AlvarezGarcia2024,
+  author  = {{Alvarez Garcia}, M. and {Arenas Parra}, M. and {Ibar Alonso}, R.},
+  title   = {Uncovering student profiles: An explainable cluster analysis approach to {PISA} 2022},
+  journal = {Computers \& Education},
+  year    = {2024},
+  volume  = {223},
+  url     = {https://www.sciencedirect.com/science/article/pii/S0360131524001805}
+}
+
+@article{Asfahani2024,
+  author  = {Asfahani, A.},
+  title   = {Fusing talent horizons: The transformative role of data integration in modern talent management},
+  journal = {Discover Sustainability},
+  year    = {2024},
+  volume  = {5},
+  number  = {25},
+  doi     = {10.1007/s43621-024-00212-7}
+}
+
+@article{Fegade2023,
+  author  = {Fegade, T. K. and Sharma, P.},
+  title   = {Exploring the impact of employee training and development on organizational efficiency: A systematic literature review},
+  journal = {IOSR Journal of Business and Management},
+  year    = {2023},
+  volume  = {25},
+  number  = {1},
+  pages   = {56--63},
+  doi     = {10.9790/487X-2501025663}
+}
+
+@article{He2026,
+  author  = {He, P. and Aluvalu, R. and Tejani, G. G.},
+  title   = {Job satisfaction as a catalyst mechanism transforming knowledge competence and intrinsic motivation into sustained lecturer performance in higher education},
+  journal = {Scientific Reports},
+  year    = {2026},
+  volume  = {16},
+  number  = {1},
+  doi     = {10.1038/s41598-026-38488-6}
+}
+
+@article{Horodyski2023,
+  author  = {Horodyski, P.},
+  title   = {Recruiter's perception of artificial intelligence ({AI})-based tools in recruitment},
+  journal = {Computers in Human Behavior Reports},
+  year    = {2023},
+  volume  = {10},
+  pages   = {100298}
+}
+
+@article{Karwehl2021,
+  author  = {Karwehl, L. J. and Kauffeld, S.},
+  title   = {Traditional and new ways in competence management: Application of {HR} analytics in competence management},
+  journal = {Gruppe. Interaktion. Organisation. Zeitschrift für Angewandte Organisationspsychologie ({GIO})},
+  year    = {2021},
+  volume  = {52},
+  pages   = {7--24},
+  doi     = {10.1007/s11612-021-00548-y}
+}
+
+@article{Magham2024,
+  author  = {Magham, R. K.},
+  title   = {Mitigating bias in {AI}-driven recruitment: The role of explainable machine learning ({XAI})},
+  journal = {International Journal of Scientific Research in Computer Science, Engineering and Information Technology},
+  year    = {2024},
+  volume  = {10},
+  number  = {5},
+  pages   = {461--469},
+  url     = {https://www.researchgate.net/publication/384802794_Mitigating_Bias_in_AI-Driven_Machine_Learning_The_Role_of_Explainable_Machine_Learning_XAI}
+}
+
+@article{Minbaeva2018,
+  author  = {Minbaeva, D. B.},
+  title   = {Creating credible human capital analytics for organizational competitive advantage},
+  journal = {Human Resource Management},
+  year    = {2018},
+  volume  = {57},
+  number  = {3},
+  pages   = {701--713},
+  doi     = {10.1002/hrm.21843}
+}
+
+@article{Nawaz2024,
+  author  = {Nawaz, N. and Arunachalam, H. and Pathi, B. K. and Gajenderan, V.},
+  title   = {The adoption of artificial intelligence in human resources management practices},
+  journal = {International Journal of Information Management Data Insights},
+  year    = {2024},
+  volume  = {4},
+  number  = {1},
+  doi     = {10.1016/j.jjimei.2023.100208}
+}
+
+@article{Quito2025,
+  author  = {Quito, P. and Valdiviezo, J. and Maldonado, J.},
+  title   = {Sistema recomendador para la asignación de profesores en la {Universidad de Cuenca}},
+  journal = {Revista Tecnológica ESPOL},
+  year    = {2025},
+  volume  = {37},
+  number  = {e1},
+  pages   = {127--145},
+  url     = {https://rte.espol.edu.ec/index.php/tecnologica/es/article/view/1354}
+}
+
+@article{Stevens2023,
+  author  = {Stevens, T. M.},
+  title   = {Teacher profiles in higher education: The move to online education during the {COVID}-19 crisis},
+  journal = {Learning Environments Research},
+  year    = {2023},
+  volume  = {26},
+  pages   = {873--898},
+  doi     = {10.1007/s10984-023-09458-w}
+}
+
+@article{Zhu2018,
+  author  = {Zhu, C. and Liu, A. and Chen, G.},
+  title   = {High-performance work systems and corporate performance: The influence of entrepreneurial orientation and organizational learning},
+  journal = {Frontiers of Business Research in China},
+  year    = {2018},
+  volume  = {12},
+  number  = {4},
+  pages   = {15},
+  doi     = {10.1186/s11782-018-0035-0}
+}
+
+%%%%%%%%%%%%%%%%%%%% REFERENCIAS METODOLÓGICAS (capítulo 2) %%%%%%%%%%%%%%%%%%%%
+
+@article{Chen2024,
+  author  = {Chen, J. and Xiao, S. and Zhang, P. and Luo, K. and Lian, D. and Liu, Z.},
+  title   = {{BGE M3-Embedding}: Multi-lingual, multi-functionality, multi-granularity text embeddings through self-knowledge distillation},
+  journal = {arXiv preprint arXiv:2402.03216},
+  year    = {2024},
+  doi     = {10.48550/arXiv.2402.03216}
+}
+
+@article{Wang2014,
+  author  = {Wang, B. and Mezlini, A. M. and Demir, F. and Fiume, M. and Tu, Z. and Brudno, M. and Haibe-Kains, B. and Goldenberg, A.},
+  title   = {Similarity network fusion for aggregating data types on a genomic scale},
+  journal = {Nature Methods},
+  year    = {2014},
+  volume  = {11},
+  number  = {3},
+  pages   = {333--337},
+  doi     = {10.1038/nmeth.2810}
+}
+
+@article{Grootendorst2022,
+  author  = {Grootendorst, M.},
+  title   = {{BERTopic}: Neural topic modeling with a class-based {TF-IDF} procedure},
+  journal = {arXiv preprint arXiv:2203.05794},
+  year    = {2022},
+  doi     = {10.48550/arXiv.2203.05794}
+}
+
+@article{McInnes2018,
+  author  = {McInnes, L. and Healy, J. and Melville, J.},
+  title   = {{UMAP}: Uniform manifold approximation and projection for dimension reduction},
+  journal = {arXiv preprint arXiv:1802.03426},
+  year    = {2018},
+  doi     = {10.48550/arXiv.1802.03426}
+}
+
+@inproceedings{Campello2013,
+  author    = {Campello, R. J. G. B. and Moulavi, D. and Sander, J.},
+  title     = {Density-based clustering based on hierarchical density estimates},
+  booktitle = {Advances in Knowledge Discovery and Data Mining (PAKDD 2013)},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {7819},
+  pages     = {160--172},
+  publisher = {Springer},
+  year      = {2013},
+  doi       = {10.1007/978-3-642-37456-2_14}
+}
+
+@article{Lloyd1982,
+  author  = {Lloyd, S.},
+  title   = {Least squares quantization in {PCM}},
+  journal = {IEEE Transactions on Information Theory},
+  year    = {1982},
+  volume  = {28},
+  number  = {2},
+  pages   = {129--137},
+  doi     = {10.1109/TIT.1982.1056489}
+}
+
+@article{Rousseeuw1987,
+  author  = {Rousseeuw, P. J.},
+  title   = {Silhouettes: A graphical aid to the interpretation and validation of cluster analysis},
+  journal = {Journal of Computational and Applied Mathematics},
+  year    = {1987},
+  volume  = {20},
+  pages   = {53--65},
+  doi     = {10.1016/0377-0427(87)90125-7}
+}
+
+@article{Hubert1985,
+  author  = {Hubert, L. and Arabie, P.},
+  title   = {Comparing partitions},
+  journal = {Journal of Classification},
+  year    = {1985},
+  volume  = {2},
+  number  = {1},
+  pages   = {193--218},
+  doi     = {10.1007/BF01908075}
+}
+
+@article{vanderMaaten2008,
+  author  = {{van der Maaten}, L. and Hinton, G.},
+  title   = {Visualizing data using {t-SNE}},
+  journal = {Journal of Machine Learning Research},
+  year    = {2008},
+  volume  = {9},
+  pages   = {2579--2605}
+}
+
+@article{Robertson2009,
+  author  = {Robertson, S. and Zaragoza, H.},
+  title   = {The probabilistic relevance framework: {BM25} and beyond},
+  journal = {Foundations and Trends in Information Retrieval},
+  year    = {2009},
+  volume  = {3},
+  number  = {4},
+  pages   = {333--389},
+  doi     = {10.1561/1500000019}
+}
+
+@inproceedings{Cormack2009,
+  author    = {Cormack, G. V. and Clarke, C. L. A. and B{\"u}ttcher, S.},
+  title     = {Reciprocal rank fusion outperforms {Condorcet} and individual rank learning methods},
+  booktitle = {Proceedings of the 32nd International ACM SIGIR Conference on Research and Development in Information Retrieval},
+  pages     = {758--759},
+  publisher = {ACM},
+  year      = {2009},
+  doi       = {10.1145/1571941.1572114}
+}
+
+@misc{LOPDP2021,
+  author       = {{Asamblea Nacional del Ecuador}},
+  title        = {Ley Orgánica de Protección de Datos Personales},
+  year         = {2021},
+  howpublished = {Registro Oficial Suplemento 459, 26 de mayo de 2021}
+}

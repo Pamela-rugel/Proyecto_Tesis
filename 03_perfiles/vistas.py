@@ -211,8 +211,12 @@ def vista_estructurada(ev: pd.DataFrame, personas: list[int]) -> pd.DataFrame:
     return df[list(VARIABLES_ESTRUCTURADAS)]
 
 
-def vistas_semanticas(ev: pd.DataFrame, personas: list[int]) -> dict[str, dict]:
-    """{'v1_trayectoria': {'matriz': (n x d), 'faltante': bool[n]}, 'v2_academico': ...}."""
+def vistas_semanticas(ev: pd.DataFrame, personas: list[int], vistas: dict[str, list[str]] | None = None) -> dict[str, dict]:
+    """{'v1_trayectoria': {'matriz': (n x d), 'faltante': bool[n]}, 'v2_academico': ...}. Con `vistas`
+    ({nombre: tipos de evidencia}) se calcula cualquier otro agrupamiento de tipos con el mismo
+    procedimiento (p. ej. una dimensión, DEC-053)."""
+    if vistas is None:
+        vistas = {"v1_trayectoria": TIPOS_V1_TRAYECTORIA, "v2_academico": TIPOS_V2_ACADEMICO}
     textos, vectores, _ = emb.cargar()
     posicion = dict(zip(textos["clave"], range(len(textos))))
     d = ev[["persona_id", "tipo_id", "texto"]].dropna().copy()
@@ -225,7 +229,7 @@ def vistas_semanticas(ev: pd.DataFrame, personas: list[int]) -> dict[str, dict]:
     d = d[d["persona_id"].isin(idx_persona)]
 
     salida = {}
-    for nombre, tipos in (("v1_trayectoria", TIPOS_V1_TRAYECTORIA), ("v2_academico", TIPOS_V2_ACADEMICO)):
+    for nombre, tipos in vistas.items():
         s = d[d["tipo_id"].isin(tipos)]
         # nivel 1: persona + tipo
         grupos = s.groupby(["persona_id", "tipo_id"], sort=False).ngroup().to_numpy()
@@ -243,7 +247,7 @@ def vistas_semanticas(ev: pd.DataFrame, personas: list[int]) -> dict[str, dict]:
         matriz[~faltante] /= conteo[~faltante, None]
         normas = np.linalg.norm(matriz, axis=1, keepdims=True)
         matriz = np.divide(matriz, normas, out=np.zeros_like(matriz), where=normas > 0)
-        if faltante.any():  # sin evidencias en la vista: vector medio (neutral)
+        if faltante.any() and (~faltante).any():  # sin evidencias en la vista: vector medio (neutral)
             media = matriz[~faltante].mean(axis=0)
             matriz[faltante] = media / np.linalg.norm(media)
         salida[nombre] = {"matriz": matriz.astype(np.float32), "faltante": faltante}

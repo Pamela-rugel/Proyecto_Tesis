@@ -17,148 +17,89 @@ export interface AmbitoResumen {
   nombre: string;
   n_personas: number;
   n_vigentes: number;
-  k: number;
-  perfiles_mixtos: number;
-  estabilidad_ari: number;
 }
 
 export interface Ambitos {
   version: string;
   fecha: string;
-  metodo: string;
-  vistas: Record<string, string>;
   estado: { actualizado: boolean; evidencias_cambiadas: string[] };
   ambitos: AmbitoResumen[];
 }
 
-export interface Rasgo {
-  variable: string;
-  descripcion: string;
-  z: number;
-  media_cluster: number;
-  media_ambito: number;
-}
-
-/** Rasgo en unidades reales (años, cantidades, %, sí/no) para mostrar; ver backend/legible.py. */
-export interface RasgoLegible {
-  variable: string;
-  texto: string;
-  direccion: "más" | "menos";
-  valor_grupo: string;
-  valor_referencia: string;
-  valor_persona?: string;
-  comparte?: boolean;
-}
-
-export interface SeleccionK {
-  k_elegido: number;
-  criterio: string;
-  tabla: { k: number; eigengap: number; silueta: number; tamano_minimo: number }[];
-}
-
-/** Subpatron (segundo nivel): misma ficha que un cluster, pero descrita frente a su patron padre. */
-export interface FichaSubpatron extends Omit<FichaCluster, "subdivision"> {
-  subpatron_id: string;
-}
-
-export interface Subdivision {
-  k: number;
-  seleccion_k: SeleccionK;
-  estabilidad_ari: number;
-  nota: string;
-  subpatrones: FichaSubpatron[];
-}
-
-export interface FichaCluster {
-  cluster: number;
-  etiqueta: string;
-  descripcion: string;
-  tamano: number;
-  tamano_vigentes: number;
-  perfiles_mixtos: number;
-  cohesion: number;
-  tipo_empleado: Record<string, number>;
-  tipos_evidencia: { tipo_id: string; tipo: string; prop_integrantes: number; prop_ambito: number; lift: number | null }[];
-  rasgos_estructurados: Rasgo[];
-  rasgos_legibles: RasgoLegible[];
-  evidencias_compartidas: { tipo: string; texto: string; integrantes: number; prop: number }[];
-  terminos_distintivos: string[];
-  unidades: { unidad: string; prop: number }[];
-  /** medoide elegido solo entre personas vigentes; null si el grupo no tiene vigentes */
-  representante: { persona_id: number; nombre: string; cargo_actual: string | null; unidad_actual: string | null; vigente: boolean } | null;
-  microarquetipos?: number[];
-  microarquetipo?: number;
-  subdivision: Subdivision | null;
-}
-
-export interface ResumenClustering {
-  ambito: Ambito;
+// ---- Dimensiones de evidencia (DEC-053) y sus temas y patrones descubiertos (DEC-055) ----
+export interface ResumenDimension {
+  dimension: string;
   nombre: string;
   n_personas: number;
   n_vigentes: number;
-  k: number;
-  seleccion_k: SeleccionK;
-  estabilidad_ari: number;
-  perfiles_mixtos: number;
-  variables_estructuradas_usadas: string[];
-  vistas: string[];
-  clusters: FichaCluster[];
+  n_personas_ambito: number;
+  n_vigentes_ambito: number;
+  k_temas: number;
+  k_patrones: number;
+  nota: string | null;
 }
 
-export interface PuntoMapa {
+export interface Tema {
+  id: number;
+  etiqueta: string;
+  terminos_distintivos: string[];
+  n_textos: number;
+  n_evidencias: number;
+  n_personas: number;
+  n_personas_vigentes: number;
+  personas_dominante: number;
+  ejemplos: { texto: string; personas: number }[];
+}
+
+export interface Patron {
+  id: number;
+  etiqueta: string;
+  tamano: number;
+  tamano_vigentes: number;
+  proporcion: number;
+  representante_id: number | null;
+  representante_nombre: string | null;
+  componentes: { componente: string; descripcion: string; z: number; media_grupo: number }[];
+}
+
+export interface DetalleDimension {
+  ambito: Ambito;
+  dimension: string;
+  nombre: string;
+  n_personas: number;
+  nota?: string;
+  definicion: { nombre: string; tipos_evidencia: string[]; componentes: Record<string, { peso: number; descripcion: string }> };
+  temas: { n_textos: number; k: number; proporcion_asignada_por_cercania: number; temas: Tema[] } | null;
+  patrones: { k: number; estabilidad_ari: number; perfiles_mixtos: number; patrones: Patron[] } | null;
+}
+
+export interface PersonaDimension {
   persona_id: number;
   nombre: string;
-  tsne_x: number;
-  tsne_y: number;
-  cluster: number;
-  cluster_2: number;
-  pertenencia_1: number;
-  pertenencia_2: number;
-  perfil_mixto: boolean;
+  intensidad: number;
+  n_evidencias: number;
   vigente: boolean;
-  es_representante: boolean;
   cargo_actual: string | null;
   unidad_actual: string | null;
   tipo_empleado: string | null;
-  subpatron: number;
-  es_subrepresentante: boolean;
+  patron: number | null;
+  afinidad_1: number | null;
+  mixto: boolean | null;
+  similitud_representante?: number | null;
+  proporcion?: number;
 }
 
-export interface Mapa {
-  ambito: Ambito;
-  solo_vigentes: boolean;
-  etiquetas: Record<string, string>;
-  puntos: PuntoMapa[];
-}
-
-export interface Integrante {
-  persona_id: number;
+export interface DimensionPersona {
+  dimension: string;
   nombre: string;
-  cargo_actual: string | null;
-  unidad_actual: string | null;
-  tipo_empleado: string | null;
-  similitud_representante: number;
-  coseno_v1_representante: number;
-  coseno_v2_representante: number;
-  pertenencia_1: number;
-  cluster_2: number;
-  pertenencia_2: number;
-  perfil_mixto: boolean;
-  es_representante: boolean;
-  subpatron: number;
-  sub_pertenencia_1: number | null;
-  sub_perfil_mixto: boolean;
-  es_subrepresentante: boolean;
-  similitud_subrepresentante: number | null;
-  vigente: boolean;
-}
-
-export interface DetalleCluster {
-  ambito: Ambito;
-  solo_vigentes: boolean;
-  ficha: FichaCluster;
-  integrantes: Integrante[];
-  mixtos_desde_otros_clusters: { persona_id: number; nombre: string; cargo_actual: string | null; unidad_actual: string | null; cluster: number; pertenencia_1: number; pertenencia_2: number }[];
+  /** percentil 0-100 dentro del ámbito; 0 sin evidencias */
+  intensidad: number;
+  n_evidencias: number;
+  componentes: { componente: string; descripcion: string; valor: number }[];
+  /** temas descubiertos con más evidencias de la persona en la dimensión (máx. 3) */
+  temas: { tema: number; etiqueta: string; proporcion: number }[];
+  /** patrón de actividad descubierto (null si la dimensión no se subdivide) */
+  patron: { patron: number; etiqueta: string; afinidad: number; mixto: boolean; segundo: string; tamano: number; n_personas: number } | null;
 }
 
 export interface Persona {
@@ -166,71 +107,147 @@ export interface Persona {
   nombre: string;
   ambito: Ambito;
   estado: { tipo_empleado: string | null; vigente: boolean; cargo_actual: string | null; unidad_actual: string | null };
-  cluster: {
-    cluster: number;
-    etiqueta: string;
-    pertenencia: number;
-    perfil_mixto: boolean;
-    es_representante: boolean;
-    representante_id: number | null;
-    representante_nombre: string | null;
-    similitud_representante: number;
-    coseno_v1_representante: number;
-    coseno_v2_representante: number;
-    coseno_v1_centroide: number;
-    coseno_v2_centroide: number;
-  };
-  subpatron: {
-    subpatron: number;
-    subpatron_id: string;
-    etiqueta: string;
-    descripcion: string;
-    pertenencia: number;
-    perfil_mixto: boolean;
-    segundo_subpatron: string;
-    pertenencia_2: number;
-    es_representante: boolean;
-    representante_id: number | null;
-    representante_nombre: string | null;
-    similitud_representante: number;
-    estabilidad_ari: number;
+  dimensiones: DimensionPersona[];
+  /** patrón global descubierto sobre el perfil completo (DEC-057) */
+  patron_global: {
+    patron: number; etiqueta: string; afinidad: number; mixto: boolean; segundo: number; segundo_etiqueta: string; tamano: number;
+    /** 1 = es la persona representativa; 0 = la más distinta a ella dentro del grupo */
+    similitud_representante: number | null; es_representante: boolean;
+    representante_id: number | null; representante_nombre: string | null;
+    micro: {
+      micro: number; codigo: string; etiqueta: string; tamano: number; mixto: boolean;
+      similitud_representante: number | null; es_representante: boolean;
+      representante_id: number | null; representante_nombre: string | null;
+    } | null;
   } | null;
-  /** microarquetipo EXCLUSIVO (referencia estructural) */
-  microarquetipo: {
-    id: number; nombre: string; grupo: number; descripcion: string; afinidad: number; perfil_mixto: boolean;
-    segundo: string | null; afinidad_2: number; representante_id: number | null; representante_nombre: string | null;
-    similitud_representante: number | null;
-  } | null;
-  /** afinidades DERIVADAS (soft, no probabilidades) con todos los microarquetipos del ámbito, de mayor a menor */
-  afinidades_microarquetipos: { id: number; nombre: string; grupo: number; afinidad: number }[];
-  pertenencias: { cluster: number; etiqueta: string; pertenencia: number }[];
-  cluster_por_vista: { vista: string; nombre: string; cluster: number; etiqueta: string; coincide: boolean }[];
-  rasgos: (Rasgo & { z_persona: number; comparte: boolean })[];
-  rasgos_legibles: RasgoLegible[];
-  vistas_faltantes: string[];
-  evidencias: { tipo_id: string; n: number; textos: string[]; compartidas_con_cluster: string[] }[];
+  /** personas vigentes con el perfil completo más parecido (DEC-056), en orden */
+  parecidos: Parecido[];
+  evidencias: { tipo_id: string; n: number; textos: string[] }[];
 }
 
+export interface Parecido {
+  persona_id: number;
+  nombre: string;
+  rango: number;
+  cargo_actual: string | null;
+  /** dimensiones donde ambas tienen intensidad >= 50; `mismo_patron` si participan igual */
+  comparte: { dimension: string; nombre: string; mismo_patron: boolean; patron: number | null }[];
+}
+
+export interface PuntoPerfil {
+  persona_id: number;
+  nombre: string;
+  x: number;
+  y: number;
+  vigente: boolean;
+  cargo_actual: string | null;
+  unidad_actual: string | null;
+  intensidad?: number | null;
+  patron?: number | null;
+  patron_global?: number | null;
+  micro_global?: number | null;
+}
+
+export interface DimensionPatronGlobal {
+  dimension: string;
+  nombre: string;
+  intensidad_media: number;
+  /** media del grupo de referencia: todo el ámbito (patrón global) o su patrón global (microarquetipo) */
+  intensidad_media_referencia: number;
+  diferencia: number;
+  con_evidencia: number;
+  patron_frecuente: { patron: number; proporcion: number; proporcion_referencia: number; lift: number | null } | null;
+}
+export interface MicroGlobal {
+  id: number;
+  codigo: string;
+  etiqueta: string;
+  tamano: number;
+  tamano_vigentes: number;
+  proporcion: number;
+  representante_id: number | null;
+  representante_nombre: string | null;
+  dimensiones: DimensionPatronGlobal[];
+}
+export interface PatronGlobal {
+  id: number;
+  etiqueta: string;
+  tamano: number;
+  tamano_vigentes: number;
+  proporcion: number;
+  representante_id: number | null;
+  representante_nombre: string | null;
+  dimensiones: DimensionPatronGlobal[];
+  microarquetipos: { k: number; estabilidad_ari: number; lista: MicroGlobal[] } | null;
+}
+export const getPatronesGlobales = async (a: Ambito) =>
+  (await api.get<{ k?: number; estabilidad_ari?: number; patrones?: PatronGlobal[] }>(`/api/perfil/${a}/patrones`)).data;
+export interface PersonaPatronGlobal {
+  persona_id: number;
+  nombre: string;
+  cargo_actual: string | null;
+  vigente: boolean;
+  /** con su persona representativa: 1 = ella misma; 0 = la más distinta del grupo */
+  similitud: number | null;
+  es_rep: boolean;
+  entre_dos: boolean;
+  micro: number;
+}
+export const getPersonasPatronGlobal = async (a: Ambito, patron: number, micro: number | null, soloVigentes: boolean) =>
+  (
+    await api.get<{ total: number; personas: PersonaPatronGlobal[] }>(`/api/perfil/${a}/personas`, {
+      params: { patron, solo_vigentes: soloVigentes, ...(micro !== null ? { micro } : {}) },
+    })
+  ).data;
+export const getMapaPerfil = async (a: Ambito, dimension: string | null, soloVigentes: boolean) =>
+  (
+    await api.get<{ puntos: PuntoPerfil[] }>(`/api/perfil/${a}/mapa`, {
+      params: { solo_vigentes: soloVigentes, ...(dimension ? { dimension } : {}) },
+    })
+  ).data.puntos;
+
 export const getHealth = async () => (await api.get<Health>("/api/health")).data;
-export const getAmbitos = async () => (await api.get<Ambitos>("/api/clustering/ambitos")).data;
-export const getResumen = async (a: Ambito) => (await api.get<ResumenClustering>(`/api/clustering/${a}`)).data;
-export const getMapa = async (a: Ambito, soloVigentes: boolean) =>
-  (await api.get<Mapa>(`/api/clustering/${a}/mapa`, { params: { solo_vigentes: soloVigentes } })).data;
-export const getDetalleCluster = async (a: Ambito, c: number, soloVigentes: boolean) =>
-  (await api.get<DetalleCluster>(`/api/clustering/${a}/clusters/${c}`, { params: { solo_vigentes: soloVigentes } })).data;
+export const getAmbitos = async () => (await api.get<Ambitos>("/api/ambitos")).data;
+export const getDimensiones = async (a: Ambito) =>
+  (await api.get<{ ambito: Ambito; dimensiones: ResumenDimension[] }>(`/api/dimensiones/${a}`)).data.dimensiones;
+export const getDimension = async (a: Ambito, d: string) => (await api.get<DetalleDimension>(`/api/dimensiones/${a}/${d}`)).data;
+export const getPersonasDimension = async (a: Ambito, d: string, filtro: { patron?: number; tema?: number }, soloVigentes: boolean) =>
+  (
+    await api.get<{ total: number; personas: PersonaDimension[] }>(`/api/dimensiones/${a}/${d}/personas`, {
+      params: { ...filtro, solo_vigentes: soloVigentes },
+    })
+  ).data;
+export interface PuntoMapaDimension {
+  persona_id: number;
+  nombre: string;
+  x: number;
+  y: number;
+  vigente: boolean;
+  cargo_actual: string | null;
+  unidad_actual: string | null;
+  intensidad: number | null;
+  patron?: number | null;
+  tema?: number | null;
+  proporcion_tema?: number | null;
+}
+export type TipoMapa = "patrones" | "temas";
+export const getMapaDimension = async (a: Ambito, d: string, tipo: TipoMapa, soloVigentes: boolean) =>
+  (
+    await api.get<{ puntos: PuntoMapaDimension[] }>(`/api/dimensiones/${a}/${d}/mapa`, {
+      params: { tipo, solo_vigentes: soloVigentes },
+    })
+  ).data.puntos;
 export const getPersona = async (id: number, a: Ambito) =>
   (await api.get<Persona>(`/api/personas/${id}`, { params: { ambito: a } })).data;
 
-export interface ResultadoBusqueda {
+export interface PersonaEncontrada {
   persona_id: number;
   nombre: string;
   cargo_actual: string | null;
   unidad_actual: string | null;
-  cluster: number;
-  etiqueta: string;
 }
 export const buscarPersonas = async (a: Ambito, q: string) =>
-  (await api.get<{ resultados: ResultadoBusqueda[] }>(`/api/clustering/${a}/buscar`, { params: { q } })).data.resultados;
+  (await api.get<{ resultados: PersonaEncontrada[] }>("/api/personas/buscar", { params: { ambito: a, q } })).data.resultados;
 
 export interface TramoTrayectoria {
   carril: string;
@@ -278,7 +295,6 @@ export interface ResultadoBusqueda {
   deseables_cubiertas: number;
   puntaje: number;
   capacidades: CapacidadResultado[];
-  grupo?: { cluster: number; etiqueta: string };
 }
 
 export interface RespuestaBusqueda {

@@ -1,18 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
+import { de } from "../lib/texto";
 import { getPersona, type Ambito } from "../api/client";
-import { colorCluster, colorSub, NOMBRE_TIPO, pct } from "../lib/colores";
+import { NOMBRE_TIPO } from "../lib/colores";
+import IntensidadDimensiones from "./IntensidadDimensiones";
 import TimelineTrayectoria from "./TimelineTrayectoria";
 
 interface Props {
   ambito: Ambito;
   personaId: number;
-  onPersona: (id: number) => void;
-  /** volver a la vista anterior del panel (el grupo o la lista de grupos) */
+  /** volver a la vista anterior del panel */
   onVolver: () => void;
   textoVolver: string;
-  /** abrir el grupo de la persona en el panel */
-  onVerGrupo: (cluster: number) => void;
+  /** abrir la ficha de otra persona (personas parecidas) */
+  onPersona?: (id: number) => void;
 }
+
+const NOMBRE_AMBITO: Record<Ambito, string> = {
+  todos: "todo el personal",
+  administrativos: "el personal administrativo",
+  docentes: "el personal docente",
+};
 
 const Seccion = ({ titulo, children }: { titulo: string; children: React.ReactNode }) => (
   <div className="px-5 py-4 border-b">
@@ -21,8 +28,8 @@ const Seccion = ({ titulo, children }: { titulo: string; children: React.ReactNo
   </div>
 );
 
-// Ficha de la persona (vista del panel derecho) y por qué está en su grupo.
-export default function FichaPersona({ ambito, personaId, onPersona, onVolver, textoVolver, onVerGrupo }: Props) {
+// Ficha de la persona: intensidad, patrón y temas en cada dimensión, trayectoria y evidencias.
+export default function FichaPersona({ ambito, personaId, onVolver, textoVolver, onPersona }: Props) {
   const { data, isLoading, isError } = useQuery({ queryKey: ["persona", ambito, personaId], queryFn: () => getPersona(personaId, ambito) });
 
   const volver = (
@@ -32,9 +39,7 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
   );
   if (isLoading) return <div>{volver}<p className="p-5 text-sm text-slate-500">Cargando ficha…</p></div>;
   if (isError || !data)
-    return <div>{volver}<p className="p-5 text-sm text-red-600">La persona seleccionada no está en este ámbito.</p></div>;
-  const c = data.cluster;
-  const s = data.subpatron;
+    return <div>{volver}<p className="p-5 text-sm text-red-600">La persona seleccionada no está en {NOMBRE_AMBITO[ambito]}.</p></div>;
 
   return (
     <section>
@@ -48,158 +53,91 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
         </p>
       </header>
 
-      <Seccion titulo="Trayectoria laboral">
-        <TimelineTrayectoria personaId={data.persona_id} />
-      </Seccion>
-
-      <Seccion titulo="Su grupo">
-        <div className="rounded-md p-3" style={{ background: `${colorCluster(c.cluster)}14`, borderLeft: `4px solid ${colorCluster(c.cluster)}` }}>
-          <button className="text-sm font-medium text-slate-800 hover:underline text-left" onClick={() => onVerGrupo(c.cluster)}>
-            {c.etiqueta} →
-          </button>
-          <p className="text-xs text-slate-600 mt-1">
-            {c.es_representante ? (
-              <strong>Es la persona representante de este grupo.</strong>
-            ) : (
-              <>
-                {c.representante_id !== null ? (
-                  <>
-                    Parecido con el representante (
-                    <button className="underline text-espol-blue" onClick={() => onPersona(c.representante_id!)}>
-                      {c.representante_nombre}
-                    </button>
-                    ): {pct(c.similitud_representante)}
-                  </>
-                ) : (
-                  "El grupo no tiene personas vigentes que lo representen."
-                )}
-              </>
-            )}
-          </p>
-          {c.perfil_mixto && data.pertenencias[1] && (
-            <p className="text-xs text-amber-800 mt-2 bg-amber-50 rounded px-2 py-1">
-              Está entre dos grupos: se parece casi lo mismo a «{data.pertenencias[1].etiqueta}». Su perfil combina rasgos de
-              ambos.
+      {data.patron_global && (() => {
+        const g = data.patron_global;
+        const similitud = (sim: number | null, esRep: boolean, rep: string | null, repId: number | null) =>
+          esRep ? (
+            <strong>Es la persona más representativa.</strong>
+          ) : sim !== null && rep ? (
+            <>
+              Se parece un {Math.round(sim * 100)} % a la persona más representativa (
+              <button className="text-espol-blue hover:underline disabled:no-underline disabled:text-slate-600" disabled={!onPersona}
+                onClick={() => repId !== null && onPersona?.(repId)}>
+                {rep}
+              </button>
+              ). 100 % = ella misma; 0 % = la más distinta del grupo.
+            </>
+          ) : (
+            "El grupo no tiene personas vigentes que lo representen."
+          );
+        return (
+          <Seccion titulo="Patrón global (todas las dimensiones)">
+            <p className="text-sm text-slate-800">Patrón global {g.patron + 1}</p>
+            <p className="text-xs text-slate-600">{g.etiqueta}</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {g.tamano} personas {de(NOMBRE_AMBITO[ambito])} · {similitud(g.similitud_representante, g.es_representante, g.representante_nombre, g.representante_id)}
             </p>
-          )}
-        </div>
-
-        {s && (
-          <div className="rounded-md p-3 mt-2" style={{ background: `${colorSub(s.subpatron)}14`, borderLeft: `4px solid ${colorSub(s.subpatron)}` }}>
-            <p className="text-[11px] uppercase text-slate-500">Microarquetipo</p>
-            <p className="text-sm font-medium text-slate-800">{s.etiqueta}</p>
-            <p className="text-xs text-slate-600 mt-1">{s.descripcion}</p>
-            <p className="text-xs text-slate-600 mt-1">
-              {s.es_representante ? (
-                <strong>Es la persona representante de este subgrupo.</strong>
-              ) : (
-                <>
-                  {s.representante_id !== null ? (
-                    <>
-                      Parecido con su representante (
-                      <button className="underline text-espol-blue" onClick={() => onPersona(s.representante_id!)}>
-                        {s.representante_nombre}
-                      </button>
-                      ): {pct(s.similitud_representante)}
-                    </>
-                  ) : (
-                    "Sin personas vigentes que lo representen."
-                  )}
-                </>
-              )}
-            </p>
-            {s.perfil_mixto && (
-              <p className="text-xs text-amber-700 mt-1">
-                Está entre dos subgrupos: también se parece mucho a «{s.segundo_subpatron}».
+            {g.mixto && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                Está entre dos patrones: también se parece mucho al Patrón global {g.segundo + 1}.
               </p>
             )}
-          </div>
-        )}
+            {g.micro && (
+              <div className="mt-2 pl-3 border-l">
+                <p className="text-xs text-slate-800">Microarquetipo {g.micro.codigo}</p>
+                <p className="text-[11px] text-slate-600">{g.micro.etiqueta}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {g.micro.tamano} personas ·{" "}
+                  {similitud(g.micro.similitud_representante, g.micro.es_representante, g.micro.representante_nombre, g.micro.representante_id)}
+                </p>
+                {g.micro.mixto && <p className="text-[11px] text-amber-700">Está entre dos microarquetipos.</p>}
+              </div>
+            )}
+          </Seccion>
+        );
+      })()}
+
+      <Seccion titulo="Intensidad por dimensión">
+        <IntensidadDimensiones ambito={ambito} dimensiones={data.dimensiones} />
       </Seccion>
 
-      {data.microarquetipo && (
-        <Seccion titulo="Afinidad con los microarquetipos">
-          <p className="text-xs text-slate-600 mb-2">
-            Asignación exclusiva: <strong>{data.microarquetipo.nombre}</strong> (Grupo {data.microarquetipo.grupo + 1}).
-            {data.microarquetipo.perfil_mixto && (
-              <span className="text-amber-700"> Perfil mixto: también muy cercana a {data.microarquetipo.segundo}.</span>
-            )}
+      {data.parecidos.length > 0 && (
+        <Seccion titulo="Personas con perfil parecido">
+          <p className="text-[11px] text-slate-500 mb-2">
+            Las más cercanas considerando todas las dimensiones a la vez (cuánto tiene en cada una y cómo participa). Se
+            indica en qué coinciden: dimensiones donde ambas tienen intensidad de 50 o más, y si siguen el mismo patrón.
           </p>
-          {data.afinidades_microarquetipos.slice(0, 5).map((m) => (
-            <div key={m.id} className="flex items-center gap-2 text-xs mb-1">
-              <span className={`w-36 truncate ${m.id === data.microarquetipo!.id ? "font-semibold" : ""}`}>{m.nombre}</span>
-              <div className="flex-1 bg-slate-100 h-2 rounded">
-                <div className="h-2 rounded bg-slate-500" style={{ width: `${m.afinidad * 100}%` }} />
-              </div>
-              <span className="w-10 text-right">{pct(m.afinidad)}</span>
-            </div>
-          ))}
-          <p className="text-[11px] text-slate-400 mt-1">
-            Afinidad derivada de la red de similitud (no es una probabilidad): suma 100 % entre los{" "}
-            {data.afinidades_microarquetipos.length} microarquetipos del ámbito. La asignación exclusiva es la referencia; una
-            persona puede tener afinidad relevante con más de uno.
-          </p>
+          <ol className="space-y-2">
+            {data.parecidos.map((x) => (
+              <li key={x.persona_id} className="text-xs">
+                <button
+                  className="text-espol-blue hover:underline font-medium text-left disabled:no-underline disabled:text-slate-800"
+                  disabled={!onPersona}
+                  onClick={() => onPersona?.(x.persona_id)}
+                >
+                  {x.rango}. {x.nombre}
+                </button>
+                <span className="text-slate-500"> · {x.cargo_actual ?? "Sin cargo actual"}</span>
+                {x.comparte.length > 0 && (
+                  <p className="text-slate-600 mt-0.5">
+                    Ambas:{" "}
+                    {x.comparte.map((c, i) => (
+                      <span key={c.dimension}>
+                        {i > 0 && ", "}
+                        {c.nombre}
+                        {c.mismo_patron && c.patron !== null && <span className="text-slate-500"> (Patrón {c.patron + 1})</span>}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
         </Seccion>
       )}
 
-      <Seccion titulo="Cuánto se parece a cada grupo">
-        {data.pertenencias.map((p) => (
-          <div key={p.cluster} className="flex items-center gap-2 text-xs mb-1">
-            <span className="w-48 truncate" title={p.etiqueta}>{p.etiqueta}</span>
-            <div className="flex-1 bg-slate-100 h-2 rounded">
-              <div className="h-2 rounded" style={{ width: `${p.pertenencia * 100}%`, background: colorCluster(p.cluster) }} />
-            </div>
-            <span className="w-10 text-right">{pct(p.pertenencia)}</span>
-          </div>
-        ))}
-        <p className="text-[11px] text-slate-400 mt-1">
-          Cada persona pertenece a un solo grupo; las barras muestran cuánto se parece también a los demás.
-        </p>
-      </Seccion>
-
-      <Seccion titulo="Por qué está en este grupo">
-        <ul className="text-xs space-y-1 mb-3">
-          {data.cluster_por_vista.map((v) => (
-            <li key={v.vista} className="flex gap-2">
-              <span className={v.coincide ? "text-emerald-600" : "text-amber-600"}>{v.coincide ? "✓" : "↗"}</span>
-              <span>
-                Por su <strong>{v.nombre}</strong>{" "}
-                {v.coincide ? "se parece a este mismo grupo" : <>se parece más a «{v.etiqueta}»</>}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {data.vistas_faltantes.length > 0 && (
-          <p className="text-[11px] text-amber-700 mb-2">Sin evidencias para: {data.vistas_faltantes.join(", ")} (se usó un valor neutro).</p>
-        )}
-        <p className="text-xs text-slate-600 mb-1">Lo que caracteriza a su grupo, comparado con esta persona:</p>
-        <table className="w-full text-xs">
-          <thead className="text-slate-400">
-            <tr>
-              <th className="text-left font-normal" />
-              <th className="text-right font-normal">Esta persona</th>
-              <th className="text-right font-normal">Su grupo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rasgos_legibles.slice(0, 6).map((r) => (
-              <tr key={r.variable} className="border-t border-slate-100 align-top">
-                <td className="py-1 pr-2">
-                  <span className={r.direccion === "más" ? "text-emerald-600" : "text-rose-600"}>{r.direccion === "más" ? "▲" : "▼"}</span>{" "}
-                  {r.texto}
-                </td>
-                <td className={`text-right font-medium whitespace-nowrap pl-2 ${r.comparte ? "text-emerald-700" : "text-slate-800"}`}>
-                  {r.valor_persona}
-                  {r.comparte && " ✓"}
-                </td>
-                <td className="text-right text-slate-500 whitespace-nowrap pl-2">{r.valor_grupo}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="text-[11px] text-slate-400 mt-1">
-          ▲ / ▼: el grupo tiene más / menos que el personal en general. ✓: la persona coincide con su grupo en ese rasgo.
-        </p>
+      <Seccion titulo="Trayectoria laboral">
+        <TimelineTrayectoria personaId={data.persona_id} />
       </Seccion>
 
       <Seccion titulo="Evidencias">
@@ -208,13 +146,10 @@ export default function FichaPersona({ ambito, personaId, onPersona, onVolver, t
             <details key={g.tipo_id} className="text-xs">
               <summary className="cursor-pointer">
                 {NOMBRE_TIPO[g.tipo_id] ?? g.tipo_id} ({g.n})
-                {g.compartidas_con_cluster.length > 0 && (
-                  <span className="text-emerald-700"> · {g.compartidas_con_cluster.length} en común con su grupo</span>
-                )}
               </summary>
               <ul className="mt-1 ml-3 list-disc space-y-0.5 text-slate-600">
                 {g.textos.map((t, i) => (
-                  <li key={i} className={g.compartidas_con_cluster.includes(t) ? "text-emerald-800" : ""}>{t}</li>
+                  <li key={i}>{t}</li>
                 ))}
               </ul>
             </details>

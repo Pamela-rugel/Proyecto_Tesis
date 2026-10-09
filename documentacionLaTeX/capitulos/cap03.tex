@@ -1,0 +1,104 @@
+\chapter{Resultados y análisis}
+%\thispagestyle{empty}
+Los resultados del proyecto ofrecen una visión detallada sobre el desempeño del modelo de detección de ademanes, evaluando su capacidad para mejorar la precisión y utilidad del sistema de retroalimentación automática. A continuación, se presentan y analizan los datos obtenidos, proporcionando una evaluación comprensiva del rendimiento del modelo y su efectividad en la retroalimentación durante las presentaciones orales.
+
+\section{Plan de Implementación}
+    El diagrama de Gantt (Figura \ref{fig:diagrama_gantt}) proporciona una visión detallada y estructurada del cronograma del proyecto, desde su inicio hasta la entrega final. El diagrama ilustra claramente las etapas clave del proyecto, incluyendo la socialización del problema, la identificación de objetivos y requerimientos, el desarrollo y ajuste del modelo, y la integración final al Sistema RAP. Además, se detallan las fases de documentación y pruebas, que son fundamentales para asegurar la calidad y efectividad del proyecto. La secuencia temporal de cada tarea y la interdependencia entre las fases destacan la planificación rigurosa necesaria para cumplir con los objetivos del proyecto y asegurar una implementación exitosa.
+    
+    \begin{figure}[!htbp]
+        \centering
+        \caption{Diagrama de Gantt}
+        %\includegraphics[width=0.9\linewidth, height=0.9\textheight]{recursos/diagrama_de_gantt.jpg}
+        \label{fig:diagrama_gantt}
+    \end{figure}
+
+\section{Pruebas}
+     Se analizaron tres enfoques principales: entrenamiento con datos históricos, entrenamiento con datos generados en un entorno controlado, y entrenamiento con una combinación de datos históricos y generados. Cada enfoque fue evaluado tanto en entornos controlados como reales, utilizando matrices de confusión para medir la confiabilidad y precisión del modelo en la detección de ademanes. Los resultados muestran variaciones significativas en el desempeño del modelo según el tipo de datos y el entorno de prueba, proporcionando una visión integral de sus fortalezas y áreas de mejora.
+
+    \subsection{Pruebas de modelo entrenado únicamente con datos históricos}
+    Para entrenar el modelo, se utilizó un conjunto de datos compuesto exclusivamente por exposiciones grabadas en las aulas RAP. El conjunto de datos históricos incluyó específicamente los ademanes más comunes identificados, proporcionando una representación auténtica de los movimientos y comportamientos de los expositores en el entorno natural del aula. El modelo fue entrenado utilizando solo estos datos históricos para aprender las características y patrones específicos de los ademanes observados en las grabaciones, con el objetivo de asegurar que el sistema pudiera identificar y clasificar los ademanes en contextos similares a los del entorno de origen.
+
+        \subsubsection{Evaluación del modelo con datos de un entorno controlado.}
+        A través de la matriz de confusión (Figura \ref{fig:matriz1}), utilizando datos de validación generados en un entorno controlado, se obtuvo de manera general una \textbf{confiabilidad del 50.00\%}, además se observó que el modelo tiene un alto desempeño en la predicción de los ademanes \textit{Caminar} y \textit{Mano a Cabeza}. Sin embargo, el ademán \textit{Apuntar} se confunde frecuentemente con \textit{Caminar}. Además, el modelo detectó \textit{Girar} como \textit{Caminar} en un 62\% de los casos, y \textit{Mover Brazos} se confundió con \textit{Mano a Cabeza} en un 69\% de las ocasiones.
+        
+        \begin{figure}[!htbp]
+            \centering
+            \caption{Matriz de confusión con datos de un entorno controlado para la evaluación del modelo con datos históricos}
+            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_historicos_test_entorno_controlado.jpg}
+            \label{fig:matriz1}
+        \end{figure}
+        
+        \subsubsection{Evaluación del modelo con datos de un entorno real.}
+        A través de la matriz de confusión (Figura \ref{fig:matriz2}), utilizando datos de validación obtenidos de videos grabados por usuarios en las aulas RAP, se obtuvo de manera general una \textbf{confiabilidad del 44.31\%}, además se observó que el modelo detecta correctamente los ademanes \textit{Caminar} y \textit{Mano a Cabeza}. Sin embargo, el ademán \textit{Girar} fue clasificado erróneamente como \textit{Caminar} en un 100\% de los casos.
+
+        
+        \begin{figure}[!htbp]
+            \centering
+            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos históricos}
+            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_historicos_test_entorno_real.jpg}
+            \label{fig:matriz2}
+        \end{figure}
+    
+    \subsection{Pruebas de modelo entrenado únicamente con datos generados bajo un entorno controlado}
+
+    Se realizaron pruebas con un modelo entrenado exclusivamente con datos generados en un entorno controlado. Este enfoque permitió evaluar el desempeño del modelo en condiciones artificialmente optimizadas, garantizando que los datos de entrenamiento fueran consistentes y específicos para el entorno simulado. Las pruebas se centraron en determinar cómo el modelo generaliza a partir de estos datos controlados y en identificar posibles áreas de mejora antes de su aplicación en escenarios más variados y reales.
+
+        \subsubsection{Evaluación del modelo con datos de un entorno controlado.}
+        A través de la matriz de confusión (Figura \ref{fig:matriz3}), utilizando datos de validación generados en un entorno controlado, se obtuvo de manera general una \textbf{confiabilidad del 98.95\%}, además se observó que el modelo muestra un alto desempeño en la predicción de todos los ademanes, siendo \textit{Mover Brazos} el menos preciso con un 94\% de aciertos.
+        
+        \begin{figure}[!htbp]
+            \centering
+            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos de un entorno controlado}
+            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_test_entorno_controlado.jpg}
+            \label{fig:matriz3}
+        \end{figure}
+        
+        \subsubsection{Evaluación del modelo con datos de un entorno real.}
+        A través de la matriz de confusión (Figura \ref{fig:matriz4}), utilizando datos de validación obtenidos de videos grabados por usuarios en las aulas RAP, se obtuvo de manera general una \textbf{confiabilidad del 85.22\%}, además se observó que el modelo predice \textit{Girar} con un 67\% de precisión y \textit{Mover Brazos} con un 60\%, siendo estas las predicciones con menor acierto. En contraste, el ademán \textit{Sin Acción} fue detectado con un 100\% de precisión.
+
+        
+        \begin{figure}[!htbp]
+            \centering
+            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos de un entorno controlado}
+            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_test_entorno_real.jpg}
+            \label{fig:matriz4}
+        \end{figure}
+
+    \subsection{Pruebas de modelo entrenado con datos históricos y datos generados bajo un entorno controlado.}
+    
+    Se llevaron a cabo pruebas con un modelo entrenado utilizando una combinación de datos históricos y datos generados en un entorno controlado. Este enfoque híbrido permitió evaluar cómo el modelo se desempeña al integrar información proveniente de exposiciones reales en las aulas RAP junto con datos sintéticos creados en condiciones optimizadas. Las pruebas se enfocaron en analizar la capacidad del modelo para generalizar y adaptarse a una variedad de escenarios, combinando la riqueza de datos históricos con la precisión y uniformidad de los datos generados artificialmente.
+
+        \subsubsection{Evaluación del modelo con datos de un entorno controlado.}
+        A través de la matriz de confusión (Figura \ref{fig:matriz5}), utilizando datos de validación generados en un entorno controlado, se obtuvo de manera general una \textbf{confiabilidad del 57.29\%}, además se observó que el modelo muestra un buen desempeño en la detección de \textit{Caminar} y \textit{Mano a Cabeza}, con precisiones promedio del 81\% y 88\% respectivamente. Sin embargo, el ademán \textit{Girar} se detecta erróneamente como \textit{Apuntar} en un 62\% de los casos, y \textit{Mover Brazos} se confunde con \textit{Mano a Cabeza} en un 56\% de las ocasiones. El resto de los ademanes se predice con un promedio del 52\%.
+        
+        \begin{figure}[!htbp]
+            \centering
+            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos históricos y de un entorno controlado}
+            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_e_historicos_test_entorno_controlado.jpg}
+            \label{fig:matriz5}
+        \end{figure}
+        
+        \subsubsection{Evaluación del modelo con datos de un entorno real.}
+        A través de la matriz de confusión (Figura \ref{fig:matriz6}), utilizando datos de validación obtenidos de videos grabados por usuarios en las aulas RAP, se obtuvo de manera general una \textbf{confiabilidad del 78.41\%}, además se observó que el modelo predice los ademanes con una precisión promedio de alrededor del 70\%. Los ademanes \textit{Sin Acción} y \textit{Mano a Cabeza} muestran las tasas de precisión más bajas y más altas respectivamente, con un 50\% y un 89\%.
+
+        
+        \begin{figure}[!htbp]
+            \centering
+            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos históricos y de un entorno controlado}
+            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_e_historicos_test_entorno_real.jpg}
+            \label{fig:matriz6}
+        \end{figure}
+
+    
+\section{Resultados}
+    \begin{itemize}
+    \item El modelo entrenado únicamente con datos históricos mostró alta precisión en \textit{Caminar} y \textit{Mano a Cabeza} en un entorno controlado. Sin embargo, en un entorno real, \textit{Girar} fue clasificado erróneamente como \textit{Caminar} en un 100\% de los casos.
+    
+    \item El modelo entrenado únicamente con datos generados en un entorno controlado mostró un alto desempeño general. En un entorno real, \textit{Girar} tuvo un 67\% de precisión y \textit{Mover Brazos} un 60\%, mientras que \textit{Sin Acción} fue detectado con un 100\% de precisión. En promedio, este modelo tuvo el mejor desempeño global.
+    
+    \item El modelo entrenado con una combinación de datos históricos y datos generados en un entorno controlado mostró una precisión promedio del 81\% para \textit{Caminar} y del 88\% para \textit{Mano a Cabeza} en un entorno controlado. En un entorno real, el modelo logró una precisión promedio del 70\%, con \textit{Sin Acción} alcanzando un 50\% y \textit{Mano a Cabeza} un 89\%.
+    
+\end{itemize}
+
+\section{Análisis de Costos}
+    En el análisis de costos realizado para este proyecto, se observa que no se incurrieron en gastos adicionales debido a que el proyecto ya había sido previamente ejecutado. La única actividad realizada fue la modificación de un módulo específico, en este caso, el módulo de ademanes. Esta tarea se llevó a cabo utilizando los recursos y herramientas ya disponibles, sin necesidad de adquirir nuevos materiales o servicios externos. Por lo tanto, el proyecto no generó costos adicionales, ya que la intervención se realizó en el contexto de una infraestructura ya establecida y operativa.

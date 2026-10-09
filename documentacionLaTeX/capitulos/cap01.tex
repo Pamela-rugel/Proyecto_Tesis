@@ -1,0 +1,72 @@
+\chapter{Introducción}
+%\thispagestyle{empty}
+
+    \section{Descripción del Problema}
+        En ESPOL, los procesos de selección y contratación de personal docente y administrativo requieren la revisión manual de información que proviene de múltiples fuentes. A pesar de contar con datos históricos de los postulantes, estos no son aprovechados para identificar perfiles y patrones que faciliten la toma de decisiones. Esto se evidencia en el tiempo invertido en la evaluación, revisión de documentos de candidatos y en la ausencia de herramientas analíticas que conviertan esta información en conocimiento útil para apoyar procesos estratégicos relacionados con la selección, asignación de responsabilidades, conformación de equipos y planificación institucional.
+
+        Actualmente, la administración del departamento de talento humano en la ESPOL se basa en un marco regulatorio institucional compuesto por reglamentos y normativas internas, los cuales definen de manera formal aspectos como:
+
+        \begin{enumerate}
+                \item Las categorías del personal (tipos de profesores o cargos administrativos)
+                \item Los criterios de evaluación (formación académica, experiencia, producción, desempeño)
+                \item Los sistemas de puntuación y requisitos necesarios para procesos como ingreso, permanencia o promoción.
+            \end{enumerate}
+        
+        El conjunto de reglas establece lineamientos claros y estandarizados para la gestión del personal. No obstante, estas normas no cubren en su totalidad todos los aspectos necesarios en los procesos estratégicos de gestión del talento humano. En consecuencia, en la práctica también se recurre al conocimiento, la experiencia y el criterio del personal responsable para complementar la toma de decisiones cuando deben analizarse características que no pueden ser determinadas únicamente mediante reglas o requisitos establecidos. 
+        
+        A pesar de que la base de datos de la ESPOL contiene registros sobre la trayectoria profesional y académica del personal la cual es tomada en cuenta para procesos de contratación, esta información presenta fragmentación y una estructuración insuficiente. Esta dispersión limita y dificulta el análisis integral y la identificación de patrones en los datos institucionales, impidiendo una analítica eficaz para la gestión del talento y la toma de decisiones \parencite{Karwehl2021}.
+        
+        Existe un volumen considerable de información no estructurada como currículos, y reportes académicos, que alberga conocimiento sobre las competencias y el desempeño docente. Al carecer de un análisis sistemático, la caracterización del personal se limita a categorías administrativas tradicionales, omitiendo patrones complejos de alto valor institucional. 
+
+        Omitir la información oculta de los datos no estructurados es un problema frecuente en muchos procesos de selección, la investigación de \textcite{Asfahani2024} resalta que existe información crítica sobre competencias y desempeño de personal, pero frecuentemente pasan inadvertidos porque no hay mecanismos adecuados para extraer la información este volumen considerable de información también representa un problema, tal como señala la investigación de \textcite{Horodyski2023}, en donde se destaca que procesos manuales relacionados a revisión documental y selección de personal, generan una carga operativa elevada.
+
+        La falta de soporte analítico basado en datos históricos provoca que procesos estratégicos, tales como la conformación de comisiones, la planificación académica y la asignación de responsabilidades, se ejecuten de forma manual y subjetiva. En consecuencia, la institución desaprovecha su capital de datos, perdiendo la oportunidad de descubrir identificar patrones y perfiles potencialmente útiles como apoyo para la toma de decisiones. 
+
+        %\ref{fig:report_retro_rap_espol}
+    
+        %\begin{figure}[!htbp]
+          %\centering
+          %\caption{Reporte de retroalimentación del Sistema RAP sobre las posturas.}
+          %\includegraphics[width=1\linewidth]{recursos/ReporteRetroSistemaRAP.jpg}
+          %\label{fig:report_retro_rap_espol}
+        %\end{figure}
+    
+    \section{Justificación del Problema}
+        El proyecto pretende ampliar las funcionalidades del sistema RAP enfocadas en ademanes de los estudiantes cuando presentan. Mucho del potencial de retroalimentación del sistema RAP se pierde al estar limitado al audio y a imágenes estáticas del estudiante, especialmente en un aspecto importante como el lenguaje corporal. 
+        
+    \section{Objetivos}
+        \subsection{Objetivo General}
+            Desarrollar un modelo de perfilamiento del personal docente y administrativo de ESPOL, basado en información estructurada y no estructurada proveniente de datos históricos institucionales, mediante técnicas de minería de datos, procesamiento de lenguaje natural y aprendizaje automático, con el propósito de apoyar la toma de decisiones en procesos estratégicos institucionales.
+        
+        \subsection{Objetivos Específicos}
+            \begin{enumerate}
+                \item Integrar información estructurada y no estructurada del personal mediante procesos de limpieza, transformación, extracción de características y representación semántica, con el fin de construir una base de conocimiento unificada para el modelo analítico. 
+                \item Identificar perfiles del personal docente y administrativo mediante técnicas de agrupamiento y procesamiento de texto, con la finalidad de descubrir patrones presentes en la información institucional, tales como trayectorias, experiencias o características comunes. 
+                \item Validar los resultados del modelo mediante técnicas de inteligencia artificial explicable para garantizar la interpretabilidad de las recomendaciones generadas como apoyo a procesos estratégicos institucionales.
+                \item Desarrollar un prototipo que permita visualizar los perfiles generados por el modelo mediante herramientas visuales y utilizarlos como apoyo para la toma de decisiones institucionales. 
+            \end{enumerate}
+            
+    \section{Marco Teórico}
+        Las instituciones de educación superior enfrentan un entorno competitivo que dificulta mantener el desempeño docente. Aunque la calidad del profesorado es vital para el éxito académico y el prestigio institucional, la escasez de recursos y las exigencias de transparencia complican la gestión del talento, haciendo indispensable comprender a fondo los factores que impulsan su rendimiento \parencite{He2026}.
+
+        Desde esta perspectiva, diversos estudios señalan que la eficiencia organizacional debe analizarse como el resultado de múltiples dimensiones interrelacionadas, entre las que destacan el capital humano, la estructura interna y el liderazgo \parencite{Minbaeva2018,Zhu2018}. En este sentido, el desempeño institucional no depende únicamente de indicadores técnicos, sino también de la capacidad de la organización para potenciar y gestionar su talento. Así, variables objetivas como la formación, la experiencia y la trayectoria profesional se complementan con información cualitativa proveniente de distintas fuentes institucionales, la cual puede aportar evidencia adicional para caracterizar el perfil del personal y apoyar los procesos de gestión del talento humano \parencite{Fegade2023}.
+
+        \textcite{Stevens2023} utilizó un análisis de clúster jerárquico para clasificar a los docentes e identificar tipologías. Aunque su enfoque era dirigido a capacidades de adaptación frente a clases virtuales, se evidenció que este análisis basado en perfiles multidimensionales es una herramienta valiosa como apoyo en el proceso de gestión. Basándose en variables categóricas relacionadas al estrés, actitudes, creencias, etc., es posible descubrir perfiles docentes complejos que no son visibles de forma convencional.
+
+        El Procesamiento de Lenguaje Natural (NLP) constituye una herramienta valiosa para extraer conocimiento de documentos textuales como currículos. \textcite{Quito2025} integran técnicas de NLP dentro de un sistema de recomendación para la asignación de profesores, evidenciando el potencial de estas técnicas como complemento para la toma de decisiones.
+
+        Otras de las técnicas que se aplican son la Ingeniería de Características para unificar fuentes dispersas y la Inteligencia Artificial Explicable (XAI) para garantizar que los hallazgos sean interpretables y transparentes. El uso de técnicas como SHAP o LIME permiten entender el porqué del comportamiento de los modelos y datos, ya sea para identificación de sesgos o darle más detalle a los posibles perfiles de personal de ESPOL \parencite{Magham2024}.
+
+        Asimismo, \textcite{AlvarezGarcia2024} respalda el uso de técnicas de clustering e inteligencia artificial explicable facilita la interpretación de patrones descubiertos en datos heterogéneos, incrementando su utilidad como herramienta de apoyo para la toma de decisiones.
+
+        En un contexto donde las instituciones de educación superior generan información de manera constante, la adopción de analítica avanzada se vuelve el factor clave para evolucionar hacia una gestión del talento humano de vanguardia y basada en datos.
+
+        La implementación de analítica de datos e inteligencia artificial permitirá incorporar capacidades predictivas y explicables al proceso, generando recomendaciones basadas en datos históricos y reduciendo la carga de revisión manual. Esto mejora la eficiencia, incrementa la precisión en procesos de gestión de personal y optimiza la toma de decisiones fundamentadas \parencite{Nawaz2024,Alam2026}.
+
+        El actual proyecto se desarrollará en la Escuela Superior Politécnica del Litoral (ESPOL), está dirigido a la Dirección de Talento Humano y a las unidades tanto académicas como administrativas encargadas de la gestión del personal docente y administrativo.
+
+        El sistema integrará información estructurada y no estructurada para la generación de perfiles multidimensionales del personal mediante técnicas de analítica de datos e inteligencia artificial, incorporando mecanismos de interpretabilidad para explicar los distintos perfiles obtenidos.
+
+        Los perfiles servirán como apoyo para la asignación inteligente de tareas, la conformación de comisiones, la integración de equipos de trabajo y la planificación académica y administrativa. El sistema complementará la toma de decisiones, sin reemplazar los criterios institucionales.
+
+        El alcance se limita a la información histórica disponible en la ESPOL. Como horizonte temporal, el sistema estará diseñado para un uso institucional continuo, con actualizaciones periódicas conforme se incorporen nuevos datos.

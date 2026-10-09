@@ -1,0 +1,28 @@
+\chapter{Conclusiones y Recomendaciones}
+%\thispagestyle{empty}
+
+Se han obtenido diversos aprendizajes y hallazgos clave que han permitido evaluar su efectividad y áreas de mejora. Las conclusiones derivadas reflejan el cumplimiento de los objetivos planteados, mientras que las recomendaciones proporcionan un camino claro para futuras optimizaciones y expansiones del trabajo realizado. A continuación, se presentan las principales conclusiones y recomendaciones del proyecto.
+
+\section{Conclusiones}
+    Como conclusión del trabajo se destaca la importancia de lo realizado en las dos grandes actividades del proyecto: el preprocesamiento de datos y el diseño del modelo.  
+    
+    \begin{itemize}
+        \item Se evidencia que, dentro del entorno real del sistema RAP, el modelo con el mejor desempeño es el que fue entrenado utilizando datos generados en un entorno controlado. Este enfoque ha demostrado ser el más efectivo en la identificación precisa de las acciones en presentaciones reales, gracias a su capacidad para generalizar y adaptarse a las variaciones del entorno.
+        
+        \item A partir de la visualización de los videos, se pudieron identificar varias acciones distintivas para el entrenamiento del modelo y se escogieron las más pertinentes. El proceso que se siguió para la segmentación y procesamiento de los datos podría ser continuado para contar con un dataset más amplio. Esto ayudará a que el modelo detecte aún mejor los ademanes, mitigando las imprecisiones actuales en la predicción.
+        
+        \item El modelo creado servirá como base para detectar las acciones del expositor, permitiendo que los resultados puedan ser interpretados y estructurados de la manera más conveniente para el reporte final de los estudiantes.
+        
+        \item Al proporcionar retroalimentación al estudiante, es recomendable realizar interpretaciones de las acciones ejecutadas durante su exposición expresándolas en porcentajes. Esto permitirá una evaluación cuantitativa del desempeño, haciendo que la retroalimentación sea más general y tolerante, considerando que algunas acciones aún pueden llegar a confundirse o predecirse de manera incorrecta.
+        
+        \item Como parte del proceso de validación, se realizaron pruebas con datos normalizados que nunca habían sido utilizados en la etapa de entrenamiento. De esta forma, se evidenció empíricamente que el modelo está en la capacidad de identificar acciones a partir de nuevas presentaciones ingresadas al sistema.
+    \end{itemize}
+
+\section{Recomendaciones}
+    \begin{itemize}
+        \item Establecer un plan de mantenimiento y actualización periódica del modelo para incorporar nuevos datos históricos y mejorar continuamente el rendimiento de las predicciones.
+ 
+        \item Crear un mecanismo para recopilar y analizar los comentarios de los usuarios sobre la precisión del modelo y la utilidad de la retroalimentación, lo cual servirá para realizar ajustes y mejoras continuas al sistema.
+        
+        \item Explorar la inclusión de nuevos tipos de ademanes, posturas y acciones para hacer el sistema más versátil y aplicable a una gama más amplia de presentaciones y situaciones académicas o profesionales.
+    \end{itemize}

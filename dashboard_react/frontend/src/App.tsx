@@ -5,7 +5,7 @@ import BusquedaPage from "./pages/BusquedaPage";
 const pestana = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1.5 rounded-md text-sm ${isActive ? "bg-white/15 text-white" : "text-slate-300 hover:text-white"}`;
 
-// Perfiles del personal (DEC-045/046): grupos con clustering multivista (SNF).
+// Perfiles del personal por dimensión de evidencia (DEC-053/055): intensidad, patrones y temas descubiertos.
 // Búsqueda (04_busqueda_semantica): personas a partir de una consulta en lenguaje natural.
 export default function App() {
   return (
@@ -35,9 +35,6 @@ export default function App() {
         </Routes>
       </main>
 
-      <footer className="text-center text-xs text-slate-400 py-4 border-t border-slate-200">
-        Herramienta de apoyo a la decisión — no reemplaza el criterio institucional.
-      </footer>
     </div>
   );
 }

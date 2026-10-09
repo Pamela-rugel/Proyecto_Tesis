@@ -2435,6 +2435,15 @@ def _cambio_respecto_anterior(serie: pd.Series) -> pd.Series:
     return ~((serie == anterior) | (serie.isna() & anterior.isna()))
 
 
+def _activos_mas_recientes(activos: pd.DataFrame) -> pd.DataFrame:
+    """Contratos activos de inicio mas reciente (DEC-049), por tipo de empleado (DEC-054): quien es
+    administrativo y docente a la vez muestra el cargo vigente mas reciente de cada tipo."""
+    if "TIPOEMPLEADO_DESC" not in activos.columns:
+        return activos[activos["FECHAINICIOCONTRATO"] == activos["FECHAINICIOCONTRATO"].max()]
+    clave = activos["TIPOEMPLEADO_DESC"].fillna("")
+    return activos[activos["FECHAINICIOCONTRATO"] == activos.groupby(clave)["FECHAINICIOCONTRATO"].transform("max")]
+
+
 def construir_features_historial_laboral(
     df: pd.DataFrame, periodos_continuos: pd.DataFrame, incluir_rmu: bool = False
 ) -> pd.DataFrame:
@@ -2529,7 +2538,7 @@ def construir_features_historial_laboral(
             # del ultimo registro por fecha (que puede ser un encargo corto ya finalizado).
             activos = grupo[grupo["_ACTIVO_HOY"]]
             if len(activos):
-                recientes = activos[activos["FECHAINICIOCONTRATO"] == activos["FECHAINICIOCONTRATO"].max()]
+                recientes = _activos_mas_recientes(activos)
                 feats["CARGO_ACTUAL"] = " / ".join(dict.fromkeys(recientes["CARGO"].dropna().astype(str)))
             no_nulos = grupo["CARGO"].dropna()
             feats["CARGO_MAS_FRECUENTE"] = no_nulos.mode().iloc[0] if len(no_nulos) else pd.NA
@@ -2543,7 +2552,7 @@ def construir_features_historial_laboral(
             feats["UNIDAD_ACTUAL_NOMBRE"] = ultimo.get("NOMBRE_UNIDAD", pd.NA)
             activos = grupo[grupo["_ACTIVO_HOY"]]
             if len(activos):
-                recientes = activos[activos["FECHAINICIOCONTRATO"] == activos["FECHAINICIOCONTRATO"].max()]
+                recientes = _activos_mas_recientes(activos)
                 feats["UNIDAD_ACTUAL_NOMBRE"] = " / ".join(dict.fromkeys(recientes["NOMBRE_UNIDAD"].dropna().astype(str)))
             nombres_unidad = grupo["NOMBRE_UNIDAD"].dropna()
             es_facultad = nombres_unidad.str.contains("FACULTAD", case=False, na=False)
@@ -2560,6 +2569,12 @@ def construir_features_historial_laboral(
             tipos = set(grupo["TIPOEMPLEADO_DESC"].dropna().unique())
             feats["TIPOEMPLEADO_ACTUAL_DESC"] = ultimo.get("TIPOEMPLEADO_DESC", pd.NA)
             feats["ES_DOCENTE_ADMIN_MIXTO"] = len(tipos) > 1
+            # DEC-054: quien tiene a la vez un contrato activo administrativo y otro docente es
+            # ambos (antes solo contaba el tipo del ultimo registro por fecha). Sin contratos
+            # activos hoy se conserva el tipo del ultimo registro.
+            tipos_activos = sorted(set(grupo.loc[grupo["_ACTIVO_HOY"], "TIPOEMPLEADO_DESC"].dropna()))
+            feats["TIPOS_EMPLEADO_ACTUALES"] = (" / ".join(tipos_activos) if tipos_activos
+                                                else feats["TIPOEMPLEADO_ACTUAL_DESC"])
             for tipo in ("DOCENTE", "ADMINISTRATIVO"):
                 dias = grupo.loc[grupo["TIPOEMPLEADO_DESC"] == tipo, "_DURACION_DIAS_CONTRATO"].sum()
                 feats[f"ANIOS_EXPERIENCIA_{tipo}"] = round(dias / 365.25, 2)

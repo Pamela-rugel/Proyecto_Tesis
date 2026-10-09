@@ -30,7 +30,7 @@ y `data/processed/historial_laboral_features.csv` (vigencia y tipo de empleado, 
 - **Fuera del clustering:** identificadores, campos administrativos, sexo, edad y el tipo
   docente/administrativo (solo define los ámbitos). Los idiomas y los tipos sin tema (IDIOMA)
   entran como variables estructuradas, no como texto.
-- **Vigencia y tipo de empleado:** `VIGENTE_ACTUALMENTE` y `TIPOEMPLEADO_ACTUAL_DESC` de
+- **Vigencia y tipo de empleado:** `VIGENTE_ACTUALMENTE` y `TIPOS_EMPLEADO_ACTUALES` (DEC-054: puede ser "ADMINISTRATIVO / DOCENTE" y la persona entra en ambos ámbitos) de
   `historial_laboral_features.csv` (corregidos en DEC-023). El atributo `vigente` de las
   evidencias de trayectoria está inflado y no se usa.
 

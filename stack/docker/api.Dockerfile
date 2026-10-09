@@ -68,7 +68,7 @@ COPY 04_busqueda_semantica/ ./04_busqueda_semantica/
 RUN python -m pip install --no-deps --no-build-isolation -e .
 
 # Backend (misma profundidad que localmente: repositorio.py usa parents[2] para ubicar /app)
-COPY dashboard_react/backend/main.py dashboard_react/backend/repositorio.py dashboard_react/backend/legible.py \
+COPY dashboard_react/backend/main.py dashboard_react/backend/repositorio.py \
      ./dashboard_react/backend/
 
 # Datos que lee la API (todo derivado; nada del crudo salvo los nombres reducidos)

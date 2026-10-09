@@ -1,13 +1,12 @@
 """
 API FastAPI del dashboard de perfiles de personal ESPOL.
 
-Expone los resultados del clustering multivista (DEC-045) calculados fuera de linea por
-`python -m perfiles.construir` y persistidos en data/perfiles/clustering/<version>/. La API solo
-LEE (ver `repositorio.py`): no recalcula el clustering ni duplica datos.
-
-Preparado para la etapa siguiente (busqueda semantica): cada resultado trae el cluster, su
-representante, las pertenencias a los demas clusters y, en disco, los centroides semanticos y
-los vecinos de cada persona en la red fusionada.
+Expone los perfiles por DIMENSIÓN de evidencia (DEC-053/055) calculados fuera de línea por
+`python -m perfiles.construir` y persistidos en data/perfiles/clustering/<version>/:
+- intensidad de cada persona en cada dimensión (percentil dentro del ámbito);
+- temas y patrones de actividad descubiertos dentro de cada dimensión.
+La API solo LEE (ver `repositorio.py`): no recalcula nada ni duplica datos. Los grupos del
+clustering multivista (SNF) siguen en disco pero ya no se muestran (decisión de la usuaria).
 
 Ejecutar con (desde dashboard_react/backend/):
     d:\\Proyecto_Tesis\\.venv\\Scripts\\python -m uvicorn main:app --reload --port 8001
@@ -16,15 +15,18 @@ Ejecutar con (desde dashboard_react/backend/):
 from __future__ import annotations
 
 import copy
-import threading
-from contextlib import asynccontextmanager
 import json
+import threading
+import unicodedata
+from contextlib import asynccontextmanager
+from difflib import SequenceMatcher
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-import legible
 import repositorio as repo
+
 
 @asynccontextmanager
 async def _ciclo_de_vida(_app: FastAPI):
@@ -57,29 +59,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-NOMBRES_VISTA = {"v1_trayectoria": "trayectoria y gestión", "v2_academico": "perfil académico-temático",
-                 "v3_estructurada": "datos estructurados"}
-
-
-def _enriquecer(ambito: str, ficha: dict) -> dict:
-    """Copia de la ficha (no se modifica la cacheada) con, para mostrar:
-    - el nombre de su representante y de los de sus subpatrones (leidos en vivo);
-    - `rasgos_legibles`: los rasgos en unidades reales (años, cantidades, %, si/no) para el patron
-      vs todo el ambito, y para cada subpatron vs su patron (ver legible.py)."""
-    ficha = copy.deepcopy(ficha)
-    p = repo.personas(ambito)
-    crudo = repo.vista_estructurada()
-    miembros = p.loc[p["cluster"] == ficha["cluster"], "persona_id"]
-    if ficha.get("representante"):
-        ficha["representante"]["nombre"] = repo.nombre(ficha["representante"]["persona_id"])
-    ficha["rasgos_legibles"] = legible.rasgos(ficha["rasgos_estructurados"], crudo, miembros, p["persona_id"])
-    for sp in (ficha.get("subdivision") or {}).get("subpatrones", []):
-        if sp.get("representante"):
-            sp["representante"]["nombre"] = repo.nombre(sp["representante"]["persona_id"])
-        del_sub = p.loc[(p["cluster"] == ficha["cluster"]) & (p["subpatron"] == sp["cluster"]), "persona_id"]
-        sp["rasgos_legibles"] = legible.rasgos(sp["rasgos_estructurados"], crudo, del_sub, miembros)
-    return ficha
-
 
 def _ambito(ambito: str) -> str:
     if ambito not in repo.AMBITOS:
@@ -89,6 +68,13 @@ def _ambito(ambito: str) -> str:
     except repo.SinClustering as e:
         raise HTTPException(503, str(e)) from e
     return ambito
+
+
+def _dimension(ambito: str, dimension: str) -> dict:
+    _, _, fichas = repo.micro_dimensiones(_ambito(ambito))
+    if dimension not in fichas:
+        raise HTTPException(404, f"Dimensión desconocida o sin resultados en esta versión: {dimension}")
+    return fichas[dimension]
 
 
 @app.get("/api/health")
@@ -101,49 +87,233 @@ def health() -> dict:
     return {"estado": "ok", "carpetas_de_evidencias": evidencias, "clustering": clustering}
 
 
-@app.get("/api/clustering/ambitos")
+@app.get("/api/ambitos")
 def ambitos() -> dict:
     _ambito("todos")
     m = repo.manifest()
     salida = []
-    for a in repo.AMBITOS:
-        r = repo.resumen(a)
-        salida.append({"ambito": a, "nombre": r["nombre"], "n_personas": r["n_personas"], "n_vigentes": r["n_vigentes"],
-                       "k": r["k"], "perfiles_mixtos": r["perfiles_mixtos"], "estabilidad_ari": r["estabilidad_ari"]})
-    return {"version": m["version"], "fecha": m["fecha"], "metodo": m["metodo"], "vistas": m["vistas"],
-            "estado": repo.estado_version(), "ambitos": salida}
+    for a, nombre in repo.AMBITOS.items():
+        p = repo.personas(a)
+        salida.append({"ambito": a, "nombre": nombre, "n_personas": len(p), "n_vigentes": int(p["vigente"].sum())})
+    return {"version": m["version"], "fecha": m["fecha"], "estado": repo.estado_version(), "ambitos": salida}
 
 
-@app.get("/api/clustering/{ambito}")
-def clustering(ambito: str) -> dict:
-    """Resumen del ambito: seleccion de k, metricas y la ficha de cada cluster."""
-    r = repo.resumen(_ambito(ambito))
-    salida = {k: v for k, v in r.items() if k not in ("segundos", "clusters")}
-    salida["clusters"] = [_enriquecer(ambito, c) for c in r["clusters"]]
+@app.get("/api/dimensiones/{ambito}")
+def dimensiones(ambito: str) -> dict:
+    """Resumen de cada dimensión del ámbito: cuántas personas tienen evidencias y cuántos temas y
+    patrones de actividad se descubrieron."""
+    _, _, fichas = repo.micro_dimensiones(_ambito(ambito))
+    p = repo.personas(ambito)
+    vigentes = set(p.loc[p["vigente"], "persona_id"])
+    d = repo.dimensiones(ambito)
+    con_ev = d[d["n_evidencias"] > 0]
+    salida = []
+    for dim, cfg in repo.definiciones_dimensiones().items():
+        info = fichas.get(dim, {})
+        ids = con_ev.loc[con_ev["dimension"] == dim, "persona_id"]
+        salida.append({"dimension": dim, "nombre": cfg["nombre"], "n_personas": int(len(ids)),
+                       "n_vigentes": int(ids.isin(vigentes).sum()), "n_personas_ambito": len(p),
+                       "n_vigentes_ambito": len(vigentes),
+                       "k_temas": (info.get("temas") or {}).get("k", 0), "k_patrones": (info.get("patrones") or {}).get("k", 0),
+                       "nota": info.get("nota")})
+    return {"ambito": ambito, "dimensiones": salida}
+
+
+@app.get("/api/dimensiones/{ambito}/{dimension}")
+def dimension(ambito: str, dimension: str) -> dict:
+    """Temas y patrones de actividad descubiertos en la dimensión (DEC-055), con el nombre del
+    representante vigente de cada patrón (leído en vivo) y la definición de sus componentes."""
+    info = copy.deepcopy(_dimension(ambito, dimension))
+    for f in (info.get("patrones") or {}).get("patrones", []):
+        f["representante_nombre"] = repo.nombre(f["representante_id"]) if f.get("representante_id") else None
+    return {"ambito": ambito, "dimension": dimension, "definicion": repo.definiciones_dimensiones().get(dimension), **info}
+
+
+@app.get("/api/dimensiones/{ambito}/{dimension}/personas")
+def personas_dimension(ambito: str, dimension: str, patron: int | None = Query(None), tema: int | None = Query(None),
+                       solo_vigentes: bool = Query(True)) -> dict:
+    """Personas con evidencias en la dimensión, opcionalmente de un patrón o con un tema. Orden:
+    afinidad con el patrón, proporción de sus evidencias en el tema, o intensidad."""
+    _dimension(ambito, dimension)
+    p = repo.personas(ambito)[["persona_id", "vigente", "cargo_actual", "unidad_actual", "tipo_empleado"]]
+    d = repo.dimensiones(ambito)
+    d = d[(d["dimension"] == dimension) & (d["n_evidencias"] > 0)][["persona_id", "intensidad", "n_evidencias"]]
+    temas, patrones, _ = repo.micro_dimensiones(ambito)
+    cols_pat = ["persona_id", "patron", "afinidad_1", "mixto"] + (["similitud_representante"] if "similitud_representante" in patrones.columns else [])
+    pat = patrones[patrones["dimension"] == dimension][cols_pat] if len(patrones) else None
+    x = d.merge(p, on="persona_id")
+    if pat is not None:
+        x = x.merge(pat, on="persona_id", how="left")
+    orden = "intensidad"
+    if patron is not None:
+        if pat is None:
+            raise HTTPException(404, "La dimensión no tiene patrones")
+        x = x[x["patron"] == patron]
+        orden = "similitud_representante" if "similitud_representante" in x.columns else "afinidad_1"
+    if tema is not None:
+        t = temas[(temas["dimension"] == dimension) & (temas["tema_id"] == tema)][["persona_id", "proporcion"]]
+        x = x.merge(t, on="persona_id")
+        orden = "proporcion"
+    if solo_vigentes:
+        x = x[x["vigente"]]
+    x = x.sort_values([orden, "intensidad"], ascending=False)
+    return {"ambito": ambito, "dimension": dimension, "patron": patron, "tema": tema, "solo_vigentes": solo_vigentes,
+            "total": len(x), "personas": repo.as_records(repo.con_nombres(x.head(500).round(4)))}
+
+
+@app.get("/api/dimensiones/{ambito}/{dimension}/mapa")
+def mapa_dimension(ambito: str, dimension: str, tipo: str = Query("patrones"), solo_vigentes: bool = Query(True)) -> dict:
+    """Puntos t-SNE de la dimensión (solo para visualizar): `tipo=patrones` usa las variables con
+    que se formaron los patrones; `tipo=temas`, el contenido de sus evidencias. Cada punto trae su
+    patrón y su tema principal."""
+    if tipo not in ("patrones", "temas"):
+        raise HTTPException(400, "tipo debe ser patrones o temas")
+    _dimension(ambito, dimension)
+    m = repo.mapas_dimension(ambito)
+    m = m[(m["dimension"] == dimension) & (m["mapa"] == tipo)][["persona_id", "x", "y"]]
+    if m.empty:
+        return {"ambito": ambito, "dimension": dimension, "tipo": tipo, "puntos": []}
+    p = repo.personas(ambito)[["persona_id", "vigente", "cargo_actual", "unidad_actual"]]
+    d = repo.dimensiones(ambito)
+    d = d[d["dimension"] == dimension][["persona_id", "intensidad"]]
+    temas, patrones, _ = repo.micro_dimensiones(ambito)
+    x = m.merge(p, on="persona_id").merge(d, on="persona_id", how="left")
+    if len(patrones):
+        x = x.merge(patrones[patrones["dimension"] == dimension][["persona_id", "patron"]], on="persona_id", how="left")
+    if len(temas):
+        t = temas[temas["dimension"] == dimension].sort_values(["persona_id", "proporcion", "tema_id"], ascending=[True, False, True])
+        t = t.drop_duplicates("persona_id")[["persona_id", "tema_id", "proporcion"]].rename(columns={"tema_id": "tema", "proporcion": "proporcion_tema"})
+        x = x.merge(t, on="persona_id", how="left")
+    if solo_vigentes:
+        x = x[x["vigente"]]
+    return {"ambito": ambito, "dimension": dimension, "tipo": tipo, "solo_vigentes": solo_vigentes,
+            "puntos": repo.as_records(repo.con_nombres(x.round(3)))}
+
+
+@app.get("/api/perfil/{ambito}/mapa")
+def mapa_perfil(ambito: str, dimension: str | None = Query(None), solo_vigentes: bool = Query(True)) -> dict:
+    """Mapa t-SNE del perfil completo (todas las dimensiones, DEC-056). Con `dimension`, cada punto
+    trae además su intensidad y su patrón en esa dimensión (para colorear)."""
+    m, _ = repo.perfil_conjunto(_ambito(ambito))
+    if m.empty:
+        return {"ambito": ambito, "puntos": []}
+    x = m.merge(repo.personas(ambito)[["persona_id", "vigente", "cargo_actual", "unidad_actual"]], on="persona_id")
+    if dimension:
+        d = repo.dimensiones(ambito)
+        x = x.merge(d[d["dimension"] == dimension][["persona_id", "intensidad"]], on="persona_id", how="left")
+        _, patrones, _ = repo.micro_dimensiones(ambito)
+        if len(patrones):
+            x = x.merge(patrones[patrones["dimension"] == dimension][["persona_id", "patron"]], on="persona_id", how="left")
+    glob, _ = repo.patrones_globales(ambito)
+    if len(glob):
+        x = x.merge(glob[["persona_id", "patron_global", "micro"]].rename(columns={"micro": "micro_global"}), on="persona_id", how="left")
+    if solo_vigentes:
+        x = x[x["vigente"]]
+    return {"ambito": ambito, "dimension": dimension, "puntos": repo.as_records(repo.con_nombres(x.round(3)))}
+
+
+@app.get("/api/perfil/{ambito}/patrones")
+def patrones_globales(ambito: str) -> dict:
+    """Patrones globales descubiertos sobre el perfil completo (DEC-057) y sus microarquetipos
+    (DEC-058), con el nombre de su persona más representativa (vigente, leída en vivo)."""
+    _, fichas = repo.patrones_globales(_ambito(ambito))
+    salida = copy.deepcopy(fichas)
+    for f in salida.get("patrones", []):
+        f["representante_nombre"] = repo.nombre(f["representante_id"]) if f.get("representante_id") else None
+        for m in (f.get("microarquetipos") or {}).get("lista", []):
+            m["representante_nombre"] = repo.nombre(m["representante_id"]) if m.get("representante_id") else None
+    return {"ambito": ambito, **salida}
+
+
+@app.get("/api/perfil/{ambito}/personas")
+def personas_patron_global(ambito: str, patron: int = Query(...), micro: int | None = Query(None),
+                           solo_vigentes: bool = Query(True)) -> dict:
+    """Personas de un patrón global (o de uno de sus microarquetipos), ordenadas por similitud con
+    su persona representativa (100 % = la representante; 0 % = la más distinta del grupo)."""
+    glob, _ = repo.patrones_globales(_ambito(ambito))
+    x = glob[glob["patron_global"] == patron]
+    if micro is not None:
+        x = x[x["micro"] == micro]
+        x = x.assign(similitud=x["similitud_representante_micro"], es_rep=x["es_representante_micro"], afinidad=x["micro_afinidad"],
+                     entre_dos=x["micro_mixto"])
+    else:
+        x = x.assign(similitud=x["similitud_representante"], es_rep=x["es_representante"], afinidad=x["afinidad_1"], entre_dos=x["mixto"])
+    x = x[["persona_id", "similitud", "es_rep", "afinidad", "entre_dos", "micro"]]
+    x = x.merge(repo.personas(ambito)[["persona_id", "vigente", "cargo_actual", "unidad_actual"]], on="persona_id")
+    if solo_vigentes:
+        x = x[x["vigente"]]
+    x = x.sort_values(["similitud", "afinidad"], ascending=False, na_position="last")
+    return {"ambito": ambito, "patron": patron, "micro": micro, "total": len(x),
+            "personas": repo.as_records(repo.con_nombres(x.head(500).round(4)))}
+
+
+def _patron_global_persona(ambito: str, persona_id: int) -> dict | None:
+    """Patrón global y microarquetipo de la persona, con su similitud con cada representante."""
+    glob, fichas = repo.patrones_globales(ambito)
+    f = glob[glob["persona_id"] == persona_id]
+    if f.empty:
+        return None
+    r = f.iloc[0]
+    lista = fichas.get("patrones", [])
+    ficha = lista[int(r["patron_global"])]
+    salida = {"patron": int(r["patron_global"]), "etiqueta": ficha["etiqueta"],
+              "afinidad": float(r["afinidad_1"]), "mixto": bool(r["mixto"]), "segundo": int(r["patron_global_2"]),
+              "segundo_etiqueta": lista[int(r["patron_global_2"])]["etiqueta"], "tamano": ficha["tamano"],
+              "similitud_representante": None if pd.isna(r["similitud_representante"]) else float(r["similitud_representante"]),
+              "es_representante": bool(r["es_representante"]),
+              "representante_id": ficha.get("representante_id"),
+              "representante_nombre": repo.nombre(ficha["representante_id"]) if ficha.get("representante_id") else None,
+              "micro": None}
+    micros = (ficha.get("microarquetipos") or {}).get("lista", [])
+    if "micro" in r and r["micro"] >= 0 and micros:
+        m = micros[int(r["micro"])]
+        salida["micro"] = {"micro": int(r["micro"]), "codigo": m["codigo"], "etiqueta": m["etiqueta"], "tamano": m["tamano"],
+                           "mixto": bool(r["micro_mixto"]),
+                           "similitud_representante": None if pd.isna(r["similitud_representante_micro"]) else float(r["similitud_representante_micro"]),
+                           "es_representante": bool(r["es_representante_micro"]),
+                           "representante_id": m.get("representante_id"),
+                           "representante_nombre": repo.nombre(m["representante_id"]) if m.get("representante_id") else None}
     return salida
 
 
-@app.get("/api/clustering/{ambito}/mapa")
-def mapa(ambito: str, solo_vigentes: bool = Query(True)) -> dict:
-    """Puntos t-SNE (solo visualizacion) con cluster, pertenencia y si es perfil mixto."""
-    p = repo.personas(_ambito(ambito))
-    if solo_vigentes:
-        p = p[p["vigente"] | p["es_representante"] | p["es_subrepresentante"]]
-    columnas = ["persona_id", "tsne_x", "tsne_y", "cluster", "cluster_2", "pertenencia_1", "pertenencia_2",
-                "perfil_mixto", "vigente", "es_representante", "cargo_actual", "unidad_actual", "tipo_empleado",
-                "subpatron", "es_subrepresentante"] + [c for c in ("microarquetipo", "micro_mixto") if c in p.columns]
-    return {"ambito": ambito, "solo_vigentes": solo_vigentes, "etiquetas": repo.etiquetas(ambito),
-            "puntos": repo.as_records(repo.con_nombres(p[columnas].round(4)))}
+def _parecidos(ambito: str, persona_id: int, n: int = 8) -> list[dict]:
+    """Personas VIGENTES con el perfil completo más parecido (vecinos más cercanos, DEC-056) y qué
+    comparten: dimensiones donde ambas tienen intensidad >= 50, indicando si siguen el mismo patrón.
+    Sin puntajes de similitud: solo el orden y lo que comparten."""
+    _, vecinos = repo.perfil_conjunto(ambito)
+    v = vecinos[vecinos["persona_id"] == persona_id].sort_values("rango")
+    if v.empty:
+        return []
+    p = repo.personas(ambito).set_index("persona_id")
+    v = v[v["vecino_id"].map(lambda i: bool(p.at[i, "vigente"]) if i in p.index else False)].head(n)
+    d = repo.dimensiones(ambito)
+    _, patrones, _ = repo.micro_dimensiones(ambito)
+    nombres = {k: c["nombre"] for k, c in repo.definiciones_dimensiones().items()}
+    ids = [persona_id, *v["vecino_id"].tolist()]
+    inten = d[d["persona_id"].isin(ids)].pivot(index="persona_id", columns="dimension", values="intensidad")
+    pat = (patrones[patrones["persona_id"].isin(ids)].pivot(index="persona_id", columns="dimension", values="patron")
+           if len(patrones) else pd.DataFrame())
+    salida = []
+    for r in v.itertuples():
+        comparte = []
+        for dim in inten.columns:
+            if inten.at[persona_id, dim] >= 50 and inten.at[r.vecino_id, dim] >= 50:
+                a = pat.at[persona_id, dim] if dim in pat.columns and persona_id in pat.index else None
+                b = pat.at[r.vecino_id, dim] if dim in pat.columns and r.vecino_id in pat.index else None
+                mismo = a is not None and b is not None and not pd.isna(a) and a == b
+                comparte.append({"dimension": dim, "nombre": nombres.get(dim, dim),
+                                 "mismo_patron": bool(mismo), "patron": int(a) if mismo else None})
+        comparte.sort(key=lambda c: (not c["mismo_patron"], c["nombre"]))
+        salida.append({"persona_id": int(r.vecino_id), "nombre": repo.nombre(r.vecino_id), "rango": int(r.rango),
+                       "cargo_actual": p.at[r.vecino_id, "cargo_actual"], "comparte": comparte})
+    return salida
 
 
-@app.get("/api/clustering/{ambito}/buscar")
-def buscar(ambito: str, q: str = Query(..., min_length=2), solo_vigentes: bool = Query(True)) -> dict:
-    """Busca personas del ambito por nombre, cargo o unidad (sin distinguir tildes ni mayusculas)."""
-    import unicodedata
-
+@app.get("/api/personas/buscar")
+def buscar(ambito: str = Query("todos"), q: str = Query(..., min_length=2), solo_vigentes: bool = Query(True)) -> dict:
+    """Busca personas del ámbito por nombre, cargo o unidad (sin distinguir tildes ni mayúsculas)."""
     def norm(x) -> str:
-        x = unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode()
-        return x.lower()
+        return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
 
     p = repo.con_nombres(repo.personas(_ambito(ambito)))
     if solo_vigentes:
@@ -151,10 +321,8 @@ def buscar(ambito: str, q: str = Query(..., min_length=2), solo_vigentes: bool =
     texto = (p["nombre"].map(norm) + " | " + p["cargo_actual"].map(norm) + " | " + p["unidad_actual"].map(norm))
     terminos = norm(q).split()
 
-    # cada termino debe aparecer; si no aparece tal cual, se acepta una palabra parecida
+    # cada término debe aparecer; si no aparece tal cual, se acepta una palabra parecida
     # (errores de tipeo como "ciclia" -> "cecilia"). Primero las coincidencias exactas.
-    from difflib import SequenceMatcher
-
     def puntaje(t: str) -> float:
         palabras = t.replace("|", " ").split()
         total = 0.0
@@ -170,152 +338,62 @@ def buscar(ambito: str, q: str = Query(..., min_length=2), solo_vigentes: bool =
 
     puntos = texto.map(puntaje)
     m = p.assign(_p=puntos)[puntos > 0].sort_values("_p", ascending=False).head(30)
-    et = repo.etiquetas(ambito)
     return {"resultados": [{"persona_id": int(r.persona_id), "nombre": r.nombre, "cargo_actual": r.cargo_actual,
-                            "unidad_actual": r.unidad_actual, "cluster": int(r.cluster), "etiqueta": et[int(r.cluster)]}
-                           for r in m.itertuples()]}
-
-
-@app.get("/api/clustering/{ambito}/clusters/{cluster}")
-def detalle_cluster(ambito: str, cluster: int, solo_vigentes: bool = Query(True)) -> dict:
-    """Ficha del cluster e integrantes ordenados por similitud al representante.
-    Filtra por vigencia solo cuando `solo_vigentes` es verdadero. También incluye
-    subpatrón y personas de otros clusters con perfil mixto hacia este."""
-    r = repo.resumen(_ambito(ambito))
-    ficha = next((c for c in r["clusters"] if c["cluster"] == cluster), None)
-    if ficha is None:
-        raise HTTPException(404, f"El ámbito {ambito} no tiene el cluster {cluster}")
-    p = repo.personas(ambito)
-    columnas = ["persona_id", "cargo_actual", "unidad_actual", "tipo_empleado", "similitud_representante",
-                "coseno_v1_representante", "coseno_v2_representante", "pertenencia_1", "cluster_2",
-                "pertenencia_2", "perfil_mixto", "es_representante", "subpatron", "sub_pertenencia_1",
-                "sub_perfil_mixto", "es_subrepresentante", "similitud_subrepresentante", "vigente"]
-    columnas += [c for c in ("microarquetipo", "micro_afinidad_1", "micro_mixto") if c in p.columns]
-    integrantes = p[p["cluster"] == cluster]
-    mixtos = p[(p["cluster"] != cluster) & (p["cluster_2"] == cluster) & p["perfil_mixto"]]
-    if solo_vigentes:
-        integrantes = integrantes[integrantes["vigente"]]
-        mixtos = mixtos[mixtos["vigente"]]
-    integrantes = integrantes.sort_values("similitud_representante", ascending=False)
-    return {"ambito": ambito, "solo_vigentes": solo_vigentes, "ficha": _enriquecer(ambito, ficha),
-            "integrantes": repo.as_records(repo.con_nombres(integrantes[columnas].round(4))),
-            "mixtos_desde_otros_clusters": repo.as_records(repo.con_nombres(
-                mixtos[["persona_id", "cargo_actual", "unidad_actual", "cluster", "pertenencia_1", "pertenencia_2"]].round(4)))}
-
-
-def _subpatron(ficha: dict, f: dict) -> dict | None:
-    """Subpatron de la persona dentro de su patron (None si el patron no se subdividio)."""
-    sub = ficha.get("subdivision")
-    if not sub or f["subpatron"] < 0:
-        return None
-    sp = next(s for s in sub["subpatrones"] if s["cluster"] == f["subpatron"])
-    segundo = next(s for s in sub["subpatrones"] if s["cluster"] == f["sub_cluster_2"])
-    return {"subpatron": f["subpatron"], "subpatron_id": f["subpatron_id"], "etiqueta": sp["etiqueta"],
-            "descripcion": sp["descripcion"], "pertenencia": f["sub_pertenencia_1"],
-            "perfil_mixto": f["sub_perfil_mixto"], "segundo_subpatron": segundo["etiqueta"],
-            "pertenencia_2": f["sub_pertenencia_2"], "es_representante": f["es_subrepresentante"],
-            "representante_id": f["subrepresentante_id"] if f["subrepresentante_id"] >= 0 else None,
-            "representante_nombre": repo.nombre(f["subrepresentante_id"]) if f["subrepresentante_id"] >= 0 else None,
-            "similitud_representante": f["similitud_subrepresentante"],
-            "estabilidad_ari": sub["estabilidad_ari"]}
-
-
-def _micro_persona(ambito: str, f: dict) -> dict:
-    """Microarquetipo EXCLUSIVO (referencia estructural) y AFINIDADES derivadas con todos los
-    microarquetipos del ámbito (soft; no son probabilidades)."""
-    if "microarquetipo" not in f:
-        return {"microarquetipo": None, "afinidades_microarquetipos": []}
-    micro = repo.resumen(ambito)["microarquetipos"]
-    afin = json.loads(f["micro_afinidades"])
-    lista = sorted(({"id": m["id"], "nombre": m["nombre"], "grupo": m["grupo"], "afinidad": a}
-                    for m, a in zip(micro, afin)), key=lambda x: -x["afinidad"])
-    propio = micro[f["microarquetipo"]]
-    rep = f.get("microrepresentante_id", -1)
-    return {
-        "microarquetipo": {"id": propio["id"], "nombre": propio["nombre"], "grupo": propio["grupo"],
-                           "descripcion": propio["descripcion"], "afinidad": f["micro_afinidad_1"],
-                           "perfil_mixto": bool(f["micro_mixto"]),
-                           "segundo": micro[f["micro_2"]]["nombre"] if f["micro_2"] >= 0 else None,
-                           "afinidad_2": f["micro_afinidad_2"],
-                           "representante_id": rep if rep >= 0 else None,
-                           "representante_nombre": repo.nombre(rep) if rep >= 0 else None,
-                           "similitud_representante": f.get("similitud_microrepresentante")},
-        "afinidades_microarquetipos": lista,
-    }
-
-
-@app.get("/api/clustering/{ambito}/microarquetipos")
-def microarquetipos(ambito: str) -> dict:
-    """Microarquetipos del ámbito (hojas grupo/subgrupo) con su caracterización frente al ámbito."""
-    r = repo.resumen(_ambito(ambito))
-    if "microarquetipos" not in r:
-        raise HTTPException(404, "Esta versión del clustering no tiene microarquetipos")
-    p = repo.personas(ambito)
-    crudo = repo.vista_estructurada()
-    salida = []
-    for m in r["microarquetipos"]:
-        m = copy.deepcopy(m)
-        if m.get("representante"):
-            m["representante"]["nombre"] = repo.nombre(m["representante"]["persona_id"])
-        miembros = p.loc[p["microarquetipo"] == m["id"], "persona_id"]
-        m["rasgos_legibles"] = legible.rasgos(m["rasgos_estructurados"], crudo, miembros, p["persona_id"])
-        salida.append(m)
-    return {"ambito": ambito, "metricas": r.get("metricas_microarquetipos"), "microarquetipos": salida}
+                            "unidad_actual": r.unidad_actual} for r in m.itertuples()]}
 
 
 @app.get("/api/personas/{persona_id}")
 def persona(persona_id: int, ambito: str = Query("todos")) -> dict:
-    """Informacion de la persona y por que pertenece a su cluster: pertenencias, cluster segun
-    cada vista, similitud al representante, rasgos compartidos y sus evidencias."""
+    """Estado de la persona, su intensidad, patrón y temas en cada dimensión, y sus evidencias."""
     p = repo.personas(_ambito(ambito))
     fila = p[p["persona_id"] == persona_id]
     if fila.empty:
         raise HTTPException(404, f"La persona {persona_id} no está en el ámbito {ambito}")
     f = repo.as_records(fila)[0]
-    et = repo.etiquetas(ambito)
-    ficha = next(c for c in repo.resumen(ambito)["clusters"] if c["cluster"] == f["cluster"])
-
-    pertenencias = sorted(({"cluster": c, "etiqueta": et[c], "pertenencia": v}
-                           for c, v in enumerate(json.loads(f["pertenencias"]))), key=lambda x: -x["pertenencia"])
-    por_vista = [{"vista": v, "nombre": NOMBRES_VISTA[v], "cluster": f[f"cluster_{v}"], "etiqueta": et[f[f"cluster_{v}"]],
-                  "coincide": f[f"cluster_{v}"] == f["cluster"]} for v in NOMBRES_VISTA]
-
-    z = repo.z_ambito(ambito)
-    miembros = p.loc[p["cluster"] == f["cluster"], "persona_id"]
-    rasgos_legibles = legible.rasgos(ficha["rasgos_estructurados"], repo.vista_estructurada(), miembros,
-                                     p["persona_id"], persona_id=persona_id, z_persona=z.loc[persona_id])
-    rasgos = []
-    for r in ficha["rasgos_estructurados"]:
-        if r["variable"] in z.columns:
-            zp = float(z.at[persona_id, r["variable"]])
-            rasgos.append({**r, "z_persona": round(zp, 2), "comparte": (zp > 0) == (r["z"] > 0) and abs(zp) >= 0.25})
-
     ev = repo.evidencias()
     ev = ev[ev["persona_id"] == persona_id]
-    compartidas = {x["texto"] for x in ficha["evidencias_compartidas"]}
-    evidencias = [{"tipo_id": t, "n": len(g), "textos": g["texto"].tolist()[:40],
-                   "compartidas_con_cluster": sorted(set(g["texto"]) & compartidas)}
-                  for t, g in ev.groupby("tipo_id")]
-
+    evidencias = [{"tipo_id": t, "n": len(g), "textos": g["texto"].tolist()[:40]} for t, g in ev.groupby("tipo_id")]
     return {
         "persona_id": persona_id, "ambito": ambito, "nombre": repo.nombre(persona_id),
         "estado": {k: f[k] for k in ("tipo_empleado", "vigente", "cargo_actual", "unidad_actual")},
-        "cluster": {"cluster": f["cluster"], "etiqueta": et[f["cluster"]], "pertenencia": f["pertenencia_1"],
-                    "perfil_mixto": f["perfil_mixto"], "es_representante": f["es_representante"],
-                    "representante_id": f["representante_id"] if f["representante_id"] >= 0 else None,
-                    "representante_nombre": repo.nombre(f["representante_id"]) if f["representante_id"] >= 0 else None,
-                    "similitud_representante": f["similitud_representante"],
-                    "coseno_v1_representante": f["coseno_v1_representante"],
-                    "coseno_v2_representante": f["coseno_v2_representante"],
-                    "coseno_v1_centroide": f["coseno_v1_centroide"], "coseno_v2_centroide": f["coseno_v2_centroide"]},
-        "subpatron": _subpatron(ficha, f),
-        **_micro_persona(ambito, f),
-        "pertenencias": pertenencias, "cluster_por_vista": por_vista, "rasgos": rasgos,
-        "rasgos_legibles": rasgos_legibles,
-        "vistas_faltantes": [v for v, falta in (("v1_trayectoria", f["vista_v1_faltante"]),
-                                                  ("v2_academico", f["vista_v2_faltante"])) if falta],
+        "dimensiones": _dimensiones_persona(ambito, persona_id),
+        "patron_global": _patron_global_persona(ambito, persona_id),
+        "parecidos": _parecidos(ambito, persona_id),
         "evidencias": sorted(evidencias, key=lambda x: -x["n"]),
     }
+
+
+def _dimensiones_persona(ambito: str, persona_id: int) -> list[dict]:
+    """Intensidad (percentil 0-100 dentro del ámbito) en cada dimensión con el aporte normalizado
+    de cada componente (DEC-053), su patrón de actividad y sus temas principales (DEC-055).
+    Ordenadas de mayor a menor intensidad."""
+    d = repo.dimensiones(ambito)
+    defs = repo.definiciones_dimensiones()
+    temas, patrones, fichas = repo.micro_dimensiones(ambito)
+    temas = temas[temas["persona_id"] == persona_id]
+    patrones = patrones[patrones["persona_id"] == persona_id].set_index("dimension") if len(patrones) else patrones
+    salida = []
+    for r in repo.as_records(d[d["persona_id"] == persona_id]):
+        dim = r["dimension"]
+        cfg = defs.get(dim, {})
+        comps = cfg.get("componentes", {})
+        info = fichas.get(dim, {})
+        temas_dim = (info.get("temas") or {}).get("temas", [])
+        mis_temas = [{"tema": int(t["tema_id"]), "etiqueta": temas_dim[int(t["tema_id"])]["etiqueta"], "proporcion": float(t["proporcion"])}
+                     for t in repo.as_records(temas[temas["dimension"] == dim].sort_values("proporcion", ascending=False).head(3))]
+        patron = None
+        if dim in getattr(patrones, "index", []):
+            f = patrones.loc[dim]
+            lista = (info.get("patrones") or {}).get("patrones", [])
+            patron = {"patron": int(f["patron"]), "etiqueta": lista[int(f["patron"])]["etiqueta"], "afinidad": float(f["afinidad_1"]),
+                      "mixto": bool(f["mixto"]), "segundo": lista[int(f["patron_2"])]["etiqueta"],
+                      "tamano": lista[int(f["patron"])]["tamano"], "n_personas": info.get("n_personas")}
+        salida.append({"dimension": dim, "nombre": cfg.get("nombre", dim),
+                       "intensidad": r["intensidad"], "n_evidencias": r["n_evidencias"],
+                       "componentes": [{"componente": c, "descripcion": comps.get(c, {}).get("descripcion", c), "valor": v}
+                                       for c, v in json.loads(r["componentes"]).items()],
+                       "temas": mis_temas, "patron": patron})
+    return sorted(salida, key=lambda x: (-x["intensidad"], x["nombre"]))
 
 
 CARRIL = {"TRAYECTORIA_CARGO_ESTRUCTURAL": "Cargo de planta en ESPOL", "TRAYECTORIA_CONTRATO_PUNTUAL": "Contrato ocasional en ESPOL",
@@ -368,9 +446,9 @@ def trayectoria(persona_id: int) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------
-# Búsqueda semántica de personas (04_busqueda_semantica, paquete `busqueda`). Independiente del
-# clustering: el grupo de cada persona se agrega solo como CONTEXTO. Los modelos (bge-m3 y el
-# reranker) se cargan en la primera búsqueda (~30 s); el LLM (Groq) solo recibe la consulta.
+# Búsqueda semántica de personas (04_busqueda_semantica, paquete `busqueda`). Independiente de
+# los perfiles. Los modelos (bge-m3 y el reranker) se cargan en la primera búsqueda (~30 s); el
+# LLM (Groq) solo recibe la consulta.
 # ---------------------------------------------------------------------------------------------
 from pydantic import BaseModel as _BaseModel  # noqa: E402
 
@@ -402,15 +480,6 @@ def busqueda_semantica(q: ConsultaBusqueda) -> dict:
     if q.vigencia not in ("vigentes", "no_vigentes", "todos"):
         raise HTTPException(400, "vigencia debe ser vigentes, no_vigentes o todos")
     r = buscar_personas(q.consulta, vigencia=q.vigencia)
-    # contexto del clustering (solo informativo) y nombres leídos en vivo
-    try:
-        p = repo.personas("todos").set_index("persona_id")
-        et = repo.etiquetas("todos")
-    except repo.SinClustering:
-        p, et = None, {}
-    for res in r["resultados"]:
+    for res in r["resultados"]:  # nombres leídos en vivo
         res["nombre"] = repo.nombre(res["persona_id"])
-        if p is not None and res["persona_id"] in p.index:
-            c = int(p.at[res["persona_id"], "cluster"])
-            res["grupo"] = {"cluster": c, "etiqueta": et.get(c, "")}
     return r

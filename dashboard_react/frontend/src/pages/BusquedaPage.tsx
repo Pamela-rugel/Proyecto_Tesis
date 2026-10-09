@@ -68,7 +68,6 @@ function Tarjeta({ p, k, activa, onAbrir }: { p: ResultadoBusqueda; k: number; a
             {p.unidad_actual ? ` · ${p.unidad_actual}` : ""}
             {!p.vigente && " · no vigente"}
           </p>
-          {p.grupo && <p className="text-[11px] text-slate-400">Grupo (contexto): {p.grupo.etiqueta}</p>}
         </div>
         <span className="text-xs text-slate-500 shrink-0 text-right">
           <strong className="text-slate-800 text-sm">{p.obligatorias_cubiertas}/{p.total_obligatorias}</strong>
@@ -211,10 +210,8 @@ export default function BusquedaPage() {
                 <FichaPersona
                   ambito="todos"
                   personaId={persona}
-                  onPersona={setPersona}
                   onVolver={() => setPersona(null)}
                   textoVolver="Cerrar ficha"
-                  onVerGrupo={(c) => (window.location.href = `${import.meta.env.BASE_URL}?ambito=todos&cluster=${c}`)}
                 />
               ) : (
                 <p className="text-sm text-slate-500 p-5">Haz clic en un nombre para ver su ficha completa y su trayectoria.</p>
