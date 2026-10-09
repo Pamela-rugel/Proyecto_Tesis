@@ -1,0 +1,32 @@
+{
+    "latex-workshop.latex.tools": [
+        {
+            "name": "latexmk-xelatex",
+            "command": "latexmk",
+            "args": [
+                "-xelatex",
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "-outdir=%OUTDIR%",
+                "%DOC%"
+            ],
+            "env": {}
+        }
+    ],
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "XeLaTeX (latexmk + biber)",
+            "tools": ["latexmk-xelatex"]
+        }
+    ],
+    "latex-workshop.latex.recipe.default": "first",
+    "latex-workshop.latex.rootFile.useSubFile": false,
+    "[latex]": {
+        "editor.wordWrap": "on",
+        "editor.wrappingIndent": "same"
+    },
+    "[bibtex]": {
+        "editor.wordWrap": "on"
+    }
+}
