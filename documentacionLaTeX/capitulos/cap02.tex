@@ -2,19 +2,24 @@
 %\thispagestyle{empty}
 \label{chapter:metodologia}
 
-Este capítulo describe el camino que se siguió para pasar de los extractos de los sistemas institucionales de ESPOL a un prototipo en el que se pueden explorar perfiles del personal y buscar personas a partir de lo que han hecho. La metodología no quedó fija desde la propuesta. Varias reglas de negocio se corrigieron cuando los datos mostraron casos que no se habían previsto, y algunas técnicas planteadas al inicio, como el agrupamiento directo de personas con K-means, se reemplazaron por otras que se ajustaban mejor a la información disponible. Por esa razón, junto con el procedimiento actual, se resumen los enfoques que se probaron y los motivos por los que se dejaron.
+El siguiente capítulo describe los pasos que atravesó el proyecto para convertir datos institucionales dispersos en información útil para la creación de un sistema de exploración de perfiles.
+La metodología sufrió cambios respectos a la propuesta inicial. Desde las técnicas para agrupar al personal hasta la forma en que se trató a los datos no estructurados con el fin de obtener una perspectiva 
+no estructurada de la información. A continuación , se presenta el proceso por el que pasaron los datos, la limpieza, transformación y el uso de técnicas de aprendizaje automático para obtener un perfil del personal que pueda ser consultado y explorado por los usuarios. 
 
 \section{Enfoque del trabajo}
 
-El estudio es cuantitativo y de carácter exploratorio. No existe en la institución una etiqueta que diga cuál es el ``perfil correcto'' de cada persona, de modo que el problema se aborda con aprendizaje no supervisado: los patrones se buscan en los datos y luego se interpretan. Esto tiene una consecuencia directa sobre la validación, que no puede apoyarse en una medida de exactitud y debe combinar métricas internas, pruebas de estabilidad y revisión de casos con personas que conocen la institución.
+La propuesta del proyecto tiene como producto final un sistema de gestión de perfiles, el sistema esta constituido de dos partes principales, la exploración de perfiles y la búsqueda semántica de personas. 
+La exploración de perfiles consiste en un conjunto de visualizaciones que permiten la comparación entre personal de institución, conocer el porcentaje de pertenencia a grupos descubiertos y su similitud a otro grupos.
+La búsqueda semántica de personas permite a un usuario encontrar personas que cumplan con ciertos criterios, por ejemplo, que tengan experiencia en un tema específico, que hayan participado en proyectos de investigación o que tengan un cierto nivel de formación académica.
 
-Desde el comienzo se asumió que el resultado sería una herramienta de consulta para quienes toman decisiones, y no un sistema que decida. Un perfil descubierto describe parecidos entre registros; no equivale a una categoría laboral ni dice nada definitivo sobre la capacidad de alguien. Esa idea guió decisiones concretas que aparecen a lo largo del capítulo: los grupos llevan nombres neutrales, las puntuaciones se presentan como intensidad de evidencia registrada y la interfaz recuerda que la ausencia de un registro no significa ausencia de una competencia.
-
-El trabajo se organizó en cuatro fases, que coinciden con las planteadas en la propuesta aunque su contenido cambió con el avance:
+Para llegar a este producto final, el proyecto consistió en las siguientes etapas:
 
 \begin{enumerate}
     \item Extracción, limpieza e integración de los datos institucionales.
-    \item Construcción de una representación común del personal basada en evidencias individuales y su representación semántica.
+    \item Creación de variables estructuradas derivadas de las fuentes institucionales, relacionadas a su trayectoria laboral, formación y experiencia.
+    \item Construcción de datasets denominados "evidencias", cada registro representa una evidencia de la formación, experiencia o capacidades del personal.
+    \item Representación textual de cada evidencia mediante técnicas de procesamiento del lenguaje natural (plantillas, concatenación de campos, limpieza de caracteres, etc.)
+    \item Generación de embeddings semánticos de los textos representativos.
     \item Modelado no supervisado para descubrir perfiles y construcción de un motor de búsqueda semántica de personas.
     \item Validación, interpretación de los resultados e implementación del prototipo.
 \end{enumerate}

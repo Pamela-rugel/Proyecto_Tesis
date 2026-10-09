@@ -80,3 +80,6 @@ documentacionLaTeX/**/*.synctex.gz
 documentacionLaTeX/**/*.synctex(busy)
 documentacionLaTeX/**/*.toc
 documentacionLaTeX/**/*.xdv
+=======
+.vscode/
+
