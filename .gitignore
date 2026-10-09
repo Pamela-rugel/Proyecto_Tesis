@@ -64,3 +64,5 @@ despliegue/
 stack/nginx/htpasswd_tunel
 stack/nginx/clave_tunel.txt
 data/api.err
+
+.vscode/
