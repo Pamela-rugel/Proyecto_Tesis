@@ -64,3 +64,19 @@ despliegue/
 stack/nginx/htpasswd_tunel
 stack/nginx/clave_tunel.txt
 data/api.err
+
+# LaTeX: archivos auxiliares de compilación (solo se versionan el .tex, la bibliografía y el PDF)
+documentacionLaTeX/**/*.aux
+documentacionLaTeX/**/*.bbl
+documentacionLaTeX/**/*.bcf
+documentacionLaTeX/**/*.blg
+documentacionLaTeX/**/*.fdb_latexmk
+documentacionLaTeX/**/*.fls
+documentacionLaTeX/**/*.lof
+documentacionLaTeX/**/*.lot
+documentacionLaTeX/**/*.out
+documentacionLaTeX/**/*.run.xml
+documentacionLaTeX/**/*.synctex.gz
+documentacionLaTeX/**/*.synctex(busy)
+documentacionLaTeX/**/*.toc
+documentacionLaTeX/**/*.xdv

@@ -349,12 +349,6 @@ INPUT .\Tesis.aux
 INPUT .\Tesis.aux
 INPUT Tesis.aux
 OUTPUT Tesis.aux
-INPUT .\Tesis.out
-INPUT .\Tesis.out
-INPUT Tesis.out
-INPUT Tesis.out
-INPUT .\Tesis.out
-INPUT .\Tesis.out
 OUTPUT Tesis.out
 INPUT C:\Users\pamrd\AppData\Local\Programs\MiKTeX\tex\latex\biblatex-apa\english-apa.lbx
 INPUT C:\Users\pamrd\AppData\Local\Programs\MiKTeX\tex\latex\biblatex-apa\english-apa.lbx
@@ -417,18 +411,12 @@ INPUT .\secciones\resumen.tex
 INPUT .\secciones\resumen.tex
 INPUT .\secciones\resumen.tex
 INPUT secciones\resumen.tex
-INPUT .\Tesis.toc
-INPUT .\Tesis.toc
-INPUT Tesis.toc
 OUTPUT Tesis.toc
 INPUT .\secciones\abreviaturas.tex
 INPUT .\secciones\abreviaturas.tex
 INPUT .\secciones\abreviaturas.tex
 INPUT .\secciones\abreviaturas.tex
 INPUT secciones\abreviaturas.tex
-INPUT .\Tesis.lof
-INPUT .\Tesis.lof
-INPUT Tesis.lof
 OUTPUT Tesis.lof
 INPUT .\capitulos\cap01.tex
 INPUT .\capitulos\cap01.tex
@@ -447,5 +435,4 @@ INPUT C:\Users\pamrd\AppData\Local\Programs\MiKTeX\fonts\tfm\public\amsfonts\sym
 INPUT Tesis.aux
 INPUT .\Tesis.out
 INPUT .\Tesis.out
-INPUT Tesis.run.xml
 OUTPUT Tesis.run.xml
