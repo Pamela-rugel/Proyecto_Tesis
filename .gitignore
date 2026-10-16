@@ -65,4 +65,23 @@ stack/nginx/htpasswd_tunel
 stack/nginx/clave_tunel.txt
 data/api.err
 
+# Archivos generados al compilar la tesis con LaTeX
+documentacionLaTeX/*.aux
+documentacionLaTeX/*.bbl
+documentacionLaTeX/*.bcf
+documentacionLaTeX/*.blg
+documentacionLaTeX/*.fdb_latexmk
+documentacionLaTeX/*.fls
+documentacionLaTeX/*.lof
+documentacionLaTeX/*.log
+documentacionLaTeX/*.out
+documentacionLaTeX/*.run.xml
+documentacionLaTeX/*.synctex.gz
+documentacionLaTeX/*.toc
+documentacionLaTeX/*.xdv
+documentacionLaTeX/*.pdf
+documentacionLaTeX/compilar.ps1
+
+# Configuración local del editor (settings.json sí se versiona; cada uno
+# puede ignorar sus cambios locales con: git update-index --skip-worktree)
 .vscode/
