@@ -65,21 +65,21 @@ stack/nginx/htpasswd_tunel
 stack/nginx/clave_tunel.txt
 data/api.err
 
-# Archivos generados al compilar la tesis con LaTeX
-documentacionLaTeX/*.aux
-documentacionLaTeX/*.bbl
-documentacionLaTeX/*.bcf
-documentacionLaTeX/*.blg
-documentacionLaTeX/*.fdb_latexmk
-documentacionLaTeX/*.fls
-documentacionLaTeX/*.lof
-documentacionLaTeX/*.log
-documentacionLaTeX/*.out
-documentacionLaTeX/*.run.xml
-documentacionLaTeX/*.synctex.gz
-documentacionLaTeX/*.toc
-documentacionLaTeX/*.xdv
-documentacionLaTeX/*.pdf
+# LaTeX: archivos auxiliares de compilación (solo se versionan el .tex, la bibliografía y el PDF)
+documentacionLaTeX/**/*.aux
+documentacionLaTeX/**/*.bbl
+documentacionLaTeX/**/*.bcf
+documentacionLaTeX/**/*.blg
+documentacionLaTeX/**/*.fdb_latexmk
+documentacionLaTeX/**/*.fls
+documentacionLaTeX/**/*.lof
+documentacionLaTeX/**/*.lot
+documentacionLaTeX/**/*.out
+documentacionLaTeX/**/*.run.xml
+documentacionLaTeX/**/*.synctex.gz
+documentacionLaTeX/**/*.synctex(busy)
+documentacionLaTeX/**/*.toc
+documentacionLaTeX/**/*.xdv
 documentacionLaTeX/compilar.ps1
 
 # Configuración local del editor (settings.json sí se versiona; cada uno

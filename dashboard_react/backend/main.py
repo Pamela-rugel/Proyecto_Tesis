@@ -410,7 +410,7 @@ def trayectoria(persona_id: int) -> dict:
     p = repo.personas("todos")
     fila = p[p["persona_id"] == persona_id]
     vigente = bool(fila["vigente"].iloc[0]) if not fila.empty else False
-    cargo_actual = str(fila["cargo_actual"].iloc[0] or "").upper() if not fila.empty else ""
+    cargos_actuales = set(str(fila["cargo_actual"].iloc[0] or "").upper().split(" / ")) if not fila.empty else set()
     ev = repo.evidencias_trayectoria()
     ev = ev[ev["persona_id"] == persona_id]
 
@@ -440,7 +440,7 @@ def trayectoria(persona_id: int) -> dict:
     for carril in {t["carril"] for t in abiertos}:
         del_carril = sorted((t for t in abiertos if t["carril"] == carril), key=lambda t: t["inicio"])
         for t in del_carril:
-            es_actual = vigente and (t["titulo"].upper() == cargo_actual or t is del_carril[-1])
+            es_actual = vigente and (t["titulo"].upper() in cargos_actuales or t is del_carril[-1])
             t["estado"] = "actual" if es_actual else "sin_fin"
     return {"vigente": vigente, "tramos": sorted(tramos, key=lambda t: t["inicio"])}
 

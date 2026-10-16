@@ -46,10 +46,25 @@ export default function FichaPersona({ ambito, personaId, onVolver, textoVolver,
       {volver}
       <header className="px-5 pt-2 pb-4 border-b">
         <h3 className="text-lg font-semibold leading-tight text-espol-navy">{data.nombre}</h3>
-        <p className="text-sm text-slate-700 mt-1">{data.estado.cargo_actual ?? "Sin cargo actual"}</p>
-        <p className="text-xs text-slate-500">
-          {data.estado.unidad_actual ?? "Unidad no registrada"} · {data.estado.tipo_empleado ?? "tipo desconocido"} ·{" "}
-          {data.estado.vigente ? "vigente" : "no vigente"}
+        {/* cargo_actual y unidad_actual son listas " / " alineadas, ya ordenadas por jerarquía de
+            contrato (nombramiento, contrato, servicios); todas se muestran con el mismo peso */}
+        {(() => {
+          const cargos = (data.estado.cargo_actual ?? "").split(" / ").filter(Boolean);
+          const unidades = (data.estado.unidad_actual ?? "").split(" / ");
+          if (!cargos.length) return <p className="text-sm text-slate-700 mt-1">Sin cargo actual</p>;
+          return (
+            <ul className="mt-1 space-y-0.5">
+              {cargos.map((c, i) => (
+                <li key={i} className="text-sm text-slate-700">
+                  {c}
+                  {unidades[i] && <span className="text-slate-500"> · {unidades[i]}</span>}
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
+        <p className="text-xs text-slate-500 mt-1">
+          {data.estado.tipo_empleado ?? "tipo desconocido"} · {data.estado.vigente ? "vigente" : "no vigente"}
         </p>
       </header>
 

@@ -21,6 +21,14 @@
         }
     ],
     "latex-workshop.latex.recipe.default": "first",
+    // Al terminar cada compilación se borran los archivos auxiliares: solo quedan el .tex y el PDF
+    "latex-workshop.latex.autoClean.run": "onBuilt",
+    "latex-workshop.latex.clean.subfolder.enabled": true,
+    "latex-workshop.latex.clean.fileTypes": [
+        "*.aux", "*.bbl", "*.bcf", "*.blg", "*.fdb_latexmk", "*.fls", "*.lof", "*.lot", "*.log",
+        "*.out", "*.run.xml", "*.synctex.gz", "*.synctex(busy)", "*.toc", "*.xdv", "*.nav", "*.snm",
+        "*.idx", "*.ilg", "*.ind", "*.loa", "*.acn", "*.acr", "*.alg", "*.glg", "*.glo", "*.gls", "*.ist"
+    ],
     "latex-workshop.latex.rootFile.useSubFile": false,
     "[latex]": {
         "editor.wordWrap": "on",
