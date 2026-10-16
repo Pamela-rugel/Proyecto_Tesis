@@ -613,6 +613,27 @@ _ESTADOS_CONTRATO_ABIERTOS = {"AA", "PE"}
 # personas en esta situacion (medido en historial_laboral_personas.csv).
 _ESTADOS_CONTRATO_CERRADOS = {"FF"}
 
+# DEC-059 (decision provisional de la usuaria, 2026-10-14): TI = TEMPORALMENTE INACTIVO. Si el
+# contrato no tiene FECHAFINCONTRATO ni FECHADESVINCULACION se trata como abierto (igual que AA)
+# hasta confirmar con Talento Humano por que el sistema lo marca asi. Son 90 nombramientos V de 85
+# personas (62 docentes TC, 28 administrativos); 70 tienen un movimiento M abierto del mismo cargo
+# y 58 de 62 docentes dictan materias en 2026. Los TI con fecha de fin (42 contratos docentes de
+# 2026) siguen sin contar como abiertos.
+_ESTADO_TEMPORALMENTE_INACTIVO = "TI"
+
+
+def _mascara_estado_abierto(df: pd.DataFrame) -> pd.Series:
+    """True si el contrato sigue abierto en el sistema origen: AA/PE, o TI sin fecha de fin ni
+    desvinculacion (DEC-059). Sin `ESTADOCONTRATO` devuelve todo False."""
+    if "ESTADOCONTRATO" not in df.columns:
+        return pd.Series(False, index=df.index)
+    estado = df["ESTADOCONTRATO"].astype(str).str.upper()
+    sin_fin = pd.Series(True, index=df.index)
+    for c in ("FECHAFINCONTRATO", "FECHADESVINCULACION"):
+        if c in df.columns:
+            sin_fin &= df[c].isna()
+    return estado.isin(_ESTADOS_CONTRATO_ABIERTOS) | ((estado == _ESTADO_TEMPORALMENTE_INACTIVO) & sin_fin)
+
 
 def calcular_fecha_fin_efectiva(df: pd.DataFrame) -> pd.Series:
     """Calcula la fecha fin efectiva de cada contrato: `FECHADESVINCULACION` si existe,
@@ -673,7 +694,7 @@ def calcular_fecha_fin_efectiva(df: pd.DataFrame) -> pd.Series:
     fin_efectivo = fin_efectivo.mask(fin_efectivo > fin_contrato)
     fin_efectivo = fin_efectivo.fillna(fin_contrato)
     if "ESTADOCONTRATO" in df.columns:
-        fin_efectivo = fin_efectivo.mask(df["ESTADOCONTRATO"].isin(_ESTADOS_CONTRATO_ABIERTOS))
+        fin_efectivo = fin_efectivo.mask(_mascara_estado_abierto(df))
         if "IDPERSONA" in df.columns and "FECHAINICIOCONTRATO" in df.columns:
             sin_fecha_pero_cerrado = fin_efectivo.isna() & df["ESTADOCONTRATO"].isin(_ESTADOS_CONTRATO_CERRADOS)
             if sin_fecha_pero_cerrado.any():
@@ -692,10 +713,8 @@ def calcular_fecha_fin_efectiva(df: pd.DataFrame) -> pd.Series:
 
 def _es_estado_abierto(df: pd.DataFrame) -> pd.Series:
     """Mascara booleana: True si `ESTADOCONTRATO` esta en `_ESTADOS_CONTRATO_ABIERTOS`
-    (AA/PE). Si la columna no existe, devuelve todo False (no hay forma de saberlo)."""
-    if "ESTADOCONTRATO" in df.columns:
-        return df["ESTADOCONTRATO"].isin(_ESTADOS_CONTRATO_ABIERTOS)
-    return pd.Series(False, index=df.index)
+    (AA/PE) o es TI sin fecha de fin (DEC-059). Si la columna no existe, devuelve todo False."""
+    return _mascara_estado_abierto(df)
 
 
 def _cargo_norm(fila) -> str:
@@ -704,7 +723,10 @@ def _cargo_norm(fila) -> str:
 
 
 def _estado_abierto(fila) -> bool:
-    return str(fila.get("ESTADOCONTRATO") or "").upper() in ("AA", "PE")
+    estado = str(fila.get("ESTADOCONTRATO") or "").upper()
+    if estado == _ESTADO_TEMPORALMENTE_INACTIVO:  # DEC-059
+        return pd.isna(fila.get("FECHAFINCONTRATO")) and pd.isna(fila.get("FECHADESVINCULACION"))
+    return estado in _ESTADOS_CONTRATO_ABIERTOS
 
 
 def marcar_contratos_activos_hoy(df: pd.DataFrame) -> pd.Series:
@@ -720,9 +742,8 @@ def marcar_contratos_activos_hoy(df: pd.DataFrame) -> pd.Series:
     reciente = df["IDPERSONA"].map(ultimo_registro) >= hoy - pd.Timedelta(days=365)
     fin = df["FECHAFINCONTRATO"] if "FECHAFINCONTRATO" in df.columns else vacio
     desv = df["FECHADESVINCULACION"] if "FECHADESVINCULACION" in df.columns else vacio
-    estado = df["ESTADOCONTRATO"].astype(str).str.upper() if "ESTADOCONTRATO" in df.columns else pd.Series("", index=df.index)
     es_v = df["TIPO"] == "V" if "TIPO" in df.columns else pd.Series(True, index=df.index)
-    return (es_v & estado.isin(["AA", "PE"]) & (df["FECHAINICIOCONTRATO"] <= hoy) & (desv.isna() | (desv >= hoy))
+    return (es_v & _mascara_estado_abierto(df) &(df["FECHAINICIOCONTRATO"] <= hoy) & (desv.isna() | (desv >= hoy))
             & ((fin >= hoy) | (fin.isna() & reciente))).fillna(False)
 
 
@@ -2444,6 +2465,30 @@ def _activos_mas_recientes(activos: pd.DataFrame) -> pd.DataFrame:
     return activos[activos["FECHAINICIOCONTRATO"] == activos.groupby(clave)["FECHAINICIOCONTRATO"].transform("max")]
 
 
+def _rango_contrato(activos: pd.DataFrame) -> pd.Series:
+    """Jerarquia para listar los cargos actuales (pedido de la usuaria, 2026-10-14): 0 = nombramiento,
+    1 = contrato con relacion de dependencia, 2 = contrato civil / servicios (TBL_CONTRATACION_OTROS)."""
+    contrato = activos.get("CONTRATO", pd.Series("", index=activos.index)).fillna("").astype(str).str.upper()
+    tabla = activos.get("NOMBRETABLA", pd.Series("", index=activos.index)).fillna("").astype(str).str.upper()
+    rango = pd.Series(1, index=activos.index)
+    rango[tabla.str.contains("OTROS") | contrato.str.contains("CIVIL|SERVICIOS PROFESIONALES|PRESTACI")] = 2
+    rango[contrato.str.match(r"NOMBRAMIENTO|NONBRAMIENTO")] = 0
+    return rango
+
+
+def _cargos_y_unidades_actuales(activos: pd.DataFrame) -> tuple[str, str]:
+    """CARGO_ACTUAL y UNIDAD_ACTUAL_NOMBRE como listas " / " ALINEADAS (el i-esimo cargo va con la
+    i-esima unidad; unidad vacia si no esta registrada), ordenadas por `_rango_contrato` y, a igual
+    rango, por inicio mas reciente. Sin pares repetidos."""
+    recientes = _activos_mas_recientes(activos)
+    recientes = recientes.assign(_RANGO=_rango_contrato(recientes)).sort_values(
+        ["_RANGO", "FECHAINICIOCONTRATO"], ascending=[True, False], kind="stable")
+    unidad = recientes["NOMBRE_UNIDAD"] if "NOMBRE_UNIDAD" in recientes.columns else pd.Series("", index=recientes.index)
+    pares = dict.fromkeys((str(c), "" if pd.isna(u) else str(u))
+                          for c, u in zip(recientes["CARGO"], unidad) if pd.notna(c))
+    return " / ".join(c for c, _ in pares), " / ".join(u for _, u in pares)
+
+
 def construir_features_historial_laboral(
     df: pd.DataFrame, periodos_continuos: pd.DataFrame, incluir_rmu: bool = False
 ) -> pd.DataFrame:
@@ -2538,8 +2583,9 @@ def construir_features_historial_laboral(
             # del ultimo registro por fecha (que puede ser un encargo corto ya finalizado).
             activos = grupo[grupo["_ACTIVO_HOY"]]
             if len(activos):
-                recientes = _activos_mas_recientes(activos)
-                feats["CARGO_ACTUAL"] = " / ".join(dict.fromkeys(recientes["CARGO"].dropna().astype(str)))
+                feats["CARGO_ACTUAL"], unidades = _cargos_y_unidades_actuales(activos)
+                if "NOMBRE_UNIDAD" in grupo.columns:
+                    feats["UNIDAD_ACTUAL_NOMBRE"] = unidades
             no_nulos = grupo["CARGO"].dropna()
             feats["CARGO_MAS_FRECUENTE"] = no_nulos.mode().iloc[0] if len(no_nulos) else pd.NA
             cargos_por_anio = grupo.groupby("_ANIO_INICIO")["CARGO"].nunique(dropna=True)
@@ -2549,11 +2595,8 @@ def construir_features_historial_laboral(
             feats["N_UNIDADES_DISTINTAS"] = grupo["IDESTRUCTURAORGANICA"].nunique(dropna=True)
 
         if "NOMBRE_UNIDAD" in grupo.columns:
-            feats["UNIDAD_ACTUAL_NOMBRE"] = ultimo.get("NOMBRE_UNIDAD", pd.NA)
-            activos = grupo[grupo["_ACTIVO_HOY"]]
-            if len(activos):
-                recientes = _activos_mas_recientes(activos)
-                feats["UNIDAD_ACTUAL_NOMBRE"] = " / ".join(dict.fromkeys(recientes["NOMBRE_UNIDAD"].dropna().astype(str)))
+            if not grupo["_ACTIVO_HOY"].any():
+                feats["UNIDAD_ACTUAL_NOMBRE"] = ultimo.get("NOMBRE_UNIDAD", pd.NA)
             nombres_unidad = grupo["NOMBRE_UNIDAD"].dropna()
             es_facultad = nombres_unidad.str.contains("FACULTAD", case=False, na=False)
             es_rectorado = nombres_unidad.str.contains("RECTORADO", case=False, na=False)
