@@ -1,7 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { de } from "../lib/texto";
-import { getPersonasPatronGlobal, type Ambito, type DimensionPatronGlobal, type PatronGlobal } from "../api/client";
+import { getPersonasPatronGlobal, type Ambito, type DimensionPatronGlobal, type PatronDistintivo, type PatronGlobal } from "../api/client";
 import { colorPatron } from "../lib/colores";
+import { usePatronesDimension, type GrupoGlobal } from "../lib/navegacion";
+import { ChipPatronDimension } from "./PatronesDimension";
+import { BuscadorEnGrupo, FiltroAplicado, Paginacion, Resaltado, ResumenPagina } from "./ListaPaginada";
+import type { ListaPersonas } from "../lib/listaPersonas";
 
 interface Props {
   ambito: Ambito;
@@ -15,17 +20,27 @@ interface Props {
   onMicro: (m: number | null) => void;
   onPersona: (id: number) => void;
   onCerrar: () => void;
+  /** página y búsqueda de la lista de personas (viven en la página para no perderse al abrir una ficha) */
+  lista: ListaPersonas;
 }
 
 // Detalle de un patrón global (DEC-057) y de sus microarquetipos (DEC-058): en qué se distingue,
 // quién lo representa y quiénes lo forman, con su similitud con la persona representativa.
-export default function PanelPatronGlobal({ ambito, nombreAmbito, patron, conColor, soloVigentes, microSel, onMicro, onPersona, onCerrar }: Props) {
+export default function PanelPatronGlobal({
+  ambito, nombreAmbito, patron, conColor, soloVigentes, microSel, onMicro, onPersona, onCerrar, lista,
+}: Props) {
   const micros = patron.microarquetipos?.lista ?? [];
   const micro = microSel !== null ? micros[microSel] ?? null : null;
+  const clave = ["personas-global", ambito, patron.id, micro?.id ?? null, soloVigentes];
   const personas = useQuery({
-    queryKey: ["personas-global", ambito, patron.id, micro?.id ?? null, soloVigentes],
-    queryFn: () => getPersonasPatronGlobal(ambito, patron.id, micro?.id ?? null, soloVigentes),
+    queryKey: [...clave, lista.pagina, lista.porPagina, lista.q],
+    queryFn: () =>
+      getPersonasPatronGlobal(ambito, patron.id, micro?.id ?? null, soloVigentes, {
+        pagina: lista.pagina, porPagina: lista.porPagina, q: lista.q,
+      }),
+    placeholderData: keepPreviousData,
   });
+  const inicioLista = useRef<HTMLDivElement>(null);
   const grupo = micro ?? patron;
   const nombreGrupo = micro ? micro.codigo : `Patrón global ${patron.id + 1}`;
   const referencia = micro ? `el Patrón global ${patron.id + 1}` : nombreAmbito;
@@ -41,6 +56,12 @@ export default function PanelPatronGlobal({ ambito, nombreAmbito, patron, conCol
           Patrón global {patron.id + 1}
         </h3>
         <p className="text-sm text-slate-700 mt-1">{patron.etiqueta}</p>
+        <Distintivos
+          ambito={ambito}
+          lista={patron.patrones_distintivos ?? []}
+          grupo={{ patron: patron.id, micro: null, nombre: `Patrón global ${patron.id + 1}` }}
+          referencia={nombreAmbito}
+        />
         <p className="text-xs text-slate-500 mt-1">
           {soloVigentes ? `${patron.tamano_vigentes} personas vigentes` : `${patron.tamano} personas`} ·{" "}
           {Math.round(patron.proporcion * 100)} % {de(nombreAmbito)}
@@ -82,10 +103,23 @@ export default function PanelPatronGlobal({ ambito, nombreAmbito, patron, conCol
           Para cada dimensión: la <strong>barra y el número</strong> son la intensidad promedio de {nombreGrupo} (0 = sin evidencias
           registradas, 100 = el máximo del personal). La <strong>raya negra</strong> es el promedio {de(referencia)}, para comparar.
         </p>
-        <ListaDimensiones dims={grupo.dimensiones} referencia={referencia} />
+        {micro && (
+          <Distintivos
+            ambito={ambito}
+            lista={micro.patrones_distintivos ?? []}
+            grupo={{ patron: patron.id, micro: micro.id, nombre: micro.codigo }}
+            referencia={referencia}
+          />
+        )}
+        <ListaDimensiones
+          dims={grupo.dimensiones}
+          referencia={referencia}
+          ambito={ambito}
+          grupo={{ patron: patron.id, micro: micro?.id ?? null, nombre: nombreGrupo }}
+        />
       </div>
 
-      <div className="px-5 pt-4 pb-2">
+      <div ref={inicioLista} className="px-5 pt-4 pb-2 scroll-mt-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Personas de {nombreGrupo} {personas.data ? `(${personas.data.total})` : ""}
         </h4>
@@ -100,13 +134,29 @@ export default function PanelPatronGlobal({ ambito, nombreAmbito, patron, conCol
         ) : (
           <p className="text-[11px] text-slate-500 mt-0.5">Este grupo no tiene personas vigentes que lo representen.</p>
         )}
+        <div className="mt-3 space-y-2">
+          <BuscadorEnGrupo
+            key={lista.contexto}
+            claveGrupo={clave}
+            nombreGrupo={nombreGrupo}
+            totalGrupo={personas.data?.total ?? null}
+            sugerir={(q) => getPersonasPatronGlobal(ambito, patron.id, micro?.id ?? null, soloVigentes, { q, pagina: 1, porPagina: 8 })}
+            aplicado={lista.q}
+            onAplicar={lista.setQ}
+            onPersona={onPersona}
+          />
+          <FiltroAplicado lista={lista} />
+          <ResumenPagina datos={personas.data} lista={lista} />
+        </div>
       </div>
-      <ul className="divide-y">
+      <ul className={`divide-y border-t transition-opacity ${personas.isPlaceholderData ? "opacity-60" : ""}`}>
         {personas.data?.personas.map((x) => (
           <li key={x.persona_id}>
             <button onClick={() => onPersona(x.persona_id)} className="w-full text-left px-5 py-2 hover:bg-slate-50">
               <span className="flex items-baseline gap-2">
-                <span className="text-sm text-slate-800 flex-1">{x.nombre}</span>
+                <span className="text-sm text-slate-800 flex-1">
+                  <Resaltado texto={x.nombre} q={lista.q} />
+                </span>
                 {x.similitud !== null && (
                   <span className="text-xs tabular-nums text-slate-700" title="Similitud con la persona más representativa">
                     {x.es_rep ? "representante" : `${Math.round(x.similitud * 100)} %`}
@@ -118,16 +168,25 @@ export default function PanelPatronGlobal({ ambito, nombreAmbito, patron, conCol
                 {!x.vigente && " · no vigente"}
                 {!micro && x.micro >= 0 && ` · ${micros[x.micro]?.codigo ?? ""}`}
                 {x.entre_dos && " · entre dos grupos"}
+                {lista.q && ` · n.º ${x.posicion} de ${personas.data?.total ?? ""}`}
               </p>
             </button>
           </li>
         ))}
       </ul>
+      {personas.data?.total_filtrado === 0 && lista.q && (
+        <p className="text-xs text-slate-500 px-5 py-4">Nadie en {nombreGrupo} coincide con «{lista.q}».</p>
+      )}
+      <Paginacion datos={personas.data} lista={lista} onCambio={() => inicioLista.current?.scrollIntoView({ block: "start", behavior: "smooth" })} />
     </section>
   );
 }
 
-function ListaDimensiones({ dims, referencia }: { dims: DimensionPatronGlobal[]; referencia: string }) {
+/** Intensidad promedio del grupo en cada dimensión frente a su referencia (todo el ámbito o el patrón global). */
+export function ListaDimensiones({ dims, referencia, ambito, grupo }: {
+  dims: DimensionPatronGlobal[]; referencia: string; ambito: Ambito; grupo: GrupoGlobal;
+}) {
+  const nav = usePatronesDimension();
   const orden = [...dims].sort((a, b) => b.intensidad_media - a.intensidad_media);
   return (
     <ul className="space-y-2">
@@ -137,7 +196,7 @@ function ListaDimensiones({ dims, referencia }: { dims: DimensionPatronGlobal[];
         const dif = d.intensidad_media - d.intensidad_media_referencia;
         return (
           <li key={d.dimension} title={`${d.nombre}: ${d.intensidad_media} (promedio ${de(referencia)}: ${d.intensidad_media_referencia})`}>
-            <div className="grid grid-cols-[8rem_1fr_4.5rem] gap-2 items-center">
+            <div className="grid grid-cols-[8rem_1fr_4.5rem_3.25rem] gap-2 items-center">
               <span className="text-xs text-slate-700 truncate">{d.nombre}</span>
               <span className="relative h-2.5 bg-slate-100 rounded-sm">
                 <span className="absolute inset-y-0 left-0 bg-espol-blue rounded-r-[3px]" style={{ width: `${d.intensidad_media}%` }} />
@@ -149,16 +208,50 @@ function ListaDimensiones({ dims, referencia }: { dims: DimensionPatronGlobal[];
                   <span className="text-[10px] text-slate-500"> ({dif > 0 ? "+" : "−"}{Math.round(Math.abs(dif))})</span>
                 )}
               </span>
+              {pf && nav ? (
+                <button
+                  onClick={() => nav.verPatrones(d.dimension, { patron: pf.patron, grupo })}
+                  className="text-[10px] text-espol-blue hover:underline text-right whitespace-nowrap"
+                  title={`Ver los patrones de ${d.nombre} y cómo se reparten las personas de ${grupo.nombre} entre ellos`}
+                >
+                  patrones ›
+                </button>
+              ) : (
+                <span />
+              )}
             </div>
             {destaca && (
               <p className="text-[11px] text-slate-500 ml-[8.5rem]">
-                El {Math.round(pf!.proporcion * 100)} % de quienes tienen evidencias aquí sigue el Patrón {pf!.patron + 1} de esta
-                dimensión (en {referencia}: {Math.round(pf!.proporcion_referencia * 100)} %).
+                El {Math.round(pf!.proporcion * 100)} % de quienes tienen evidencias aquí sigue el{" "}
+                <ChipPatronDimension ambito={ambito} dimension={d.dimension} patron={pf!.patron} grupo={grupo} /> (en {referencia}:{" "}
+                {Math.round(pf!.proporcion_referencia * 100)} %).
               </p>
             )}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** Patrones de dimensión mucho más frecuentes en el grupo que en su referencia, como chips. */
+function Distintivos({ ambito, lista, grupo, referencia }: {
+  ambito: Ambito; lista: PatronDistintivo[]; grupo: GrupoGlobal; referencia: string;
+}) {
+  if (!lista.length) return null;
+  return (
+    <div className="mt-2">
+      <p className="text-[11px] text-slate-500 mb-1">Patrones de dimensión típicos de {grupo.nombre}:</p>
+      <ul className="flex flex-wrap gap-x-3 gap-y-1">
+        {lista.map((x) => (
+          <li key={x.dimension} className="text-[11px] text-slate-600 flex items-center gap-1">
+            <ChipPatronDimension ambito={ambito} dimension={x.dimension} patron={x.patron} grupo={grupo} />
+            <span title={`El ${Math.round(x.proporcion * 100)} % de quienes tienen evidencias en ${x.nombre} lo sigue; en ${referencia}, el ${Math.round(x.proporcion_referencia * 100)} %`}>
+              {Math.round(x.proporcion * 100)} % <span className="text-slate-400">(vs {Math.round(x.proporcion_referencia * 100)} %)</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

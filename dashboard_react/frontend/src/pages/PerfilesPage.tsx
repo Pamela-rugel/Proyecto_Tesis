@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { a } from "../lib/texto";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   getAmbitos, getDimension, getDimensiones, getMapaDimension, getMapaPerfil, getPatronesGlobales, getPersonasDimension,
-  type Ambito, type Patron,
+  type Ambito,
   type Tema, type TipoMapa,
 } from "../api/client";
 import MapaPerfil, { type ColorPerfil } from "../components/MapaPerfil";
@@ -11,7 +11,13 @@ import PanelPatronGlobal from "../components/PanelPatronGlobal";
 import FichaPersona from "../components/FichaPersona";
 import MapaDimension from "../components/MapaDimension";
 import BuscadorPersonas from "../components/BuscadorPersonas";
+import TarjetaPatron from "../components/TarjetaPatron";
+import { ProveedorPatronesDimension } from "../components/PatronesDimension";
 import { colorPatron } from "../lib/colores";
+import {
+  BuscadorEnGrupo, FiltroAplicado, Paginacion, Resaltado, ResumenPagina,
+} from "../components/ListaPaginada";
+import { useListaPersonas } from "../lib/listaPersonas";
 
 // con quién se compara cada número, dicho en palabras (en vez de "ámbito")
 const NOMBRE_AMBITO: Record<Ambito, string> = {
@@ -27,6 +33,17 @@ const AMBITOS: { id: Ambito; nombre: string }[] = [
 ];
 
 type Filtro = { tipo: "patron" | "tema"; id: number } | null;
+type Vista = "dimension" | "perfil";
+/** lo necesario para volver exactamente a donde se estaba */
+interface Lugar {
+  vista: Vista;
+  dimension: string;
+  filtro: Filtro;
+  persona: number | null;
+  globalSel: number | null;
+  microSel: number | null;
+  tipoMapa: TipoMapa;
+}
 
 // Perfiles por dimensión de evidencia (DEC-053/055): dimensiones a la izquierda; al centro, los
 // patrones de actividad y los temas descubiertos en la dimensión; a la derecha, las personas del
@@ -37,17 +54,27 @@ export default function PerfilesPage() {
     AMBITOS.some((a) => a.id === inicial.get("ambito")) ? (inicial.get("ambito") as Ambito) : "todos",
   );
   const [dimension, setDimension] = useState<string>(inicial.get("dimension") ?? "investigacion");
-  const [filtro, setFiltro] = useState<Filtro>(null);
+  const [filtro, setFiltro] = useState<Filtro>(() => {
+    const p = inicial.get("patron");
+    return p !== null && p !== "" && !isNaN(Number(p)) ? { tipo: "patron", id: Number(p) } : null;
+  });
   const [persona, setPersona] = useState<number | null>(null);
   const [soloVigentes, setSoloVigentes] = useState(true);
   const [tipoMapa, setTipoMapa] = useState<TipoMapa>("patrones");
-  const [vista, setVista] = useState<"dimension" | "perfil">(inicial.get("vista") === "perfil" ? "perfil" : "dimension");
+  const [vista, setVista] = useState<Vista>(inicial.get("vista") === "perfil" ? "perfil" : "dimension");
   const [colorPerfil, setColorPerfil] = useState<ColorPerfil>("global");
   const [globalSel, setGlobalSel] = useState<number | null>(
     inicial.get("global") !== null && !isNaN(Number(inicial.get("global"))) ? Number(inicial.get("global")) : null,
   );
   const [microSel, setMicroSel] = useState<number | null>(null);
   const [dimColor, setDimColor] = useState<string | null>("investigacion");
+  /** a dónde vuelve el aviso "← Volver a …" tras saltar entre el perfil completo y una dimensión */
+  const [retorno, setRetorno] = useState<{ texto: string; lugar: Lugar } | null>(null);
+
+  // página y búsqueda de cada lista de personas; se reinician al cambiar de grupo
+  const listaDim = useListaPersonas(`${ambito}|${dimension}|${filtro?.tipo ?? ""}|${filtro?.id ?? ""}|${soloVigentes}`);
+  const listaGlobal = useListaPersonas(`${ambito}|${globalSel}|${microSel}|${soloVigentes}`);
+  const inicioListaDim = useRef<HTMLDivElement>(null);
 
   const calcularAlto = () => Math.max(560, window.innerHeight - 150);
   const [alto, setAlto] = useState(calcularAlto);
@@ -97,10 +124,15 @@ export default function PerfilesPage() {
     enabled: vista === "perfil",
   });
   const globalesConColor = (globales.data?.patrones?.length ?? 0) <= 6;
+  const clavePersonas = ["personas-dimension", ambito, dimension, filtro, soloVigentes];
+  const filtroApi = filtro ? { [filtro.tipo]: filtro.id } : {};
   const personas = useQuery({
-    queryKey: ["personas-dimension", ambito, dimension, filtro, soloVigentes],
+    queryKey: [...clavePersonas, listaDim.pagina, listaDim.porPagina, listaDim.q],
     queryFn: () =>
-      getPersonasDimension(ambito, dimension, filtro ? { [filtro.tipo]: filtro.id } : {}, soloVigentes),
+      getPersonasDimension(ambito, dimension, filtroApi, soloVigentes, {
+        pagina: listaDim.pagina, porPagina: listaDim.porPagina, q: listaDim.q,
+      }),
+    placeholderData: keepPreviousData,
   });
 
   const elegirGlobal = (g: number) => {
@@ -140,7 +172,47 @@ export default function PerfilesPage() {
   const tituloFiltro =
     filtro?.tipo === "patron" ? `Patrón ${filtro.id + 1}` : filtro?.tipo === "tema" ? `Tema ${filtro.id + 1}` : null;
 
+  // saltar entre el perfil completo y las dimensiones, recordando de dónde se vino
+  const aqui = (): { texto: string; lugar: Lugar } => {
+    const grupo =
+      globalSel !== null && microSel !== null ? `G${globalSel + 1}.${microSel + 1}` : globalSel !== null ? `Patrón global ${globalSel + 1}` : null;
+    const texto =
+      vista === "perfil"
+        ? `${grupo ?? "Perfil completo"}${persona !== null ? " (ficha)" : ""}`
+        : `${resumenDim?.nombre ?? dimension}${tituloFiltro ? ` · ${tituloFiltro}` : ""}${persona !== null ? " (ficha)" : ""}`;
+    return { texto, lugar: { vista, dimension, filtro, persona, globalSel, microSel, tipoMapa } };
+  };
+  const irADimension = (dim: string, patron: number | null, conPersona: number | null = null) => {
+    setRetorno(aqui());
+    setVista("dimension");
+    setDimension(dim);
+    setFiltro(patron !== null ? { tipo: "patron", id: patron } : null);
+    setTipoMapa("patrones");
+    setPersona(conPersona);
+  };
+  const irAPerfil = (personaId: number, patron: number, micro: number | null) => {
+    setRetorno(aqui());
+    setVista("perfil");
+    setGlobalSel(patron);
+    setMicroSel(micro);
+    setColorPerfil("global");
+    setPersona(personaId);
+  };
+  const volver = () => {
+    if (!retorno) return;
+    const l = retorno.lugar;
+    setVista(l.vista);
+    setDimension(l.dimension);
+    setFiltro(l.filtro);
+    setPersona(l.persona);
+    setGlobalSel(l.globalSel);
+    setMicroSel(l.microSel);
+    setTipoMapa(l.tipoMapa);
+    setRetorno(null);
+  };
+
   return (
+    <ProveedorPatronesDimension ambito={ambito} onIr={irADimension}>
     <div className="space-y-3">
       {/* mismas columnas que los paneles de abajo: ámbito y vista sobre las dos primeras, buscador sobre la última */}
       <div className="grid lg:grid-cols-[17rem_minmax(0,1fr)_27rem] gap-4 items-center">
@@ -175,6 +247,18 @@ export default function PerfilesPage() {
         </div>
         <BuscadorPersonas ambito={ambito} onElegir={(r) => setPersona(r.persona_id)} />
       </div>
+
+      {retorno && (
+        <div className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5">
+          <button onClick={volver} className="text-espol-blue font-medium hover:underline">
+            ← Volver a {retorno.texto}
+          </button>
+          <span className="text-slate-500 flex-1">de donde llegaste</span>
+          <button onClick={() => setRetorno(null)} className="text-slate-400 hover:text-slate-700 text-base leading-none" aria-label="Quitar aviso">
+            ×
+          </button>
+        </div>
+      )}
 
       {ambitos.data && !ambitos.data.estado.actualizado && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
@@ -298,6 +382,7 @@ export default function PerfilesPage() {
                   nombreDimension={colorPerfil !== "global" && dimColor ? nombreDimColor : null}
                   personaSeleccionada={persona}
                   alto={alto - 130}
+                  revision={`${ambito}|${soloVigentes}`}
                   onPersona={setPersona}
                   globalSeleccionado={globalSel}
                   onGlobal={elegirGlobal}
@@ -338,6 +423,7 @@ export default function PerfilesPage() {
                 microSel={microSel}
                 onMicro={setMicroSel}
                 onPersona={setPersona}
+                lista={listaGlobal}
                 onCerrar={() => {
                   setGlobalSel(null);
                   setMicroSel(null);
@@ -425,6 +511,7 @@ export default function PerfilesPage() {
                       seleccion={filtro && (filtro.tipo === "patron") === (tipoMapa === "patrones") ? filtro.id : null}
                       personaSeleccionada={persona}
                       alto={Math.max(320, Math.round(alto * 0.5))}
+                      revision={`${ambito}|${dimension}|${tipoMapa}|${soloVigentes}`}
                       onPersona={setPersona}
                       onGrupo={(g) => elegirFiltro({ tipo: tipoMapa === "patrones" ? "patron" : "tema", id: g })}
                     />
@@ -443,8 +530,9 @@ export default function PerfilesPage() {
                     Patrones de actividad · cómo participan ({d.patrones.k})
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
-                    Personas agrupadas por cuánto hacen y en qué proporciones. Barras: cuánto se aleja el grupo del promedio
-                    de la dimensión (hacia la derecha, más; hacia la izquierda, menos).
+                    Personas agrupadas por cuánto hacen y en qué proporciones. Cada patrón se compara con el promedio de
+                    quienes tienen evidencias en {d.nombre}: arriba, en qué tiene más o menos que ese promedio; las barras
+                    muestran cuánto se aleja en cada componente (hacia la derecha, más; hacia la izquierda, menos).
                   </p>
                   <div className="grid xl:grid-cols-2 gap-3">
                     {d.patrones.patrones.map((p) => (
@@ -454,6 +542,7 @@ export default function PerfilesPage() {
                         seleccionado={filtro?.tipo === "patron" && filtro.id === p.id}
                         onClick={() => elegirFiltro({ tipo: "patron", id: p.id })}
                         onPersona={setPersona}
+                        nombreDimension={d.nombre}
                       />
                     ))}
                   </div>
@@ -495,10 +584,12 @@ export default function PerfilesPage() {
               onVolver={() => setPersona(null)}
               textoVolver={tituloFiltro ? `Volver a ${tituloFiltro}` : "Volver a la lista"}
               onPersona={setPersona}
+              dimension={dimension}
+              onIrPerfil={irAPerfil}
             />
           ) : (
             <div>
-              <div className="px-5 pt-4 pb-3 border-b">
+              <div ref={inicioListaDim} className="px-5 pt-4 pb-3 border-b scroll-mt-2">
                 <h3 className="text-base font-semibold text-espol-navy">
                   {tituloFiltro ? `Personas · ${tituloFiltro}` : `Personas con evidencias de ${d?.nombre ?? ""}`}
                 </h3>
@@ -521,13 +612,29 @@ export default function PerfilesPage() {
                     </button>
                   )}
                 </div>
+                <div className="mt-3 space-y-2">
+                  <BuscadorEnGrupo
+                    key={listaDim.contexto}
+                    claveGrupo={clavePersonas}
+                    nombreGrupo={tituloFiltro ?? d?.nombre ?? "la dimensión"}
+                    totalGrupo={personas.data?.total ?? null}
+                    sugerir={(q) => getPersonasDimension(ambito, dimension, filtroApi, soloVigentes, { q, pagina: 1, porPagina: 8 })}
+                    aplicado={listaDim.q}
+                    onAplicar={listaDim.setQ}
+                    onPersona={setPersona}
+                  />
+                  <FiltroAplicado lista={listaDim} />
+                  <ResumenPagina datos={personas.data} lista={listaDim} />
+                </div>
               </div>
-              <ul className="divide-y">
+              <ul className={`divide-y transition-opacity ${personas.isPlaceholderData ? "opacity-60" : ""}`}>
                 {personas.data?.personas.map((x) => (
                   <li key={x.persona_id}>
                     <button onClick={() => setPersona(x.persona_id)} className="w-full text-left px-5 py-2 hover:bg-slate-50">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-sm text-slate-800 flex-1">{x.nombre}</span>
+                        <span className="text-sm text-slate-800 flex-1">
+                          <Resaltado texto={x.nombre} q={listaDim.q} />
+                        </span>
                         <span className="text-xs tabular-nums text-slate-700" title={`Intensidad en la dimensión (percentil frente ${a(NOMBRE_AMBITO[ambito])})`}>
                           {Math.floor(x.intensidad)}
                         </span>
@@ -535,6 +642,7 @@ export default function PerfilesPage() {
                       <p className="text-[11px] text-slate-500 truncate">
                         {x.cargo_actual ?? "Sin cargo actual"}
                         {!x.vigente && " · no vigente"}
+                        {listaDim.q && ` · n.º ${x.posicion} de ${personas.data?.total ?? ""}`}
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {filtro?.tipo === "tema" && x.proporcion !== undefined
@@ -547,64 +655,27 @@ export default function PerfilesPage() {
                   </li>
                 ))}
               </ul>
-              {personas.data && personas.data.total > personas.data.personas.length && (
-                <p className="text-[11px] text-slate-400 px-5 py-3">Se muestran las primeras {personas.data.personas.length}.</p>
+              {personas.data?.total_filtrado === 0 && listaDim.q && (
+                <p className="text-xs text-slate-500 px-5 py-4">
+                  Nadie en {tituloFiltro ?? "esta lista"} coincide con «{listaDim.q}».
+                </p>
               )}
               <p className="text-[11px] text-slate-400 px-5 py-3">
                 Número a la derecha: intensidad en la dimensión, de 0 a 100, comparada con {NOMBRE_AMBITO[ambito]} (100 = quien
                 más evidencia tiene).{filtro?.tipo === "patron" ? " Similitud: cuánto se parece a la persona más representativa del patrón (100 % = ella misma; 0 % = la más distinta del patrón)." : ""}
               </p>
+              <Paginacion
+                datos={personas.data}
+                lista={listaDim}
+                onCambio={() => inicioListaDim.current?.scrollIntoView({ block: "start", behavior: "smooth" })}
+              />
             </div>
           )}
         </aside>
       </div>
       )}
     </div>
-  );
-}
-
-function TarjetaPatron({ patron, seleccionado, onClick, onPersona }: {
-  patron: Patron; seleccionado: boolean; onClick: () => void; onPersona: (id: number) => void;
-}) {
-  const extremo = Math.max(1.5, ...patron.componentes.map((c) => Math.abs(c.z)));
-  return (
-    <div className={`border rounded-md p-3 ${seleccionado ? "border-espol-blue ring-1 ring-espol-blue" : "hover:border-slate-300"}`}>
-      <button onClick={onClick} className="w-full text-left" aria-pressed={seleccionado}>
-        <div className="flex items-baseline gap-2">
-          <span className="w-2.5 h-2.5 rounded-full shrink-0 self-center" style={{ background: colorPatron(patron.id) }} />
-          <span className="text-sm font-semibold text-slate-800 flex-1">Patrón {patron.id + 1}</span>
-          <span className="text-xs text-slate-500 tabular-nums">
-            {patron.tamano_vigentes} vigentes · {patron.tamano} en total
-          </span>
-        </div>
-        <p className="text-xs text-slate-600 mt-1">{patron.etiqueta}</p>
-        <ul className="mt-2 space-y-1">
-          {patron.componentes.map((c) => {
-            const ancho = (Math.min(Math.abs(c.z), extremo) / extremo) * 50;
-            return (
-              <li key={c.componente} className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2 items-center" title={`${c.descripcion}: z = ${c.z}`}>
-                <span className="text-[11px] text-slate-600 truncate">{c.descripcion.replace(" (log)", "")}</span>
-                <span className="relative h-2 bg-slate-100 rounded-sm">
-                  <span className="absolute top-0 bottom-0 left-1/2 w-px bg-slate-400" />
-                  <span
-                    className={`absolute top-0 bottom-0 ${c.z >= 0 ? "bg-espol-blue rounded-r-sm" : "bg-slate-400 rounded-l-sm"}`}
-                    style={c.z >= 0 ? { left: "50%", width: `${ancho}%` } : { right: "50%", width: `${ancho}%` }}
-                  />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </button>
-      {patron.representante_id !== null && (
-        <p className="text-[11px] text-slate-500 mt-2">
-          Persona más representativa:{" "}
-          <button className="text-espol-blue hover:underline" onClick={() => onPersona(patron.representante_id!)}>
-            {patron.representante_nombre}
-          </button>
-        </p>
-      )}
-    </div>
+    </ProveedorPatronesDimension>
   );
 }
 

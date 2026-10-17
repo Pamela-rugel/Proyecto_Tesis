@@ -1,4 +1,4 @@
-import Plot from "react-plotly.js";
+import GraficoNavegable from "./GraficoNavegable";
 import type { PuntoMapaDimension, TipoMapa } from "../api/client";
 import { colorPatron } from "../lib/colores";
 
@@ -11,6 +11,8 @@ interface Props {
   alto: number;
   onPersona: (id: number) => void;
   onGrupo: (id: number) => void;
+  /** al cambiar, el mapa vuelve a la vista completa (ver GraficoNavegable) */
+  revision: string;
 }
 
 // Patrones (máx. 6): un color por patrón (paleta validada para scatter) + rótulo P1…P6 sobre su
@@ -26,7 +28,7 @@ const mediana = (xs: number[]) => {
 };
 
 // Mapa t-SNE de las personas con evidencias en la dimensión (solo para orientarse).
-export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccionada, alto, onPersona, onGrupo }: Props) {
+export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccionada, alto, onPersona, onGrupo, revision }: Props) {
   const grupo = (p: PuntoMapaDimension) => (tipo === "patrones" ? p.patron : p.tema) ?? null;
   const prefijo = tipo === "patrones" ? "P" : "T";
   const nombreGrupo = tipo === "patrones" ? "Patrón" : "Tema principal";
@@ -119,33 +121,16 @@ export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccio
     });
   }
 
+  const elegidos = seleccion !== null ? porGrupo.get(seleccion) : undefined;
   return (
-    <Plot
+    <GraficoNavegable
       data={trazas}
-      layout={{
-        autosize: true,
-        height: alto,
-        margin: { l: 4, r: 4, t: 4, b: 4 },
-        xaxis: { visible: false },
-        yaxis: { visible: false },
-        annotations: rotulos,
-        hovermode: "closest",
-        hoverdistance: 8,
-        hoverlabel: { bgcolor: "#fff", bordercolor: "#cbd5e1", font: { size: 12, color: "#0f172a" }, align: "left" },
-        plot_bgcolor: "#fff",
-        paper_bgcolor: "#fff",
-        dragmode: "pan",
-      }}
-      config={{
-        displaylogo: false,
-        responsive: true,
-        scrollZoom: false,
-        displayModeBar: true,
-        modeBarButtonsToRemove: ["zoom2d", "pan2d", "select2d", "lasso2d", "autoScale2d", "toImage"],
-        doubleClick: "reset",
-      }}
-      style={{ width: "100%" }}
-      useResizeHandler
+      annotations={rotulos}
+      alto={alto}
+      revision={revision}
+      ruedaConCtrl
+      enfoque={elegidos ? { xs: elegidos.map((p) => p.x), ys: elegidos.map((p) => p.y), nombre: `${prefijo}${seleccion! + 1}` } : null}
+      foco={sel ? { id: sel.persona_id, x: sel.x, y: sel.y } : null}
       onClick={(e) => {
         const id = e.points[0]?.customdata;
         if (typeof id === "number") onPersona(id);

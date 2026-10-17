@@ -20,7 +20,9 @@ import threading
 import unicodedata
 from contextlib import asynccontextmanager
 from difflib import SequenceMatcher
+from functools import lru_cache
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,9 +32,14 @@ import repositorio as repo
 
 @asynccontextmanager
 async def _ciclo_de_vida(_app: FastAPI):
-    """Precarga en segundo plano el índice y los modelos de la búsqueda (~30 s en GPU, más en CPU)
-    para que la primera búsqueda no tenga que esperarlos; la API responde mientras tanto."""
+    """Precarga en segundo plano los datos reales de las personas (unos segundos) y el índice y los
+    modelos de la búsqueda (~30 s en GPU, más en CPU) para que la primera ficha y la primera búsqueda
+    no tengan que esperarlos; la API responde mientras tanto."""
     def precargar():
+        try:
+            _componentes_crudos()
+        except Exception as e:  # noqa: BLE001 — la ficha sigue sin los datos reales
+            print(f"Precarga de los datos reales falló: {e}", flush=True)
         try:
             from busqueda.indice import cargar_indice, modelo_embedding
             from busqueda.rerank import modelo_reranker
@@ -70,11 +77,209 @@ def _ambito(ambito: str) -> str:
     return ambito
 
 
+# ------------------------------------------------------------------ patrones descritos en palabras
+NOMBRE_AMBITO = {"todos": "todo el personal", "administrativos": "el personal administrativo", "docentes": "el personal docente"}
+# mismos cortes que la etiqueta calculada al construir (micro_dimensiones.UMBRAL_Z y "muy alto")
+CORTE_MAS, CORTE_MUCHO = 0.4, 1.5
+COMPARACIONES = [("mucho_mas", "Mucho más"), ("mas", "Más"), ("menos", "Menos"), ("mucho_menos", "Mucho menos")]
+
+
+def _formato_componente(componente: str, descripcion: str) -> str:
+    """Cómo mostrar el valor: `porcentaje` para proporciones y marcas sí/no (su promedio es la parte
+    de las personas que la tiene), `nivel` para escalas ordinales y `numero` para conteos y razones."""
+    if descripcion.startswith(("Proporción", "Tiene ")) or componente == "posgrado_en_curso":
+        return "porcentaje"
+    if descripcion.startswith("Nivel"):
+        return "nivel"
+    return "numero"
+
+
+def _comparacion(z: float) -> str:
+    """Cuánto se aleja el grupo del promedio de la dimensión, en palabras (z del centroide)."""
+    if z >= CORTE_MUCHO:
+        return "mucho_mas"
+    if z >= CORTE_MAS:
+        return "mas"
+    if z <= -CORTE_MUCHO:
+        return "mucho_menos"
+    if z <= -CORTE_MAS:
+        return "menos"
+    return "similar"
+
+
+def _frase_componente(descripcion: str) -> str:
+    """"Tiene título del exterior" -> "título del exterior"; sin aclaraciones entre paréntesis."""
+    f = descripcion.split(" (")[0].split(":")[0]
+    if f.startswith("Tiene "):
+        f = f[len("Tiene "):]
+    return f[:1].lower() + f[1:]
+
+
+def _enumerar(xs: list[str], maximo: int = 3) -> str:
+    """"a, b y c"; con más de `maximo`, los primeros y "N más" (el detalle va en los componentes)."""
+    if len(xs) > maximo:
+        xs = xs[:maximo] + [f"{len(xs) - maximo} más"]
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1]
+
+
+def _describir_patron(componentes: list[dict], nombre_dimension: str) -> str:
+    """P. ej. "Más que el promedio de Formación en títulos de cuarto nivel y nivel máximo de
+    formación; menos en título del exterior". Dice frente a qué se compara; los valores van aparte."""
+    partes = []
+    for clave, texto in COMPARACIONES:
+        xs = [_frase_componente(c["descripcion"]) for c in sorted(componentes, key=lambda c: -abs(c["z"])) if c["comparacion"] == clave]
+        if xs:
+            inicio = f"{texto} que el promedio de {nombre_dimension} en" if not partes else f"{texto.lower()} en"
+            partes.append(f"{inicio} {_enumerar(xs)}")
+    return "; ".join(partes) if partes else f"Cerca del promedio de {nombre_dimension} en todo"
+
+
+def _media_dimension(patrones: list[dict], componente: str, en_log: bool) -> float:
+    """Promedio de la dimensión a partir de los promedios de sus patrones (ponderados por tamaño),
+    en la misma escala que `media_grupo` (en las variables en log, la media se toma en log)."""
+    pares = [(p["tamano"], next(c["media_grupo"] for c in p["componentes"] if c["componente"] == componente)) for p in patrones]
+    n = sum(t for t, _ in pares)
+    if en_log:
+        return float(np.expm1(sum(t * np.log1p(m) for t, m in pares) / n))
+    return float(sum(t * m for t, m in pares) / n)
+
+
+@lru_cache(maxsize=3)
+def _fichas(ambito: str) -> dict:
+    """Fichas de temas y patrones por dimensión (DEC-055) con cada patrón descrito en palabras. A
+    cada componente se le agrega el promedio de la dimensión (`media_dimension`), cómo se compara el
+    grupo con él (`comparacion`) y en qué unidad mostrarlo (`formato`); la etiqueta calculada al
+    construir ("Alto: …") queda en `etiqueta_tecnica`. Solo presentación: no cambia los grupos."""
+    _, _, fichas = repo.micro_dimensiones(ambito)
+    fichas = copy.deepcopy(fichas)
+    defs = repo.definiciones_dimensiones()
+    for dim, info in fichas.items():
+        patrones = (info.get("patrones") or {}).get("patrones", [])
+        nombre = defs.get(dim, {}).get("nombre", dim)
+        for p in patrones:
+            for c in p["componentes"]:
+                c["formato"] = _formato_componente(c["componente"], c["descripcion"])
+                c["media_dimension"] = round(_media_dimension(patrones, c["componente"], "(log" in c["descripcion"]), 2)
+                c["comparacion"] = _comparacion(c["z"])
+            p["etiqueta_tecnica"] = p["etiqueta"]
+            p["etiqueta"] = _describir_patron(p["componentes"], nombre)
+    return fichas
+
+
+
+# ------------------------------------------------------------------ patrones globales descritos en palabras
+UMBRAL_PUNTOS_GLOBAL = 15   # mismo corte que al construir (perfil_conjunto.UMBRAL_PUNTOS)
+
+
+def _distintivos_globales(dims: list[dict], fichas_dim: dict) -> list[dict]:
+    """Patrones por dimensión mucho más frecuentes en el grupo que en su referencia (mismo criterio
+    que al construir: lift >= 1,5, >= 50 % de quienes tienen evidencias y >= 30 % del grupo), con la
+    etiqueta del patrón para mostrarlo como "P2 · Investigación"."""
+    salida = []
+    for e in dims:
+        pf = e.get("patron_frecuente")
+        if not pf or (pf.get("lift") or 0) < 1.5 or pf["proporcion"] < 0.5 or e["con_evidencia"] * pf["proporcion"] < 0.3:
+            continue
+        lista = ((fichas_dim.get(e["dimension"]) or {}).get("patrones") or {}).get("patrones", [])
+        salida.append({"dimension": e["dimension"], "nombre": e["nombre"], "patron": pf["patron"],
+                       "etiqueta_patron": lista[pf["patron"]]["etiqueta"] if pf["patron"] < len(lista) else None,
+                       "proporcion": pf["proporcion"], "proporcion_referencia": pf["proporcion_referencia"], "lift": pf["lift"]})
+    return sorted(salida, key=lambda x: -(x["lift"] or 0))[:3]
+
+
+def _de(s: str) -> str:
+    """"de el personal docente" -> "del personal docente"."""
+    return f"del {s[3:]}" if s.startswith("el ") else f"de {s}"
+
+
+def _describir_global(dims: list[dict], referencia: str, sin_diferencias: str) -> str:
+    """P. ej. "Por encima del promedio de todo el personal en Investigación y Tesis dirigidas; por
+    debajo en Idiomas" (intensidad media del grupo frente a la de su referencia, >= 15 puntos)."""
+    orden = sorted(dims, key=lambda e: -e["diferencia"])
+    altos = [e["nombre"] for e in orden if e["diferencia"] >= UMBRAL_PUNTOS_GLOBAL]
+    bajos = [e["nombre"] for e in reversed(orden) if e["diferencia"] <= -UMBRAL_PUNTOS_GLOBAL]
+    partes = []
+    if altos:
+        partes.append(f"Por encima del promedio {_de(referencia)} en {_enumerar(altos)}")
+    if bajos:
+        partes.append(f"{'por' if partes else 'Por'} debajo{'' if partes else f' del promedio {_de(referencia)}'} en {_enumerar(bajos)}")
+    return "; ".join(partes) if partes else sin_diferencias
+
+
+@lru_cache(maxsize=3)
+def _globales(ambito: str) -> tuple[pd.DataFrame, dict]:
+    """Patrones globales (DEC-057) y microarquetipos (DEC-058) con la etiqueta en palabras (la
+    calculada al construir queda en `etiqueta_tecnica`) y sus patrones por dimensión distintivos
+    (`patrones_distintivos`), para mostrarlos con su significado. Solo presentación."""
+    glob, fichas = repo.patrones_globales(ambito)
+    fichas = copy.deepcopy(fichas)
+    fichas_dim = _fichas(ambito)
+    nombre_ambito = NOMBRE_AMBITO.get(ambito, ambito)
+    for f in fichas.get("patrones", []):
+        f["etiqueta_tecnica"] = f["etiqueta"]
+        f["etiqueta"] = _describir_global(f.get("dimensiones", []), nombre_ambito, "Cerca del promedio en todas las dimensiones")
+        f["patrones_distintivos"] = _distintivos_globales(f.get("dimensiones", []), fichas_dim)
+        for m in (f.get("microarquetipos") or {}).get("lista", []):
+            m["etiqueta_tecnica"] = m["etiqueta"]
+            m["etiqueta"] = _describir_global(m.get("dimensiones", []), f"su Patrón global {f['id'] + 1}",
+                                              "Como su patrón global, sin diferencias marcadas")
+            m["patrones_distintivos"] = _distintivos_globales(m.get("dimensiones", []), fichas_dim)
+    return glob, fichas
+
+
 def _dimension(ambito: str, dimension: str) -> dict:
-    _, _, fichas = repo.micro_dimensiones(_ambito(ambito))
+    fichas = _fichas(_ambito(ambito))
     if dimension not in fichas:
         raise HTTPException(404, f"Dimensión desconocida o sin resultados en esta versión: {dimension}")
     return fichas[dimension]
+
+
+def _norm(x) -> str:
+    """Texto sin tildes y en minúsculas, para comparar nombres."""
+    return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
+
+
+def _puntaje(terminos: list[str], texto: str) -> float:
+    """Cada término debe aparecer en `texto` (ya normalizado); si no aparece tal cual, se acepta una
+    palabra parecida (errores de tipeo como "ciclia" -> "cecilia"). 0 = no coincide; más alto, mejor."""
+    palabras = texto.replace("|", " ").split()
+    total = 0.0
+    for x in terminos:
+        if x in texto:
+            total += 1.0
+            continue
+        mejor = max((SequenceMatcher(None, x, w).ratio() for w in palabras), default=0.0)
+        if len(x) < 4 or mejor < 0.75:
+            return 0.0
+        total += mejor
+    return total
+
+
+ORDEN_LISTA = "^(grupo|inverso|azar)$"
+
+
+def _pagina_personas(x: pd.DataFrame, q: str | None, pagina: int, por_pagina: int, orden: str = "grupo",
+                     semilla: int = 0) -> dict:
+    """Una página de una lista de personas YA ordenada. `posicion` es el lugar de cada persona en
+    ese orden y se conserva al filtrar o reordenar; `orden` = `inverso` empieza por las últimas
+    (p. ej. las menos parecidas a la representante) y `azar`, una muestra al azar reproducible con
+    `semilla` (para revisar el grupo sin quedarse con los extremos). Con `q`, solo quienes coinciden
+    por nombre (primero las coincidencias exactas). `total_filtrado` cuenta las coincidencias; si la
+    página pedida ya no existe (p. ej. el grupo se achicó), se devuelve la última."""
+    x = repo.con_nombres(x.assign(posicion=range(1, len(x) + 1)))
+    if orden == "inverso":
+        x = x.iloc[::-1]
+    elif orden == "azar":
+        x = x.sample(frac=1, random_state=semilla)
+    if q and q.strip():
+        terminos = _norm(q).split()
+        p = x["nombre"].map(lambda n: _puntaje(terminos, _norm(n)))
+        x = x.assign(_p=p)[p > 0].sort_values(["_p", "posicion"], ascending=[False, True]).drop(columns="_p")
+    paginas = max(1, -(-len(x) // por_pagina))
+    pagina = min(pagina, paginas)
+    trozo = x.iloc[(pagina - 1) * por_pagina: pagina * por_pagina]
+    return {"q": q or None, "orden": orden, "total_filtrado": len(x), "pagina": pagina, "por_pagina": por_pagina,
+            "paginas": paginas, "personas": repo.as_records(trozo.round(4))}
 
 
 @app.get("/api/health")
@@ -102,7 +307,7 @@ def ambitos() -> dict:
 def dimensiones(ambito: str) -> dict:
     """Resumen de cada dimensión del ámbito: cuántas personas tienen evidencias y cuántos temas y
     patrones de actividad se descubrieron."""
-    _, _, fichas = repo.micro_dimensiones(_ambito(ambito))
+    fichas = _fichas(_ambito(ambito))
     p = repo.personas(ambito)
     vigentes = set(p.loc[p["vigente"], "persona_id"])
     d = repo.dimensiones(ambito)
@@ -131,9 +336,12 @@ def dimension(ambito: str, dimension: str) -> dict:
 
 @app.get("/api/dimensiones/{ambito}/{dimension}/personas")
 def personas_dimension(ambito: str, dimension: str, patron: int | None = Query(None), tema: int | None = Query(None),
-                       solo_vigentes: bool = Query(True)) -> dict:
-    """Personas con evidencias en la dimensión, opcionalmente de un patrón o con un tema. Orden:
-    afinidad con el patrón, proporción de sus evidencias en el tema, o intensidad."""
+                       solo_vigentes: bool = Query(True), q: str | None = Query(None),
+                       pagina: int = Query(1, ge=1), por_pagina: int = Query(25, ge=1, le=200),
+                       orden: str = Query("grupo", pattern=ORDEN_LISTA), semilla: int = Query(0)) -> dict:
+    """Personas con evidencias en la dimensión, opcionalmente de un patrón o con un tema, paginadas
+    y opcionalmente filtradas por nombre (`q`). Orden: afinidad con el patrón, proporción de sus
+    evidencias en el tema, o intensidad. `total` es el tamaño del grupo, sin el filtro por nombre."""
     _dimension(ambito, dimension)
     p = repo.personas(ambito)[["persona_id", "vigente", "cargo_actual", "unidad_actual", "tipo_empleado"]]
     d = repo.dimensiones(ambito)
@@ -144,21 +352,21 @@ def personas_dimension(ambito: str, dimension: str, patron: int | None = Query(N
     x = d.merge(p, on="persona_id")
     if pat is not None:
         x = x.merge(pat, on="persona_id", how="left")
-    orden = "intensidad"
+    criterio = "intensidad"
     if patron is not None:
         if pat is None:
             raise HTTPException(404, "La dimensión no tiene patrones")
         x = x[x["patron"] == patron]
-        orden = "similitud_representante" if "similitud_representante" in x.columns else "afinidad_1"
+        criterio = "similitud_representante" if "similitud_representante" in x.columns else "afinidad_1"
     if tema is not None:
         t = temas[(temas["dimension"] == dimension) & (temas["tema_id"] == tema)][["persona_id", "proporcion"]]
         x = x.merge(t, on="persona_id")
-        orden = "proporcion"
+        criterio = "proporcion"
     if solo_vigentes:
         x = x[x["vigente"]]
-    x = x.sort_values([orden, "intensidad"], ascending=False)
+    x = x.sort_values([criterio, "intensidad"], ascending=False)
     return {"ambito": ambito, "dimension": dimension, "patron": patron, "tema": tema, "solo_vigentes": solo_vigentes,
-            "total": len(x), "personas": repo.as_records(repo.con_nombres(x.head(500).round(4)))}
+            "total": len(x), **_pagina_personas(x, q, pagina, por_pagina, orden, semilla)}
 
 
 @app.get("/api/dimensiones/{ambito}/{dimension}/mapa")
@@ -216,7 +424,7 @@ def mapa_perfil(ambito: str, dimension: str | None = Query(None), solo_vigentes:
 def patrones_globales(ambito: str) -> dict:
     """Patrones globales descubiertos sobre el perfil completo (DEC-057) y sus microarquetipos
     (DEC-058), con el nombre de su persona más representativa (vigente, leída en vivo)."""
-    _, fichas = repo.patrones_globales(_ambito(ambito))
+    _, fichas = _globales(_ambito(ambito))
     salida = copy.deepcopy(fichas)
     for f in salida.get("patrones", []):
         f["representante_nombre"] = repo.nombre(f["representante_id"]) if f.get("representante_id") else None
@@ -225,11 +433,42 @@ def patrones_globales(ambito: str) -> dict:
     return {"ambito": ambito, **salida}
 
 
+@app.get("/api/perfil/{ambito}/patrones/{patron}/dimension/{dimension}")
+def reparto_en_dimension(ambito: str, patron: int, dimension: str, micro: int | None = Query(None)) -> dict:
+    """Cómo se reparten entre los patrones de una dimensión las personas de un patrón global (o de
+    uno de sus microarquetipos) que tienen evidencias en ella, frente a su referencia: todo el ámbito
+    para un patrón global; su patrón global para un microarquetipo."""
+    glob, _ = repo.patrones_globales(_ambito(ambito))
+    info = _dimension(ambito, dimension)
+    k = len((info.get("patrones") or {}).get("patrones", []))
+    grupo = glob[glob["patron_global"] == patron]
+    referencia = glob
+    if micro is not None:
+        referencia, grupo = grupo, grupo[grupo["micro"] == micro]
+    pat = _patrones_de(ambito, dimension)["patron"]
+
+    def reparto(ids: pd.Series) -> tuple[pd.Series, int]:
+        v = pat.reindex(ids.to_numpy()).dropna().astype(int)
+        return v.value_counts(), len(v)
+
+    en_grupo, n_grupo = reparto(grupo["persona_id"])
+    en_ref, n_ref = reparto(referencia["persona_id"])
+    return {"ambito": ambito, "patron": patron, "micro": micro, "dimension": dimension,
+            "n_grupo": int(len(grupo)), "con_evidencia": n_grupo, "n_referencia_con_evidencia": n_ref,
+            "patrones": [{"patron": j, "n": int(en_grupo.get(j, 0)),
+                          "proporcion": round(float(en_grupo.get(j, 0)) / n_grupo, 3) if n_grupo else 0.0,
+                          "proporcion_referencia": round(float(en_ref.get(j, 0)) / n_ref, 3) if n_ref else 0.0}
+                         for j in range(k)]}
+
+
 @app.get("/api/perfil/{ambito}/personas")
 def personas_patron_global(ambito: str, patron: int = Query(...), micro: int | None = Query(None),
-                           solo_vigentes: bool = Query(True)) -> dict:
+                           solo_vigentes: bool = Query(True), q: str | None = Query(None),
+                           pagina: int = Query(1, ge=1), por_pagina: int = Query(25, ge=1, le=200),
+                           orden: str = Query("grupo", pattern=ORDEN_LISTA), semilla: int = Query(0)) -> dict:
     """Personas de un patrón global (o de uno de sus microarquetipos), ordenadas por similitud con
-    su persona representativa (100 % = la representante; 0 % = la más distinta del grupo)."""
+    su persona representativa (100 % = la representante; 0 % = la más distinta del grupo), paginadas
+    y opcionalmente filtradas por nombre (`q`). `total` es el tamaño del grupo, sin ese filtro."""
     glob, _ = repo.patrones_globales(_ambito(ambito))
     x = glob[glob["patron_global"] == patron]
     if micro is not None:
@@ -243,13 +482,12 @@ def personas_patron_global(ambito: str, patron: int = Query(...), micro: int | N
     if solo_vigentes:
         x = x[x["vigente"]]
     x = x.sort_values(["similitud", "afinidad"], ascending=False, na_position="last")
-    return {"ambito": ambito, "patron": patron, "micro": micro, "total": len(x),
-            "personas": repo.as_records(repo.con_nombres(x.head(500).round(4)))}
+    return {"ambito": ambito, "patron": patron, "micro": micro, "total": len(x), **_pagina_personas(x, q, pagina, por_pagina, orden, semilla)}
 
 
 def _patron_global_persona(ambito: str, persona_id: int) -> dict | None:
     """Patrón global y microarquetipo de la persona, con su similitud con cada representante."""
-    glob, fichas = repo.patrones_globales(ambito)
+    glob, fichas = _globales(ambito)
     f = glob[glob["persona_id"] == persona_id]
     if f.empty:
         return None
@@ -311,32 +549,14 @@ def _parecidos(ambito: str, persona_id: int, n: int = 8) -> list[dict]:
 
 @app.get("/api/personas/buscar")
 def buscar(ambito: str = Query("todos"), q: str = Query(..., min_length=2), solo_vigentes: bool = Query(True)) -> dict:
-    """Busca personas del ámbito por nombre, cargo o unidad (sin distinguir tildes ni mayúsculas)."""
-    def norm(x) -> str:
-        return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
-
+    """Busca personas del ámbito por nombre, cargo o unidad (sin distinguir tildes ni mayúsculas).
+    Primero las coincidencias exactas (ver `_puntaje`)."""
     p = repo.con_nombres(repo.personas(_ambito(ambito)))
     if solo_vigentes:
         p = p[p["vigente"]]
-    texto = (p["nombre"].map(norm) + " | " + p["cargo_actual"].map(norm) + " | " + p["unidad_actual"].map(norm))
-    terminos = norm(q).split()
-
-    # cada término debe aparecer; si no aparece tal cual, se acepta una palabra parecida
-    # (errores de tipeo como "ciclia" -> "cecilia"). Primero las coincidencias exactas.
-    def puntaje(t: str) -> float:
-        palabras = t.replace("|", " ").split()
-        total = 0.0
-        for x in terminos:
-            if x in t:
-                total += 1.0
-                continue
-            mejor = max((SequenceMatcher(None, x, w).ratio() for w in palabras), default=0.0)
-            if len(x) < 4 or mejor < 0.75:
-                return 0.0
-            total += mejor
-        return total
-
-    puntos = texto.map(puntaje)
+    texto = (p["nombre"].map(_norm) + " | " + p["cargo_actual"].map(_norm) + " | " + p["unidad_actual"].map(_norm))
+    terminos = _norm(q).split()
+    puntos = texto.map(lambda t: _puntaje(terminos, t))
     m = p.assign(_p=puntos)[puntos > 0].sort_values("_p", ascending=False).head(30)
     return {"resultados": [{"persona_id": int(r.persona_id), "nombre": r.nombre, "cargo_actual": r.cargo_actual,
                             "unidad_actual": r.unidad_actual} for r in m.itertuples()]}
@@ -369,7 +589,8 @@ def _dimensiones_persona(ambito: str, persona_id: int) -> list[dict]:
     Ordenadas de mayor a menor intensidad."""
     d = repo.dimensiones(ambito)
     defs = repo.definiciones_dimensiones()
-    temas, patrones, fichas = repo.micro_dimensiones(ambito)
+    temas, patrones, _ = repo.micro_dimensiones(ambito)
+    fichas = _fichas(ambito)
     temas = temas[temas["persona_id"] == persona_id]
     patrones = patrones[patrones["persona_id"] == persona_id].set_index("dimension") if len(patrones) else patrones
     salida = []
@@ -394,6 +615,241 @@ def _dimensiones_persona(ambito: str, persona_id: int) -> list[dict]:
                                        for c, v in json.loads(r["componentes"]).items()],
                        "temas": mis_temas, "patron": patron})
     return sorted(salida, key=lambda x: (-x["intensidad"], x["nombre"]))
+
+
+# ------------------------------------------------------------------ persona en una dimensión, comparar
+@lru_cache(maxsize=64)
+def _matriz_dimension(ambito: str, dimension: str) -> tuple[pd.DataFrame, np.ndarray]:
+    """(componentes normalizados 0–1 de quienes tienen evidencias en la dimensión, su versión
+    estandarizada). Estandarizar el valor normalizado (componente / máximo del ámbito) da lo mismo
+    que estandarizar el componente, como al formar los patrones (DEC-055); no incluye las
+    proporciones que también usan los patrones, porque no se guardan por persona."""
+    d = repo.dimensiones(ambito)
+    d = d[(d["dimension"] == dimension) & (d["n_evidencias"] > 0)]
+    comp = pd.DataFrame([json.loads(c) for c in d["componentes"]], index=d["persona_id"].astype(int).to_numpy()).fillna(0.0)
+    desv = comp.std()
+    z = ((comp - comp.mean()) / desv.where(desv > 0, 1)).loc[:, desv > 0]
+    return comp, z.to_numpy()
+
+
+def _patrones_de(ambito: str, dimension: str) -> pd.DataFrame:
+    """Patrón de cada persona en la dimensión, indexado por persona_id (vacío si no hay patrones)."""
+    _, patrones, _ = repo.micro_dimensiones(ambito)
+    if not len(patrones):
+        return pd.DataFrame(columns=["patron"])
+    return patrones[patrones["dimension"] == dimension].set_index("persona_id")
+
+
+def _temas_de(ambito: str, dimension: str) -> pd.DataFrame:
+    """Proporción de las evidencias de cada persona en cada tema de la dimensión (personas x temas)."""
+    temas, _, _ = repo.micro_dimensiones(ambito)
+    if not len(temas):
+        return pd.DataFrame()
+    t = temas[temas["dimension"] == dimension]
+    return t.pivot_table(index="persona_id", columns="tema_id", values="proporcion", aggfunc="sum", fill_value=0.0)
+
+
+def _evidencias(persona_id: int, tipos: list[str] | None = None, maximo: int = 40) -> list[dict]:
+    """Evidencias de la persona agrupadas por tipo (solo de `tipos`, si se indican)."""
+    ev = repo.evidencias()
+    ev = ev[ev["persona_id"] == persona_id]
+    if tipos is not None:
+        ev = ev[ev["tipo_id"].isin(tipos)]
+    grupos = [{"tipo_id": t, "n": len(g), "textos": g["texto"].tolist()[:maximo]} for t, g in ev.groupby("tipo_id")]
+    return sorted(grupos, key=lambda x: -x["n"])
+
+
+def _persona_dimension(ambito: str, dimension: str, persona_id: int, maximo_textos: int = 40) -> dict:
+    """La persona vista desde una dimensión: su puntaje (índice de DEC-053) y cómo se obtiene, su
+    posición frente al personal del ámbito (cuántas personas tienen un puntaje menor, igual o
+    mayor), cada componente frente al promedio de su patrón y de la dimensión, su patrón (con la
+    similitud con la persona representativa), sus temas y solo las evidencias de esa dimensión."""
+    info = _dimension(ambito, dimension)
+    cfg = repo.definiciones_dimensiones().get(dimension, {})
+    comps_def = cfg.get("componentes", {})
+    comp, _ = _matriz_dimension(ambito, dimension)
+    d = repo.dimensiones(ambito)
+    fila = d[(d["persona_id"] == persona_id) & (d["dimension"] == dimension)]
+    pat = _patrones_de(ambito, dimension)
+    lista = (info.get("patrones") or {}).get("patrones", [])
+    patron, miembros = None, []
+    if persona_id in pat.index:
+        r = pat.loc[persona_id]
+        f = lista[int(r["patron"])]
+        miembros = pat.index[pat["patron"] == r["patron"]]
+        sim = r.get("similitud_representante")
+        patron = {"patron": int(r["patron"]), "etiqueta": f["etiqueta"], "tamano": f["tamano"], "afinidad": float(r["afinidad_1"]),
+                  "mixto": bool(r["mixto"]), "segundo": int(r["patron_2"]), "segundo_etiqueta": lista[int(r["patron_2"])]["etiqueta"],
+                  "similitud_representante": None if sim is None or pd.isna(sim) else float(sim),
+                  "es_representante": bool(r.get("es_representante", False)),
+                  "representante_id": f.get("representante_id"),
+                  "representante_nombre": repo.nombre(f["representante_id"]) if f.get("representante_id") else None}
+    del_patron = comp.loc[comp.index.intersection(miembros)]
+    orden_comps = [c for c in comps_def if c in comp.columns] + [c for c in comp.columns if c not in comps_def]
+    suma_pesos = sum(float(comps_def.get(c, {}).get("peso", 1.0)) for c in orden_comps) or 1.0
+    componentes = []
+    for c in orden_comps:
+        valor = float(comp.at[persona_id, c]) if persona_id in comp.index else 0.0
+        peso = float(comps_def.get(c, {}).get("peso", 1.0))
+        componentes.append({"componente": c, "descripcion": comps_def.get(c, {}).get("descripcion", c), "valor": valor,
+                            "media_dimension": round(float(comp[c].mean()), 3),
+                            "media_patron": round(float(del_patron[c].mean()), 3) if len(del_patron) else None,
+                            # puntaje = suma de aportes = sum(valor x peso) / suma de pesos (DEC-053)
+                            "peso": peso, "aporte": round(100 * valor * peso / suma_pesos, 1)})
+    todos = d.loc[d["dimension"] == dimension, "indice"].to_numpy(dtype=float)
+    indice = float(fila["indice"].iloc[0]) if len(fila) else 0.0
+    igual = np.isclose(todos, indice, atol=1e-6)
+    posicion = {"n": int(len(todos)), "ambito": NOMBRE_AMBITO.get(ambito, ambito),
+                "menor": round(100 * float(((todos < indice) & ~igual).mean()), 1),
+                "igual": round(100 * float(igual.mean()), 1),
+                "mayor": round(100 * float(((todos > indice) & ~igual).mean()), 1)}
+    temas_dim = (info.get("temas") or {}).get("temas", [])
+    tp = _temas_de(ambito, dimension)
+    temas = []
+    if persona_id in tp.index:
+        mios = tp.loc[persona_id]
+        temas = [{"tema": int(t), "etiqueta": temas_dim[int(t)]["etiqueta"], "proporcion": round(float(v), 3)}
+                 for t, v in mios[mios > 0].sort_values(ascending=False).head(5).items()]
+    return {"dimension": dimension, "nombre": cfg.get("nombre", dimension),
+            "intensidad": float(fila["intensidad"].iloc[0]) if len(fila) else 0.0,
+            "n_evidencias": int(fila["n_evidencias"].iloc[0]) if len(fila) else 0,
+            "puntaje": round(100 * indice, 1), "suma_pesos": suma_pesos, "posicion": posicion,
+            "patron": patron, "componentes": componentes, "temas": temas,
+            "datos": _datos_persona(dimension, persona_id, lista[patron["patron"]] if patron else None),
+            "evidencias": _evidencias(persona_id, cfg.get("tipos_evidencia", []), maximo_textos)}
+
+
+# ------------------------------------------------------------------ datos reales de cada persona
+@lru_cache(maxsize=1)
+def _componentes_crudos() -> pd.DataFrame:
+    """Componentes de cada persona en sus unidades (conteos en log1p), calculados con la misma
+    función que `perfiles.construir` (`dimensiones.componentes_crudos`) sobre las evidencias. Solo
+    para MOSTRAR el dato real de una persona (p. ej. "1 título de cuarto nivel"); las notas,
+    puntajes y patrones siguen saliendo de los resultados guardados. Tarda unos segundos la primera
+    vez (lee los atributos de todas las evidencias); se precarga al arrancar."""
+    from perfiles.comun import archivos_evidencias
+    from perfiles.dimensiones import componentes_crudos
+
+    ev = pd.concat([pd.read_csv(f, usecols=["persona_id", "tipo_id", "atributos"]) for f in archivos_evidencias()],
+                   ignore_index=True)
+    ids = [int(x) for x in repo.personas("todos")["persona_id"]]
+    comp, _ = componentes_crudos(ev, ids)
+    return comp
+
+
+def _datos_persona(dimension: str, persona_id: int, ficha_patron: dict | None) -> list[dict]:
+    """Los datos de la persona con que se forman los patrones de la dimensión (componentes y
+    proporciones, DEC-055), en sus unidades, junto al valor típico de su patrón y de la dimensión.
+    Responde "qué dato la hizo terminar en ese patrón". Vacío si no se pueden calcular."""
+    try:
+        from perfiles.micro_dimensiones import variables_patron
+
+        comp = _componentes_crudos()
+    except Exception as e:  # noqa: BLE001 — la ficha sigue sin esta sección
+        print(f"No se pudieron calcular los datos reales: {e}", flush=True)
+        return []
+    if persona_id not in comp.index:
+        return []
+    x, descripciones = variables_patron(dimension, comp.loc[[persona_id]])
+    del_patron = {c["componente"]: c for c in (ficha_patron or {}).get("componentes", [])}
+    salida = []
+    for col, desc in descripciones.items():
+        nombre = col.split("__", 1)[1]
+        valor = float(x.iloc[0][col])
+        if "(log" in desc:
+            valor = float(np.expm1(valor))
+        f = del_patron.get(nombre)
+        salida.append({"componente": nombre, "descripcion": desc, "valor": round(valor, 3),
+                       "formato": _formato_componente(nombre, desc),
+                       # marca sí/no: para una persona se muestra "Sí"/"No", no un porcentaje
+                       "marca": desc.startswith("Tiene ") or nombre == "posgrado_en_curso",
+                       "media_patron": f["media_grupo"] if f else None,
+                       "media_dimension": f["media_dimension"] if f else None,
+                       "comparacion": f["comparacion"] if f else None, "z": f["z"] if f else None})
+    return salida
+
+
+def _parecidos_dimension(ambito: str, dimension: str, persona_id: int, n: int = 8) -> list[dict]:
+    """Personas VIGENTES más cercanas en la dimensión, en el mismo espacio estandarizado con que se
+    formaron sus patrones (sin las proporciones, ver `_matriz_dimension`). A igual distancia (p. ej.
+    los mismos títulos), primero quien comparte más de sus temas. Sin puntajes: orden y qué comparten."""
+    comp, z = _matriz_dimension(ambito, dimension)
+    if persona_id not in comp.index:
+        return []
+    ids = comp.index.to_numpy()
+    i = comp.index.get_loc(persona_id)
+    dist = np.linalg.norm(z - z[i], axis=1) if z.shape[1] else np.zeros(len(ids))
+    tp = _temas_de(ambito, dimension).reindex(ids, fill_value=0.0)
+    m = tp.to_numpy()
+    comun = np.minimum(m, m[i]).sum(axis=1) if m.shape[1] else np.zeros(len(ids))
+    p = repo.personas(ambito).set_index("persona_id")
+    vigente = p["vigente"].reindex(ids, fill_value=False).to_numpy(dtype=bool)
+    orden = [j for j in np.lexsort((-comun, np.round(dist, 6))) if j != i and vigente[j]][:n]
+    pat = _patrones_de(ambito, dimension)
+    mi_patron = int(pat.at[persona_id, "patron"]) if persona_id in pat.index else None
+    temas_dim = (_dimension(ambito, dimension).get("temas") or {}).get("temas", [])
+    salida = []
+    for rango, j in enumerate(orden, start=1):
+        otro = int(ids[j])
+        su_patron = int(pat.at[otro, "patron"]) if otro in pat.index else None
+        ambos = sorted((k for k in range(m.shape[1]) if m[i, k] > 0 and m[j, k] > 0), key=lambda k: -min(m[i, k], m[j, k]))
+        salida.append({"persona_id": otro, "nombre": repo.nombre(otro), "rango": rango, "cargo_actual": p.at[otro, "cargo_actual"],
+                       "mismo_patron": mi_patron is not None and su_patron == mi_patron, "patron": su_patron,
+                       "mismos_valores": bool(dist[j] < 1e-9),
+                       "temas_comunes": [temas_dim[int(tp.columns[k])]["etiqueta"] for k in ambos[:3]]})
+    return salida
+
+
+@app.get("/api/personas/{persona_id}/dimension/{dimension}")
+def persona_en_dimension(persona_id: int, dimension: str, ambito: str = Query("todos")) -> dict:
+    """La persona vista desde una dimensión (lo primero de su ficha al abrirla desde esa dimensión):
+    su patrón y componentes frente al patrón, temas, evidencias de la dimensión y personas parecidas
+    en la dimensión."""
+    p = repo.personas(_ambito(ambito))
+    if not (p["persona_id"] == persona_id).any():
+        raise HTTPException(404, f"La persona {persona_id} no está en el ámbito {ambito}")
+    return {"persona_id": persona_id, "ambito": ambito, **_persona_dimension(ambito, dimension, persona_id),
+            "parecidos": _parecidos_dimension(ambito, dimension, persona_id)}
+
+
+@app.get("/api/comparar")
+def comparar(ambito: str = Query("todos"), ids: str = Query(..., description="ids separados por coma (máx. 4)"),
+             dimension: str | None = Query(None)) -> dict:
+    """Varias personas (máx. 4) lado a lado. Siempre: su patrón global y microarquetipo, y su
+    intensidad y patrón en cada dimensión. Con `dimension`, además cada una vista desde esa dimensión
+    (patrón, componentes frente a su patrón, temas, evidencias de la dimensión); sin ella, todas sus
+    evidencias resumidas."""
+    try:
+        lista = list(dict.fromkeys(int(x) for x in ids.split(",") if x.strip()))[:4]
+    except ValueError as e:
+        raise HTTPException(400, "ids debe ser una lista de números separados por coma") from e
+    p = repo.personas(_ambito(ambito)).set_index("persona_id")
+    if dimension:
+        _dimension(ambito, dimension)
+    defs = repo.definiciones_dimensiones()
+    d = repo.dimensiones(ambito)
+    d = d[d["persona_id"].isin(lista)]
+    _, patrones, _ = repo.micro_dimensiones(ambito)
+    pat = patrones[patrones["persona_id"].isin(lista)] if len(patrones) else pd.DataFrame(columns=["persona_id", "dimension", "patron"])
+    salida = []
+    for pid in lista:
+        if pid not in p.index:
+            continue
+        suyos = pat[pat["persona_id"] == pid]
+        su_patron = dict(zip(suyos["dimension"], suyos["patron"]))
+        intensidades = [{"dimension": r.dimension, "nombre": defs.get(r.dimension, {}).get("nombre", r.dimension),
+                         "intensidad": float(r.intensidad), "n_evidencias": int(r.n_evidencias),
+                         "patron": int(su_patron[r.dimension]) if r.dimension in su_patron else None}
+                        for r in d[d["persona_id"] == pid].itertuples()]
+        x = {"persona_id": pid, "nombre": repo.nombre(pid), "vigente": bool(p.at[pid, "vigente"]),
+             **{k: (None if pd.isna(p.at[pid, k]) else p.at[pid, k]) for k in ("cargo_actual", "unidad_actual", "tipo_empleado")},
+             "patron_global": _patron_global_persona(ambito, pid), "intensidades": intensidades}
+        if dimension:
+            x["dimension"] = _persona_dimension(ambito, dimension, pid, maximo_textos=25)
+        else:
+            x["evidencias"] = _evidencias(pid, None, 15)
+        salida.append(x)
+    return {"ambito": ambito, "dimension": dimension, "personas": salida}
 
 
 CARRIL = {"TRAYECTORIA_CARGO_ESTRUCTURAL": "Cargo de planta en ESPOL", "TRAYECTORIA_CONTRATO_PUNTUAL": "Contrato ocasional en ESPOL",

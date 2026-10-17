@@ -1,4 +1,4 @@
-import Plot from "react-plotly.js";
+import GraficoNavegable from "./GraficoNavegable";
 import type { PuntoPerfil } from "../api/client";
 import { colorPatron } from "../lib/colores";
 
@@ -17,6 +17,8 @@ interface Props {
   /** microarquetipo resaltado dentro del patrón global elegido */
   microSeleccionado?: number | null;
   onMicro?: (id: number) => void;
+  /** al cambiar, el mapa vuelve a la vista completa (ver GraficoNavegable) */
+  revision: string;
 }
 
 const RESALTE = "#2a78d6";
@@ -36,7 +38,7 @@ const mediana = (xs: number[]) => {
 // en el conjunto. Se colorea por la intensidad o el patrón de UNA dimensión para leerlo.
 export default function MapaPerfil({
   puntos, color, nombreDimension, personaSeleccionada, alto, onPersona, globalSeleccionado = null, onGlobal,
-  microSeleccionado = null, onMicro,
+  microSeleccionado = null, onMicro, revision,
 }: Props) {
   const hover = (p: PuntoPerfil) =>
     [
@@ -138,33 +140,20 @@ export default function MapaPerfil({
     });
   }
 
+  // "Encuadrar": el microarquetipo elegido o, si no, el patrón global elegido
+  const delGlobal = globalSeleccionado !== null ? puntos.filter((p) => p.patron_global === globalSeleccionado) : [];
+  const delMicro = microSeleccionado !== null ? delGlobal.filter((p) => p.micro_global === microSeleccionado) : [];
+  const grupo = delMicro.length ? delMicro : delGlobal;
+  const nombreGrupo = delMicro.length ? `G${globalSeleccionado! + 1}.${microSeleccionado! + 1}` : `G${(globalSeleccionado ?? 0) + 1}`;
+
   return (
-    <Plot
+    <GraficoNavegable
       data={trazas}
-      layout={{
-        autosize: true,
-        height: alto,
-        margin: { l: 4, r: 4, t: 4, b: 4 },
-        xaxis: { visible: false },
-        yaxis: { visible: false },
-        annotations: rotulos,
-        hovermode: "closest",
-        hoverdistance: 8,
-        hoverlabel: { bgcolor: "#fff", bordercolor: "#cbd5e1", font: { size: 12, color: "#0f172a" }, align: "left" },
-        plot_bgcolor: "#fff",
-        paper_bgcolor: "#fff",
-        dragmode: "pan",
-      }}
-      config={{
-        displaylogo: false,
-        responsive: true,
-        scrollZoom: false,
-        displayModeBar: true,
-        modeBarButtonsToRemove: ["zoom2d", "pan2d", "select2d", "lasso2d", "autoScale2d", "toImage"],
-        doubleClick: "reset",
-      }}
-      style={{ width: "100%" }}
-      useResizeHandler
+      annotations={rotulos}
+      alto={alto}
+      revision={revision}
+      enfoque={grupo.length ? { xs: grupo.map((p) => p.x), ys: grupo.map((p) => p.y), nombre: nombreGrupo } : null}
+      foco={sel ? { id: sel.persona_id, x: sel.x, y: sel.y } : null}
       onClick={(e) => {
         const id = e.points[0]?.customdata;
         if (typeof id === "number") onPersona(id);

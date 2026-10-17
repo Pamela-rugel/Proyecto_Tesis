@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { de } from "../lib/texto";
 import type { Ambito, DimensionPersona } from "../api/client";
+import { colorPatron } from "../lib/colores";
+import { ModalDimensionPersona } from "./PatronesDimension";
 
 const NOMBRE_AMBITO: Record<Ambito, string> = {
   todos: "todo el personal",
@@ -8,31 +9,34 @@ const NOMBRE_AMBITO: Record<Ambito, string> = {
   docentes: "el personal docente",
 };
 
-// Intensidad (percentil 0-100 dentro del ámbito) en cada dimensión de evidencia (DEC-053).
-// Barras independientes: no suman 100. Clic en una fila para ver de qué componentes sale.
-export default function IntensidadDimensiones({ ambito, dimensiones }: { ambito: Ambito; dimensiones: DimensionPersona[] }) {
+// La persona en cada dimensión de evidencia: su puntaje frente al ámbito (percentil, DEC-053) y su
+// patrón de actividad (DEC-055) con lo que lo describe. Clic en una dimensión: su detalle en una
+// ventana (sus datos frente a su patrón, temas, evidencias), con la opción de ver todos los
+// patrones de la dimensión o de ir a ella.
+export default function IntensidadDimensiones({ ambito, dimensiones, personaId, nombrePersona, onPersona }: {
+  ambito: Ambito;
+  dimensiones: DimensionPersona[];
+  /** sin persona, las filas no abren el detalle */
+  personaId?: number;
+  nombrePersona?: string;
+  onPersona?: (id: number) => void;
+}) {
   const [abierta, setAbierta] = useState<string | null>(null);
   if (!dimensiones.length) return <p className="text-xs text-slate-500">Esta versión de resultados no tiene dimensiones.</p>;
+  const conDetalle = personaId !== undefined;
 
   return (
     <div>
       <p className="text-xs text-slate-500 mb-3">
-        Percentil frente a {NOMBRE_AMBITO[ambito]}: 85 significa que tiene tanta o más evidencia registrada que el 85&nbsp;% de
-        las personas. Cada dimensión se mide por separado; 0 = sin evidencias registradas.
+        Barra y número: puntaje frente a {NOMBRE_AMBITO[ambito]} (85 = tanta o más evidencia registrada que el 85&nbsp;%; 0 = sin
+        evidencias). A la derecha, su patrón en cada dimensión.{conDetalle && " Clic en una dimensión para ver su detalle."}
       </p>
-      <ul className="space-y-1">
+      <ul className="space-y-0.5">
         {dimensiones.map((d) => {
-          const desplegada = abierta === d.dimension;
           const sin = d.n_evidencias === 0;
-          return (
-            <li key={d.dimension}>
-              <button
-                type="button"
-                onClick={() => setAbierta(desplegada ? null : d.dimension)}
-                aria-expanded={desplegada}
-                title={sin ? "Sin evidencias registradas" : d.componentes.map((c) => `${c.descripcion}: ${Math.round(c.valor * 100)}%`).join("\n")}
-                className="w-full grid grid-cols-[7.5rem_1fr_2.5rem] items-center gap-2 py-1 rounded hover:bg-slate-50 text-left"
-              >
+          const fila = (
+            <>
+              <span className="grid grid-cols-[7.5rem_1fr_2rem_2.5rem] items-center gap-2">
                 <span className="text-xs text-slate-700 truncate">{d.nombre}</span>
                 <span className="h-2.5 bg-slate-100 rounded-sm overflow-hidden">
                   <span className="block h-full bg-espol-blue rounded-r-[4px]" style={{ width: `${d.intensidad}%` }} />
@@ -40,46 +44,52 @@ export default function IntensidadDimensiones({ ambito, dimensiones }: { ambito:
                 <span className={`text-xs tabular-nums text-right ${sin ? "text-slate-400" : "text-slate-800 font-medium"}`}>
                   {Math.floor(d.intensidad)}
                 </span>
-              </button>
-              {desplegada && (
-                <div className="ml-2 mb-2 mt-1 pl-3 border-l text-xs text-slate-600 space-y-0.5">
-                  {d.patron && (
-                    <div className="mb-2">
-                      <p className="text-[11px] uppercase text-slate-500">Patrón de actividad (descubierto)</p>
-                      <p className="text-slate-800">{d.patron.etiqueta}</p>
-                      <p className="text-slate-500">
-                        Lo comparte con {d.patron.tamano} de {d.patron.n_personas} personas con esta evidencia · afinidad{" "}
-                        {Math.round(d.patron.afinidad * 100)}%
-                      </p>
-                      {d.patron.mixto && <p className="text-amber-700">También se parece mucho a: {d.patron.segundo}</p>}
-                    </div>
+                <span className="text-[11px] text-right">
+                  {d.patron ? (
+                    <span className="inline-flex items-center gap-1 border rounded px-1 py-px bg-white text-slate-800">
+                      <span className="w-2 h-2 rounded-full" style={{ background: colorPatron(d.patron.patron) }} />P{d.patron.patron + 1}
+                    </span>
+                  ) : (
+                    <span className="text-slate-300">—</span>
                   )}
-                  {d.temas.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[11px] uppercase text-slate-500">Temas principales (descubiertos)</p>
-                      {d.temas.map((t) => (
-                        <p key={t.tema} className="flex justify-between gap-3">
-                          <span>{t.etiqueta}</span>
-                          <span className="tabular-nums">{Math.round(t.proporcion * 100)}% de sus evidencias</span>
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-slate-500">
-                    {d.n_evidencias} evidencia{d.n_evidencias === 1 ? "" : "s"}. Aporte de cada componente (100 % = el valor más alto {de(NOMBRE_AMBITO[ambito])}):
-                  </p>
-                  {d.componentes.map((c) => (
-                    <p key={c.componente} className="flex justify-between gap-3">
-                      <span>{c.descripcion}</span>
-                      <span className="tabular-nums">{Math.round(c.valor * 100)}%</span>
-                    </p>
-                  ))}
-                </div>
+                </span>
+              </span>
+              {d.patron && (
+                <span className="block text-[11px] text-slate-500 ml-[8rem] leading-snug">
+                  {d.patron.etiqueta}
+                  {d.patron.mixto && <span className="text-amber-700"> · entre dos patrones</span>}
+                </span>
+              )}
+            </>
+          );
+          return (
+            <li key={d.dimension}>
+              {conDetalle ? (
+                <button
+                  type="button"
+                  onClick={() => setAbierta(d.dimension)}
+                  className="w-full text-left rounded px-1 -mx-1 py-1 hover:bg-slate-50"
+                  title={`Ver su detalle en ${d.nombre}`}
+                >
+                  {fila}
+                </button>
+              ) : (
+                <div className="py-1">{fila}</div>
               )}
             </li>
           );
         })}
       </ul>
+      {abierta && conDetalle && (
+        <ModalDimensionPersona
+          ambito={ambito}
+          personaId={personaId!}
+          nombrePersona={nombrePersona ?? ""}
+          dimension={abierta}
+          onCerrar={() => setAbierta(null)}
+          onPersona={onPersona}
+        />
+      )}
     </div>
   );
 }
