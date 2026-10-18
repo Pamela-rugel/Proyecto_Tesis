@@ -253,8 +253,9 @@ export interface Parecido {
   cargo_actual: string | null;
   /** dimensiones donde ambas tienen nivel >= 50; `mismo_patron` si participan igual */
   comparte: { dimension: string; nombre: string; mismo_patron: boolean; patron: number | null; patron_nombre?: string | null }[];
-  /** vistas del perfil multivista en que son vecinas (DEC-062): en qué se parecen */
-  vistas?: { vista: string; nombre: string }[];
+  /** vistas del perfil multivista en que son vecinas (DEC-062): en qué se parecen.
+   *  `rango`: puesto de esta persona en esa vista entre las vigentes (null en versiones anteriores) */
+  vistas?: { vista: string; nombre: string; rango?: number | null }[];
 }
 
 export interface TemaDistintivo {

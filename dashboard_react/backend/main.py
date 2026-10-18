@@ -355,9 +355,12 @@ def _parecidos(ambito: str, persona_id: int, n: int = 8) -> list[dict]:
                                  "patron_nombre": nombre_patron.get((dim, int(a))) if mismo else None})
         comparte.sort(key=lambda c: (not c["mismo_patron"], c["nombre"]))
         vistas = json.loads(r.vistas) if isinstance(getattr(r, "vistas", None), str) else []
+        # versiones anteriores guardan solo el nombre de la vista; las nuevas, {vista, rango} (puesto en esa vista)
+        vistas = [x if isinstance(x, dict) else {"vista": x, "rango": None} for x in vistas]
         salida.append({"persona_id": int(r.vecino_id), "nombre": repo.nombre(r.vecino_id), "rango": int(r.rango),
                        "cargo_actual": p.at[r.vecino_id, "cargo_actual"], "comparte": comparte,
-                       "vistas": [{"vista": x, "nombre": NOMBRES_VISTAS.get(x, x)} for x in vistas]})
+                       "vistas": [{"vista": x["vista"], "nombre": NOMBRES_VISTAS.get(x["vista"], x["vista"]),
+                                   "rango": x.get("rango")} for x in vistas]})
     return salida
 
 

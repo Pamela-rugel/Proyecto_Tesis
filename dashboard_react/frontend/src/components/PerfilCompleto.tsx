@@ -149,7 +149,17 @@ export default function PerfilCompleto({ ambito, persona, nav }: Props) {
                   <span className="flex flex-wrap items-center gap-1 ml-5 mt-0.5">
                     <span className="text-[10px] text-slate-500">Se parecen en:</span>
                     {x.vistas!.map((v) => (
-                      <Chip key={v.vista} titulo={DESCRIPCION_VISTA[v.vista]}>{v.nombre}</Chip>
+                      <Chip
+                        key={v.vista}
+                        titulo={
+                          v.rango != null
+                            ? `${DESCRIPCION_VISTA[v.vista]}. En esta vista es la ${v.rango}.ª persona vigente más parecida.`
+                            : DESCRIPCION_VISTA[v.vista]
+                        }
+                      >
+                        {v.nombre}
+                        {v.rango != null && <span className="tabular-nums text-slate-500">N°{v.rango}</span>}
+                      </Chip>
                     ))}
                   </span>
                 )}

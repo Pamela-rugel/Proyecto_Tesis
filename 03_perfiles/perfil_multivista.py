@@ -105,6 +105,37 @@ def red_nemo(act: np.ndarray, contenido: dict, presente: dict, k: int = K_VECINO
     return w, vecindad
 
 
+def _rangos_por_vista(act: np.ndarray, contenido: dict, presente: dict, vigente: np.ndarray, pares: dict,
+                      k: int = K_VECINOS_RED) -> dict:
+    """{(vista, i, j): puesto de j en la fila de i} con la afinidad de esa vista, contando solo a las personas
+    VIGENTES que tienen la vista (como la lista de parecidas, que solo muestra vigentes). Es el orden con que
+    cada persona elige a sus K vecinas; puede pasar de K cuando el par es vecino porque j eligió a i y no al revés
+    (la red de cada vista es simétrica)."""
+    n = len(act)
+    vigente = np.asarray(vigente, dtype=bool)
+    salida = {}
+    for v, lista in pares.items():
+        if not lista:
+            continue
+        t = np.arange(n) if v == "actividad" else np.flatnonzero(presente[v])
+        x = act if v == "actividad" else contenido[v][t]
+        w = _afinidad(x, k)
+        local = np.full(n, -1)
+        local[t] = np.arange(len(t))
+        candidatas = vigente[t]
+        por_persona: dict[int, list[int]] = {}
+        for i, j in lista:
+            por_persona.setdefault(i, []).append(j)
+        for i, js in por_persona.items():
+            fila = w[local[i]]
+            c = candidatas.copy()
+            c[local[i]] = False
+            valores = np.sort(fila[c])
+            for j in js:  # 1 + cuántas vigentes tienen más afinidad que j con i
+                salida[(v, i, j)] = int(1 + len(valores) - np.searchsorted(valores, fila[local[j]], side="right"))
+    return salida
+
+
 def _temas_distintivos(mascara: np.ndarray, ids: np.ndarray, temas: pd.DataFrame, etiquetas: dict, n: int = 4,
                        referencia: np.ndarray | None = None) -> list[dict]:
     """Temas mucho más frecuentes en el grupo que en la referencia (por defecto el ámbito): lift >= 1,5
@@ -149,12 +180,18 @@ def construir_ambito(ids: np.ndarray, vigente: np.ndarray, dim: pd.DataFrame, pa
     n = min(N_VECINOS, len(ids) - 1)
     orden = np.argsort(-w, axis=1)[:, :n + 1]
     maximo = w.max()
-    filas = []
+    lista, pares = [], {v: [] for v in vecindad}
     for i in range(len(ids)):
-        vec = [j for j in orden[i] if j != i][:n]
-        for r, j in enumerate(vec, start=1):
+        for r, j in enumerate([j for j in orden[i] if j != i][:n], start=1):
             vistas = [v for v, m in vecindad.items() if m[i, j] or m[j, i]]
-            filas.append((int(ids[i]), int(ids[j]), float(1 - w[i, j] / maximo), r, json.dumps(vistas)))
+            for v in vistas:
+                pares[v].append((i, j))
+            lista.append((i, j, r, vistas))
+    # en cada vista, el puesto de la vecina en la lista de la persona (solo vigentes) para mostrar "N°5"
+    rango_vista = _rangos_por_vista(act, contenido, presente, vigente, pares)
+    filas = [(int(ids[i]), int(ids[j]), float(1 - w[i, j] / maximo), r,
+              json.dumps([{"vista": v, "rango": rango_vista[(v, i, j)]} for v in vistas]))
+             for i, j, r, vistas in lista]
     vecinos = pd.DataFrame(filas, columns=["persona_id", "vecino_id", "distancia", "rango", "vistas"])
 
     # ---- perfiles amplios
