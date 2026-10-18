@@ -11,6 +11,8 @@ interface Props {
   alto: number;
   onPersona: (id: number) => void;
   onGrupo: (id: number) => void;
+  /** nombre de cada patrón (hover) */
+  nombresPatrones?: Record<number, string>;
 }
 
 // Patrones (máx. 6): un color por patrón (paleta validada para scatter) + rótulo P1…P6 sobre su
@@ -25,28 +27,61 @@ const mediana = (xs: number[]) => {
   return o[Math.floor(o.length / 2)];
 };
 
+type PuntoDibujo = PuntoMapaDimension & { apilados: number };
+
+// Quienes tienen exactamente los mismos valores quedan en la MISMA coordenada t-SNE (en Ponencias
+// de docentes, 223 personas en 61 posiciones) y se tapan entre sí. Cada grupo apilado se reparte
+// en una espiral (girasol) alrededor de su posición, para que cada persona tenga su punto.
+const ANGULO_AUREO = Math.PI * (3 - Math.sqrt(5));
+function desapilar(puntos: PuntoMapaDimension[]): PuntoDibujo[] {
+  if (!puntos.length) return [];
+  const xs = puntos.map((p) => p.x), ys = puntos.map((p) => p.y);
+  const paso = 0.005 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-6);
+  const pilas = new Map<string, PuntoMapaDimension[]>();
+  for (const p of puntos) {
+    const clave = `${p.x.toFixed(2)}|${p.y.toFixed(2)}`;
+    pilas.set(clave, [...(pilas.get(clave) ?? []), p]);
+  }
+  const salida: PuntoDibujo[] = [];
+  for (const pila of pilas.values()) {
+    pila.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    pila.forEach((p, k) => {
+      const r = paso * Math.sqrt(k);
+      salida.push({ ...p, x: p.x + r * Math.cos(k * ANGULO_AUREO), y: p.y + r * Math.sin(k * ANGULO_AUREO), apilados: pila.length });
+    });
+  }
+  return salida;
+}
+
 // Mapa t-SNE de las personas con evidencias en la dimensión (solo para orientarse).
-export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccionada, alto, onPersona, onGrupo }: Props) {
-  const grupo = (p: PuntoMapaDimension) => (tipo === "patrones" ? p.patron : p.tema) ?? null;
+export default function MapaDimension({ puntos: originales, tipo, seleccion, personaSeleccionada, alto, onPersona, onGrupo, nombresPatrones = {} }: Props) {
+  const puntos = desapilar(originales);
+  const grupo = (p: PuntoDibujo) => (tipo === "patrones" ? p.patron : p.tema) ?? null;
   const prefijo = tipo === "patrones" ? "P" : "T";
   const nombreGrupo = tipo === "patrones" ? "Patrón" : "Tema principal";
 
-  const hover = (p: PuntoMapaDimension) =>
+  // parte de las evidencias de la persona en el tema elegido (0 si no tiene evidencias en él)
+  const enTema = (p: PuntoDibujo) =>
+    tipo === "temas" && seleccion !== null ? (p.temas ?? []).find(([t]) => t === seleccion)?.[1] ?? 0 : 0;
+
+  const hover = (p: PuntoDibujo) =>
     [
       `<b>${p.nombre}</b>`,
+      enTema(p) > 0 ? `Tema ${seleccion! + 1}: ${Math.round(enTema(p) * 100)} % de sus evidencias` : "",
+      p.apilados > 1 ? `<i>${p.apilados} personas con valores idénticos (agrupadas aquí)</i>` : "",
       p.cargo_actual ?? "Sin cargo actual",
-      p.patron !== null && p.patron !== undefined ? `Patrón ${p.patron + 1}` : "",
+      p.patron !== null && p.patron !== undefined ? `Patrón ${p.patron + 1}${nombresPatrones[p.patron] ? `: ${nombresPatrones[p.patron]}` : ""}` : "",
       p.tema !== null && p.tema !== undefined
         ? `Tema principal: ${p.tema + 1} (${Math.round((p.proporcion_tema ?? 0) * 100)} % de sus evidencias)`
         : "",
-      p.intensidad !== null ? `Intensidad: ${Math.floor(p.intensidad)}` : "",
+      p.nivel != null ? `Nivel: ${Math.round(p.nivel)}` : "",
       p.vigente ? "" : "<i>No vigente</i>",
       "<i style='color:#94a3b8'>Clic para ver la ficha</i>",
     ]
       .filter(Boolean)
       .join("<br>");
 
-  const traza = (ps: PuntoMapaDimension[], color: string, opacidad: number, tam: number): Plotly.Data => ({
+  const traza = (ps: PuntoDibujo[], color: string, opacidad: number, tam: number | number[]): Plotly.Data => ({
     type: "scattergl",
     mode: "markers",
     x: ps.map((p) => p.x),
@@ -67,14 +102,16 @@ export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccio
       trazas.push(traza(ps, g >= 0 ? colorPatron(g) : BASE, activo ? 0.85 : 0.12, 8));
     }
   } else {
-    const elegidos = seleccion === null ? [] : puntos.filter((p) => grupo(p) === seleccion);
-    const resto = seleccion === null ? puntos : puntos.filter((p) => grupo(p) !== seleccion);
-    trazas.push(traza(resto, BASE, seleccion === null ? 0.7 : 0.25, 8));
-    if (elegidos.length) trazas.push(traza(elegidos, RESALTE, 0.95, 9));
+    // tema elegido: TODAS las personas con evidencias en él (no solo las que lo tienen como
+    // principal); el tamaño crece con la parte de sus evidencias en el tema
+    const elegidos = puntos.filter((p) => enTema(p) > 0).sort((a, b) => enTema(a) - enTema(b));
+    const resto = seleccion === null ? puntos : puntos.filter((p) => enTema(p) === 0);
+    trazas.push(traza(resto, BASE, seleccion === null ? 0.7 : 0.2, seleccion === null ? 8 : 6));
+    if (elegidos.length) trazas.push(traza(elegidos, RESALTE, 0.85, elegidos.map((p) => 6 + 12 * Math.sqrt(enTema(p)))));
   }
 
   // rótulos: todos los patrones; en temas, los MAX_ROTULOS_TEMA con más personas (y el elegido)
-  const porGrupo = new Map<number, PuntoMapaDimension[]>();
+  const porGrupo = new Map<number, PuntoDibujo[]>();
   for (const p of puntos) {
     const g = grupo(p);
     if (g === null) continue;
@@ -84,7 +121,8 @@ export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccio
   if (tipo === "temas") ids = ids.slice(0, MAX_ROTULOS_TEMA);
   if (seleccion !== null && porGrupo.has(seleccion) && !ids.includes(seleccion)) ids.push(seleccion);
   const rotulos: Partial<Plotly.Annotations>[] = ids.map((g) => {
-    const ps = porGrupo.get(g)!;
+    const conTema = tipo === "temas" && g === seleccion ? puntos.filter((p) => enTema(p) > 0) : [];
+    const ps = conTema.length ? conTema : porGrupo.get(g)!;
     const activo = seleccion === null || seleccion === g;
     return {
       x: mediana(ps.map((p) => p.x)),
@@ -98,7 +136,9 @@ export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccio
       borderpad: 3,
       opacity: activo ? 1 : 0.45,
       captureevents: true,
-      hovertext: `${nombreGrupo} ${g + 1}: ${ps.length} personas · clic para resaltar`,
+      hovertext: conTema.length
+        ? `Tema ${g + 1}: ${ps.length} personas con evidencias en él · clic para quitar`
+        : `${nombreGrupo} ${g + 1}: ${ps.length} personas · clic para resaltar`,
     };
   });
 
@@ -135,13 +175,15 @@ export default function MapaDimension({ puntos, tipo, seleccion, personaSeleccio
         plot_bgcolor: "#fff",
         paper_bgcolor: "#fff",
         dragmode: "pan",
+        // conserva el acercamiento del usuario entre re-renderizados; se reinicia al cambiar los datos
+        uirevision: `dimension-${tipo}-${originales.length}`,
       }}
       config={{
         displaylogo: false,
         responsive: true,
-        scrollZoom: false,
+        scrollZoom: true,
         displayModeBar: true,
-        modeBarButtonsToRemove: ["zoom2d", "pan2d", "select2d", "lasso2d", "autoScale2d", "toImage"],
+        modeBarButtonsToRemove: ["zoom2d", "select2d", "lasso2d", "autoScale2d", "toImage"],
         doubleClick: "reset",
       }}
       style={{ width: "100%" }}

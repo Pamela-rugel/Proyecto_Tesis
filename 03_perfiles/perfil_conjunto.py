@@ -130,7 +130,8 @@ def agrupar(x: np.ndarray, k: int, vigente: np.ndarray) -> dict:
 
 
 def describir(ids: np.ndarray, mascara: np.ndarray, referencia: np.ndarray, intensidad: pd.DataFrame,
-              pat: pd.DataFrame, sin_diferencias: str = "Cerca del promedio en todo") -> tuple[str, list[dict]]:
+              pat: pd.DataFrame, sin_diferencias: str = "Cerca del promedio en todo",
+              nombres: dict | None = None) -> tuple[str, list[dict]]:
     """(etiqueta, detalle por dimensión) del grupo `mascara` frente a `referencia` (máscaras sobre
     `ids`): dimensiones con intensidad media alta o baja frente a la referencia y patrones por
     dimensión mucho más frecuentes que en la referencia (lift >= 1,5, compartidos por >= 50 % de
@@ -149,7 +150,8 @@ def describir(ids: np.ndarray, mascara: np.ndarray, referencia: np.ndarray, inte
                 prop = float((v == moda).mean())
                 base = float(pat[d][referencia].dropna().eq(moda).mean()) if pat[d][referencia].notna().any() else 0.0
                 entrada["patron_frecuente"] = {"patron": moda, "proporcion": round(prop, 3), "proporcion_referencia": round(base, 3),
-                                               "lift": round(prop / base, 2) if base else None}
+                                               "lift": round(prop / base, 2) if base else None,
+                                               "nombre": (nombres or {}).get((d, moda))}
         dims.append(entrada)
     dims.sort(key=lambda e: -e["diferencia"])
     altos = [e["nombre"] for e in dims if e["diferencia"] >= UMBRAL_PUNTOS][:3]
@@ -159,7 +161,10 @@ def describir(ids: np.ndarray, mascara: np.ndarray, referencia: np.ndarray, inte
          and e["patron_frecuente"]["proporcion"] >= 0.5 and e["con_evidencia"] * e["patron_frecuente"]["proporcion"] >= 0.3),
         key=lambda e: -(e["patron_frecuente"]["lift"] or 0))[:2]
     partes = ([f"Alto: {', '.join(altos)}"] if altos else []) + ([f"Bajo: {', '.join(bajos)}"] if bajos else [])
-    partes += [f"Patrón {e['patron_frecuente']['patron'] + 1} en {e['nombre']}" for e in distintivos]
+    # con `nombres` {(dimensión, patrón): nombre} se dice el patrón en palabras (DEC-063)
+    partes += [f"En {e['nombre']}: {nombres[(e['dimension'], e['patron_frecuente']['patron'])]}"
+               if nombres and (e["dimension"], e["patron_frecuente"]["patron"]) in nombres
+               else f"Patrón {e['patron_frecuente']['patron'] + 1} en {e['nombre']}" for e in distintivos]
     return " · ".join(partes) or sin_diferencias, dims
 
 

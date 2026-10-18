@@ -10,7 +10,7 @@ asignación inteligente de tareas.**
 |---|---|---|
 | `01_preprocesamiento_features/` | Carpeta `01_preprocesamiento/` (limpieza de cada fuente) y los notebooks `02_integracion_datos`, `03_construccion_features`, `04_trayectorias` y `05_preparacion_modelado` | `data/processed/`, `data/features/`, `data/trayectorias/` |
 | `02_evidencias/` | Paquete `evidencias`: convierte los datos en evidencias individuales (un cargo, un título, una materia…) | `data/evidencias/` |
-| `03_perfiles/` | Paquete `perfiles`: embeddings de las evidencias, tres vistas por persona, SNF, grupos y subgrupos ([METODOLOGIA.md](03_perfiles/METODOLOGIA.md)) | `data/perfiles/` |
+| `03_perfiles/` | Paquete `perfiles`: embeddings de las evidencias, intensidad por dimensión, temas y patrones de actividad, perfil completo y patrones globales ([DOCUMENTACION_PERFILES.md](03_perfiles/DOCUMENTACION_PERFILES.md)) | `data/perfiles/` |
 | `04_busqueda_semantica/` | Paquete `busqueda`: búsqueda de personas por consulta en lenguaje natural sobre las evidencias ([IMPLEMENTACION.md](04_busqueda_semantica/IMPLEMENTACION.md)) | `data/busqueda/` |
 | `dashboard_react/` | Vista web (API FastAPI de solo lectura + React) | — |
 

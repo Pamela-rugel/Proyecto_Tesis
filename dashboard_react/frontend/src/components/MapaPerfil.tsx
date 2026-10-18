@@ -21,7 +21,7 @@ interface Props {
 
 const RESALTE = "#2a78d6";
 
-// Rampa secuencial de un solo tono (azul) de la paleta de referencia: claro = poca intensidad.
+// Rampa secuencial de un solo tono (azul) de la paleta de referencia: claro = nivel bajo.
 const RAMPA: [number, string][] = [
   [0, "#cde2fb"], [0.25, "#86b6ef"], [0.5, "#3987e5"], [0.75, "#1c5cab"], [1, "#0d366b"],
 ];
@@ -33,7 +33,7 @@ const mediana = (xs: number[]) => {
 };
 
 // Mapa t-SNE del perfil completo (todas las dimensiones, DEC-056): las personas cercanas se parecen
-// en el conjunto. Se colorea por la intensidad o el patrón de UNA dimensión para leerlo.
+// en el conjunto. Se colorea por el nivel (entre quienes tienen registros) o el patrón de UNA dimensión.
 export default function MapaPerfil({
   puntos, color, nombreDimension, personaSeleccionada, alto, onPersona, globalSeleccionado = null, onGlobal,
   microSeleccionado = null, onMicro,
@@ -42,9 +42,10 @@ export default function MapaPerfil({
     [
       `<b>${p.nombre}</b>`,
       p.cargo_actual ?? "Sin cargo actual",
-      p.patron_global !== null && p.patron_global !== undefined ? `Patrón global ${p.patron_global + 1}` : "",
-      nombreDimension && p.intensidad !== undefined && p.intensidad !== null
-        ? `${nombreDimension}: intensidad ${Math.floor(p.intensidad)}${p.patron !== null && p.patron !== undefined ? ` · Patrón ${p.patron + 1}` : ""}`
+      p.patron_global !== null && p.patron_global !== undefined ? `Perfil ${p.patron_global + 1}${(p.micro_global ?? -1) >= 0 ? ` · G${p.patron_global + 1}.${p.micro_global! + 1}` : ""}` : "",
+      nombreDimension
+        ? `${nombreDimension}: ${p.nivel != null ? `nivel ${Math.round(p.nivel)}` : (p.intensidad ?? 0) > 0 ? "con registros" : "sin registros"}` +
+          `${p.patron !== null && p.patron !== undefined ? ` · Patrón ${p.patron + 1}` : ""}`
         : "",
       p.vigente ? "" : "<i>No vigente</i>",
       "<i style='color:#94a3b8'>Clic para ver la ficha</i>",
@@ -67,11 +68,12 @@ export default function MapaPerfil({
   const trazas: Plotly.Data[] = [];
   const rotulos: Partial<Plotly.Annotations>[] = [];
   if (color === "intensidad") {
-    // primero los de menor intensidad, para que los intensos queden encima
-    const ps = [...puntos].sort((a, b) => (a.intensidad ?? 0) - (b.intensidad ?? 0));
+    // sin nivel (sin registros) en gris claro; con nivel, la rampa, los más altos encima
+    trazas.push(base(puntos.filter((p) => p.nivel == null), { color: "#e2e8f0", opacity: 0.6 }));
+    const ps = puntos.filter((p) => p.nivel != null).sort((a, b) => a.nivel! - b.nivel!);
     trazas.push(base(ps, {
-      color: ps.map((p) => p.intensidad ?? 0), colorscale: RAMPA, cmin: 0, cmax: 100, opacity: 0.9,
-      colorbar: { title: { text: "Intensidad", side: "right" }, thickness: 10, len: 0.6, outlinewidth: 0, tickfont: { size: 10 } },
+      color: ps.map((p) => p.nivel!), colorscale: RAMPA, cmin: 0, cmax: 100, opacity: 0.9,
+      colorbar: { title: { text: "Nivel", side: "right" }, thickness: 10, len: 0.6, outlinewidth: 0, tickfont: { size: 10 } },
     }));
   } else if (color === "patron") {
     const sin = puntos.filter((p) => p.patron === null || p.patron === undefined);
@@ -119,7 +121,7 @@ export default function MapaPerfil({
         x: mediana(ps.map((p) => p.x)), y: mediana(ps.map((p) => p.y)), text: `<b>G${g + 1}</b>`, showarrow: false,
         font: { size: 12, color: "#0f172a" }, bgcolor: "rgba(255,255,255,0.9)", bordercolor: conColor ? colorPatron(g) : "#64748b",
         borderwidth: 2, borderpad: 3, opacity: activo ? 1 : 0.45, captureevents: true,
-        hovertext: `Patrón global ${g + 1}: ${ps.length} personas · clic para resaltar`,
+        hovertext: `Perfil ${g + 1}: ${ps.length} personas · clic para resaltar`,
       });
     }
   } else {
@@ -154,13 +156,15 @@ export default function MapaPerfil({
         plot_bgcolor: "#fff",
         paper_bgcolor: "#fff",
         dragmode: "pan",
+        // conserva el acercamiento del usuario entre re-renderizados; se reinicia al cambiar los datos
+        uirevision: `perfil-${puntos.length}`,
       }}
       config={{
         displaylogo: false,
         responsive: true,
-        scrollZoom: false,
+        scrollZoom: true,
         displayModeBar: true,
-        modeBarButtonsToRemove: ["zoom2d", "pan2d", "select2d", "lasso2d", "autoScale2d", "toImage"],
+        modeBarButtonsToRemove: ["zoom2d", "select2d", "lasso2d", "autoScale2d", "toImage"],
         doubleClick: "reset",
       }}
       style={{ width: "100%" }}
