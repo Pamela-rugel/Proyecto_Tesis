@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { buscarSemantica, type ResultadoBusqueda, type RespuestaBusqueda, type Vigencia } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import {
+  buscarSemantica, type NavegacionFicha, type OrigenFicha, type ResultadoBusqueda, type RespuestaBusqueda, type Vigencia,
+} from "../api/client";
 import FichaPersona from "../components/FichaPersona";
 import { NOMBRE_TIPO } from "../lib/colores";
 
@@ -108,7 +111,19 @@ function Tarjeta({ p, k, activa, onAbrir }: { p: ResultadoBusqueda; k: number; a
 export default function BusquedaPage() {
   const [texto, setTexto] = useState("");
   const [vigencia, setVigencia] = useState<Vigencia>("vigentes");
-  const [persona, setPersona] = useState<number | null>(null);
+  // ficha abierta; desde los resultados el contexto es "otra" (pestaña Trayectoria), y desde la
+  // propia ficha manda el lugar del clic
+  const [ficha, setFicha] = useState<{ id: number; origen: OrigenFicha; dimension?: string } | null>(null);
+  const persona = ficha?.id ?? null;
+  const setPersona = (id: number | null) => setFicha(id === null ? null : { id, origen: "otra" });
+  // patrones globales y dimensiones se abren en la página Perfiles (ámbito "todo el personal",
+  // el mismo de esta ficha), por la URL que esa página lee al abrirse
+  const navegar = useNavigate();
+  const nav: NavegacionFicha = {
+    persona: (id, origen, dimension) => setFicha({ id, origen, dimension }),
+    patronGlobal: (g, m) => navegar(`/?ambito=todos&vista=perfil&global=${g}${m !== null ? `&micro=${m}` : ""}`),
+    dimension: (d, f) => navegar(`/?ambito=todos&vista=dimension&dimension=${d}${f ? `&${f.tipo}=${f.id}` : ""}`),
+  };
   const m = useMutation({ mutationFn: (q: { consulta: string; vigencia: Vigencia }) => buscarSemantica(q.consulta, q.vigencia) });
   const ejecutar = (consulta = texto) => {
     if (consulta.trim().length < 3) return;
@@ -208,8 +223,12 @@ export default function BusquedaPage() {
             <aside className="bg-white border rounded-lg overflow-y-auto" style={{ height: alto }}>
               {persona !== null ? (
                 <FichaPersona
+                  key={`${ficha!.id}-${ficha!.origen}-${ficha!.dimension ?? ""}`}
                   ambito="todos"
                   personaId={persona}
+                  origen={ficha!.origen}
+                  dimensionInicial={ficha!.dimension}
+                  nav={nav}
                   onVolver={() => setPersona(null)}
                   textoVolver="Cerrar ficha"
                 />

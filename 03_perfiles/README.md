@@ -5,8 +5,9 @@ Agrupa al personal integrando **tres vistas del mismo perfil** con *Similarity N
 resultados se calculan fuera de línea, se guardan versionados en `data/perfiles/` y la API del
 dashboard (`dashboard_react/backend`) solo los lee.
 
-> Explicación completa del proceso, con fórmulas, umbrales, parámetros y el diagrama
-> (`img/proceso_multivista.png`): **[METODOLOGIA.md](METODOLOGIA.md)**.
+> Documentación completa del método vigente (herramientas, decisiones sobre los datos, capas del
+> perfil, resultados y cómo leer el dashboard): **[DOCUMENTACION_PERFILES.md](DOCUMENTACION_PERFILES.md)**.
+> El clustering multivista SNF anterior (ya no se muestra) está en [METODOLOGIA.md](METODOLOGIA.md).
 
 ## Ejecución
 

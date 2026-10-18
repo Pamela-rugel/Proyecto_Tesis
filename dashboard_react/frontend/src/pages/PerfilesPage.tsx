@@ -1,24 +1,19 @@
-import { useEffect, useState } from "react";
-import { a } from "../lib/texto";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { NOMBRE_AMBITO } from "../lib/texto";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   getAmbitos, getDimension, getDimensiones, getMapaDimension, getMapaPerfil, getPatronesGlobales, getPersonasDimension,
-  type Ambito, type Patron,
+  type Ambito, type FiltroDimension, type NavegacionFicha, type OrigenFicha, type Patron,
   type Tema, type TipoMapa,
 } from "../api/client";
 import MapaPerfil, { type ColorPerfil } from "../components/MapaPerfil";
-import PanelPatronGlobal from "../components/PanelPatronGlobal";
+import PanelPatronGlobal, { type PestanaPerfil } from "../components/PanelPatronGlobal";
 import FichaPersona from "../components/FichaPersona";
 import MapaDimension from "../components/MapaDimension";
 import BuscadorPersonas from "../components/BuscadorPersonas";
+import Paginacion from "../components/Paginacion";
+import { guardarPorPagina, porPaginaGuardado } from "../lib/paginacion";
 import { colorPatron } from "../lib/colores";
-
-// con quién se compara cada número, dicho en palabras (en vez de "ámbito")
-const NOMBRE_AMBITO: Record<Ambito, string> = {
-  todos: "todo el personal",
-  administrativos: "el personal administrativo",
-  docentes: "el personal docente",
-};
 
 const AMBITOS: { id: Ambito; nombre: string }[] = [
   { id: "todos", nombre: "Todo el personal" },
@@ -26,7 +21,7 @@ const AMBITOS: { id: Ambito; nombre: string }[] = [
   { id: "docentes", nombre: "Docentes" },
 ];
 
-type Filtro = { tipo: "patron" | "tema"; id: number } | null;
+type Filtro = FiltroDimension;
 
 // Perfiles por dimensión de evidencia (DEC-053/055): dimensiones a la izquierda; al centro, los
 // patrones de actividad y los temas descubiertos en la dimensión; a la derecha, las personas del
@@ -37,16 +32,51 @@ export default function PerfilesPage() {
     AMBITOS.some((a) => a.id === inicial.get("ambito")) ? (inicial.get("ambito") as Ambito) : "todos",
   );
   const [dimension, setDimension] = useState<string>(inicial.get("dimension") ?? "investigacion");
-  const [filtro, setFiltro] = useState<Filtro>(null);
-  const [persona, setPersona] = useState<number | null>(null);
+  // ?patron=n / ?tema=n (enlaces desde la ficha en Búsqueda): filtro inicial de la dimensión
+  const [filtro, setFiltro] = useState<Filtro>(() => {
+    const patron = inicial.get("patron") !== null && !isNaN(Number(inicial.get("patron"))) ? Number(inicial.get("patron")) : null;
+    const tema = inicial.get("tema") !== null && !isNaN(Number(inicial.get("tema"))) ? Number(inicial.get("tema")) : null;
+    return patron !== null ? { tipo: "patron", id: patron } : tema !== null ? { tipo: "tema", id: tema } : null;
+  });
+  // ficha abierta y su contexto de origen (decide la pestaña inicial; ver FichaPersona)
+  const [ficha, setFicha] = useState<{ id: number; origen: OrigenFicha; dimension?: string } | null>(null);
   const [soloVigentes, setSoloVigentes] = useState(true);
-  const [tipoMapa, setTipoMapa] = useState<TipoMapa>("patrones");
-  const [vista, setVista] = useState<"dimension" | "perfil">(inicial.get("vista") === "perfil" ? "perfil" : "dimension");
+  const [tipoMapa, setTipoMapa] = useState<TipoMapa>(inicial.get("tema") !== null ? "temas" : "patrones");
+  const [vista, setVistaEstado] = useState<"dimension" | "perfil">(inicial.get("vista") === "perfil" ? "perfil" : "dimension");
+  const persona = ficha?.id ?? null;
+  // abrir una ficha desde esta página: el contexto es la vista activa (en la vista por dimensión,
+  // con la dimensión elegida desplegada)
+  // la lista y la ficha comparten el panel derecho: al abrir una ficha desde la lista se guarda su
+  // scroll y al volver ("← Volver" o Esc) se restaura, para seguir donde estaba esa persona
+  const panelDerecho = useRef<HTMLElement | null>(null);
+  const scrollLista = useRef(0);
+  const restaurarScroll = useRef(false);
+  const setPersona = (id: number | null) => {
+    if (id !== null && ficha === null) scrollLista.current = panelDerecho.current?.scrollTop ?? 0;
+    setFicha(id === null ? null : { id, origen: vista, dimension: vista === "dimension" ? dimension : undefined });
+  };
+  const volverDeFicha = () => {
+    restaurarScroll.current = true;
+    setFicha(null);
+  };
+  useLayoutEffect(() => {
+    if (ficha === null && restaurarScroll.current && panelDerecho.current) {
+      panelDerecho.current.scrollTop = scrollLista.current;
+      restaurarScroll.current = false;
+    }
+  }, [ficha]);
+  // cambiar de vista cierra la ficha: al volver a abrirla, el nuevo contexto decide la pestaña
+  const setVista = (v: "dimension" | "perfil") => {
+    if (v !== vista) setFicha(null);
+    setVistaEstado(v);
+  };
   const [colorPerfil, setColorPerfil] = useState<ColorPerfil>("global");
   const [globalSel, setGlobalSel] = useState<number | null>(
     inicial.get("global") !== null && !isNaN(Number(inicial.get("global"))) ? Number(inicial.get("global")) : null,
   );
-  const [microSel, setMicroSel] = useState<number | null>(null);
+  // pestaña del panel del perfil amplio: se conserva al abrir y cerrar fichas
+  const [pestanaPerfil, setPestanaPerfil] = useState<PestanaPerfil>("micro");
+  const [microSel, setMicroSel] = useState<number | null>(inicial.get("micro") !== null && !isNaN(Number(inicial.get("micro"))) ? Number(inicial.get("micro")) : null);
   const [dimColor, setDimColor] = useState<string | null>("investigacion");
 
   const calcularAlto = () => Math.max(560, window.innerHeight - 150);
@@ -65,14 +95,18 @@ export default function PerfilesPage() {
     url.searchParams.set("vista", vista);
     if (globalSel !== null) url.searchParams.set("global", String(globalSel));
     else url.searchParams.delete("global");
+    if (globalSel !== null && microSel !== null) url.searchParams.set("micro", String(microSel));
+    else url.searchParams.delete("micro");
+    url.searchParams.delete("patron");
+    url.searchParams.delete("tema");
     window.history.replaceState(null, "", url);
-  }, [ambito, dimension, vista, globalSel]);
+  }, [ambito, dimension, vista, globalSel, microSel]);
 
   // Esc vuelve un paso atrás
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (persona !== null) setPersona(null);
+      if (persona !== null) volverDeFicha();
       else setFiltro(null);
     };
     window.addEventListener("keydown", f);
@@ -97,15 +131,35 @@ export default function PerfilesPage() {
     enabled: vista === "perfil",
   });
   const globalesConColor = (globales.data?.patrones?.length ?? 0) <= 6;
+  // página de la lista de personas: vuelve a la primera al cambiar ámbito, dimensión, filtro o vigencia
+  const [porPagina, setPorPagina] = useState(porPaginaGuardado);
+  const claveLista = JSON.stringify([ambito, dimension, filtro, soloVigentes, porPagina]);
+  const [paginaLista, setPaginaLista] = useState({ clave: claveLista, n: 0 });
+  const pagina = paginaLista.clave === claveLista ? paginaLista.n : 0;
+  const cambiarPagina = (n: number) => {
+    setPaginaLista({ clave: claveLista, n });
+    if (panelDerecho.current) panelDerecho.current.scrollTop = 0;
+  };
   const personas = useQuery({
-    queryKey: ["personas-dimension", ambito, dimension, filtro, soloVigentes],
+    queryKey: ["personas-dimension", ambito, dimension, filtro, soloVigentes, pagina, porPagina],
     queryFn: () =>
-      getPersonasDimension(ambito, dimension, filtro ? { [filtro.tipo]: filtro.id } : {}, soloVigentes),
+      getPersonasDimension(ambito, dimension, filtro ? { [filtro.tipo]: filtro.id } : {}, soloVigentes, pagina, porPagina),
+    placeholderData: keepPreviousData,
   });
+
+  // el selector "Por patrones / Por temas" decide el mapa y la sección de abajo; si la dimensión
+  // elegida no tiene lo seleccionado (p. ej. Idiomas no tiene temas), se cambia a lo que sí tiene
+  useEffect(() => {
+    const info = detalle.data;
+    if (!info) return;
+    if (tipoMapa === "temas" && !info.temas && info.patrones) setTipoMapa("patrones");
+    if (tipoMapa === "patrones" && !info.patrones && info.temas) setTipoMapa("temas");
+  }, [detalle.data, tipoMapa]);
 
   const elegirGlobal = (g: number) => {
     setGlobalSel(globalSel === g ? null : g);
     setMicroSel(null);
+    setPestanaPerfil("micro");
     setColorPerfil("global");
     setPersona(null);
   };
@@ -125,6 +179,27 @@ export default function PerfilesPage() {
     setFiltro(f && filtro && f.tipo === filtro.tipo && f.id === filtro.id ? null : f);
     if (f) setTipoMapa(f.tipo === "patron" ? "patrones" : "temas");
     setPersona(null);
+  };
+  // enlaces de la ficha: otra persona (con el contexto del clic), un patrón global o una dimensión
+  const irPatronGlobal = (g: number, m: number | null) => {
+    setVista("perfil");
+    setFicha(null);
+    setGlobalSel(g);
+    setMicroSel(m);
+    setColorPerfil("global");
+    setPestanaPerfil(m !== null ? "distingue" : "micro");
+  };
+  const irDimension = (dim: string, f: Filtro) => {
+    setVista("dimension");
+    setFicha(null);
+    setDimension(dim);
+    setFiltro(f);
+    if (f) setTipoMapa(f.tipo === "patron" ? "patrones" : "temas");
+  };
+  const nav: NavegacionFicha = {
+    persona: (id, origen, dim) => setFicha({ id, origen, dimension: dim }),
+    patronGlobal: irPatronGlobal,
+    dimension: irDimension,
   };
 
   if (ambitos.isError) {
@@ -184,12 +259,11 @@ export default function PerfilesPage() {
 
       {vista === "perfil" && (
         <div className="grid lg:grid-cols-[17rem_minmax(0,1fr)_27rem] gap-4 items-start">
-          <nav className="bg-white border rounded-lg overflow-y-auto p-2" style={{ height: alto }} aria-label="Patrones globales">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500 px-2 pt-1">Patrones globales</p>
-            <p className="text-[11px] text-slate-500 px-2 pb-2">
-              Descubiertos con todas las dimensiones a la vez{globales.data?.k ? ` (${globales.data.k})` : ""}; debajo de cada
-              uno, sus microarquetipos (G1.1, G1.2…). El número es cuántas personas{soloVigentes ? " vigentes" : ""} tiene cada
-              uno.
+          <nav className="bg-white border rounded-lg overflow-y-auto p-2" style={{ height: alto }} aria-label="Perfiles amplios">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500 px-2 pt-1">Perfiles amplios</p>
+            <p className="text-[11px] text-slate-500 px-2 pb-2"
+              title="Agrupamiento de la red que une actividad y temas (NEMO). Debajo de cada perfil, sus microarquetipos (G1.1, G1.2…). Los datos son casi continuos: orientan, no son grupos cerrados.">
+              Actividad y temas juntos{globales.data?.estabilidad_ari ? ` · estabilidad ${globales.data.estabilidad_ari.toFixed(2)}` : ""}. Número: personas{soloVigentes ? " vigentes" : ""}.
             </p>
             {globales.data?.patrones?.map((g) => (
             <div key={g.id}>
@@ -201,7 +275,7 @@ export default function PerfilesPage() {
                 <span className="flex items-center gap-2">
                   {globalesConColor && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorPatron(g.id) }} />}
                   <span className={`text-sm flex-1 ${globalSel === g.id ? "font-semibold text-espol-navy" : "text-slate-800"}`}>
-                    Patrón global {g.id + 1}
+                    Perfil {g.id + 1}
                   </span>
                   <span className="text-[11px] text-slate-500 tabular-nums" title={soloVigentes ? "personas vigentes" : "personas"}>
                     {soloVigentes ? g.tamano_vigentes : g.tamano}
@@ -210,7 +284,8 @@ export default function PerfilesPage() {
                 <span className="block text-[11px] text-slate-500 mt-0.5">{g.etiqueta}</span>
               </button>
               {(g.microarquetipos?.lista.length ?? 0) > 0 && (
-                <ul className="ml-4 mb-2 border-l pl-2" aria-label={`Microarquetipos del Patrón global ${g.id + 1}`}>
+                <ul className="ml-4 mb-2 border-l pl-2" aria-label={`Microarquetipos del Perfil ${g.id + 1}`}
+                  title={g.microarquetipos!.estable === false ? `Subdivisión orientativa: estabilidad ${g.microarquetipos!.estabilidad_ari.toFixed(2)} (< 0,90)` : undefined}>
                   {g.microarquetipos!.lista.map((m) => {
                     const activo = globalSel === g.id && microSel === m.id;
                     return (
@@ -244,10 +319,10 @@ export default function PerfilesPage() {
               onClick={() => setColorPerfil("global")}
               className={`w-full text-left rounded-md px-2 py-1.5 mb-1 text-sm ${colorPerfil === "global" ? "bg-slate-100 font-semibold text-espol-navy" : "text-slate-700 hover:bg-slate-50"}`}
             >
-              Patrón global
+              Perfil amplio
             </button>
             <div className="inline-flex bg-slate-100 rounded-md p-0.5 mx-2 mb-2" role="group" aria-label="Por dimensión">
-              {([["intensidad", "Intensidad"], ["patron", "Patrón"]] as const).map(([c, t]) => (
+              {([["intensidad", "Nivel"], ["patron", "Patrón"]] as const).map(([c, t]) => (
                 <button
                   key={c}
                   onClick={() => {
@@ -282,8 +357,8 @@ export default function PerfilesPage() {
                 participa. Las personas cercanas se parecen en el conjunto (p. ej. quienes lideran investigación y además tienen
                 muchos reconocimientos).{" "}
                 {colorPerfil === "global"
-                  ? "Color y rótulos G1, G2…: el patrón global de cada persona (clic en un rótulo para resaltarlo)."
-                  : `Color: ${nombreDimColor}, por ${colorPerfil === "patron" ? "patrón" : "intensidad"}.`}
+                  ? "Color y rótulos G1, G2…: el perfil amplio de cada persona (clic en un rótulo para resaltarlo)."
+                  : `Color: ${nombreDimColor}, por ${colorPerfil === "patron" ? "patrón" : "nivel"}.`}
               </p>
               <label className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                 <input type="checkbox" checked={soloVigentes} onChange={(e) => setSoloVigentes(e.target.checked)} />
@@ -315,18 +390,21 @@ export default function PerfilesPage() {
             </div>
           </section>
 
-          <aside className="bg-white border rounded-lg overflow-y-auto" style={{ height: alto }}>
-            {persona !== null ? (
+          <aside ref={panelDerecho} className="bg-white border rounded-lg overflow-y-auto" style={{ height: alto }}>
+            {ficha !== null ? (
               <FichaPersona
+                key={`${ficha.id}-${ficha.origen}-${ficha.dimension ?? ""}`}
                 ambito={ambito}
-                personaId={persona}
-                onVolver={() => setPersona(null)}
+                personaId={ficha.id}
+                origen={ficha.origen}
+                dimensionInicial={ficha.dimension}
+                onVolver={volverDeFicha}
                 textoVolver={
                   globalSel !== null
-                    ? `Volver a ${microSel !== null ? `G${globalSel + 1}.${microSel + 1}` : `Patrón global ${globalSel + 1}`}`
+                    ? `Volver a ${microSel !== null ? `G${globalSel + 1}.${microSel + 1}` : `Perfil ${globalSel + 1}`}`
                     : "Cerrar ficha"
                 }
-                onPersona={setPersona}
+                nav={nav}
               />
             ) : globalSel !== null && globales.data?.patrones?.[globalSel] ? (
               <PanelPatronGlobal
@@ -338,6 +416,9 @@ export default function PerfilesPage() {
                 microSel={microSel}
                 onMicro={setMicroSel}
                 onPersona={setPersona}
+                onDimension={irDimension}
+                pestana={pestanaPerfil}
+                onPestana={setPestanaPerfil}
                 onCerrar={() => {
                   setGlobalSel(null);
                   setMicroSel(null);
@@ -345,7 +426,7 @@ export default function PerfilesPage() {
               />
             ) : (
               <p className="text-sm text-slate-500 p-5">
-                Elige un patrón global para ver qué lo caracteriza y quiénes lo forman, o haz clic en un punto para ver la ficha
+                Elige un perfil amplio para ver qué lo caracteriza y quiénes lo forman, o haz clic en un punto para ver la ficha
                 de esa persona y las personas con el perfil más parecido.
               </p>
             )}
@@ -407,7 +488,7 @@ export default function PerfilesPage() {
                           aria-pressed={tipoMapa === t}
                           className={`px-2.5 py-1 text-xs rounded disabled:opacity-40 ${tipoMapa === t ? "bg-white shadow-sm text-espol-navy font-medium" : "text-slate-600"}`}
                         >
-                          {t === "patrones" ? "Mapa por patrones" : "Mapa por temas"}
+                          {t === "patrones" ? "Por patrones" : "Por temas"}
                         </button>
                       ))}
                     </div>
@@ -416,6 +497,7 @@ export default function PerfilesPage() {
                       {tipoMapa === "patrones" ? "cómo participan" : "el contenido de su evidencia"}. Los rótulos{" "}
                       {tipoMapa === "patrones" ? "P1, P2… (y el color)" : "T1, T2… (los 10 temas más grandes)"} marcan cada grupo;
                       haz clic en uno para resaltarlo, o en un punto para abrir la ficha.
+                      {tipoMapa === "temas" && " Al elegir un tema se resaltan todas las personas con evidencias en él (más grande = más parte de sus evidencias)."}
                     </p>
                   </div>
                   {mapa.data && mapa.data.length > 0 ? (
@@ -427,17 +509,18 @@ export default function PerfilesPage() {
                       alto={Math.max(320, Math.round(alto * 0.5))}
                       onPersona={setPersona}
                       onGrupo={(g) => elegirFiltro({ tipo: tipoMapa === "patrones" ? "patron" : "tema", id: g })}
+                      nombresPatrones={Object.fromEntries((d.patrones?.patrones ?? []).map((p) => [p.id, p.nombre ?? ""]))}
                     />
                   ) : (
                     <p className="text-sm text-slate-500 px-5 py-6">{mapa.isLoading ? "Cargando mapa…" : "Sin mapa para esta dimensión."}</p>
                   )}
                   <p className="text-[11px] text-slate-400 px-5 pb-2">
-                    Dibujo aproximado (t-SNE) para orientarse: los grupos se calcularon con los datos completos, no con este plano.
+                    Dibujo aproximado (t-SNE) para orientarse; personas con valores idénticos se agrupan alrededor del mismo punto.
                   </p>
                 </div>
               )}
 
-              {d.patrones && (
+              {d.patrones && tipoMapa === "patrones" && (
                 <div className="px-5 py-4 border-b">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Patrones de actividad · cómo participan ({d.patrones.k})
@@ -460,7 +543,7 @@ export default function PerfilesPage() {
                 </div>
               )}
 
-              {d.temas && (
+              {d.temas && tipoMapa === "temas" && (
                 <div className="px-5 py-4">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Temas · de qué trata su evidencia ({d.temas.k})
@@ -487,14 +570,17 @@ export default function PerfilesPage() {
         </section>
 
         {/* personas o ficha */}
-        <aside className="bg-white border rounded-lg overflow-y-auto" style={{ height: alto }}>
-          {persona !== null ? (
+        <aside ref={panelDerecho} className="bg-white border rounded-lg overflow-y-auto" style={{ height: alto }}>
+          {ficha !== null ? (
             <FichaPersona
+              key={`${ficha.id}-${ficha.origen}-${ficha.dimension ?? ""}`}
               ambito={ambito}
-              personaId={persona}
-              onVolver={() => setPersona(null)}
+              personaId={ficha.id}
+              origen={ficha.origen}
+              dimensionInicial={ficha.dimension}
+              onVolver={volverDeFicha}
               textoVolver={tituloFiltro ? `Volver a ${tituloFiltro}` : "Volver a la lista"}
-              onPersona={setPersona}
+              nav={nav}
             />
           ) : (
             <div>
@@ -508,7 +594,7 @@ export default function PerfilesPage() {
                     ? "Ordenadas por afinidad con el patrón."
                     : filtro?.tipo === "tema"
                       ? "Ordenadas por la parte de sus evidencias que trata este tema."
-                      : "Ordenadas por intensidad. Elige un patrón o un tema para filtrar."}
+                      : "Ordenadas por nivel. Elige un patrón o un tema para filtrar."}
                 </p>
                 <div className="flex items-center gap-3 mt-2">
                   <label className="text-[11px] text-slate-500 flex items-center gap-1">
@@ -522,14 +608,15 @@ export default function PerfilesPage() {
                   )}
                 </div>
               </div>
+              <div>
               <ul className="divide-y">
                 {personas.data?.personas.map((x) => (
                   <li key={x.persona_id}>
                     <button onClick={() => setPersona(x.persona_id)} className="w-full text-left px-5 py-2 hover:bg-slate-50">
                       <div className="flex items-baseline gap-2">
                         <span className="text-sm text-slate-800 flex-1">{x.nombre}</span>
-                        <span className="text-xs tabular-nums text-slate-700" title={`Intensidad en la dimensión (percentil frente ${a(NOMBRE_AMBITO[ambito])})`}>
-                          {Math.floor(x.intensidad)}
+                        <span className="text-[11px] tabular-nums text-slate-600" title="Nivel: percentil entre quienes tienen registros en esta dimensión">
+                          {x.nivel != null ? <>nivel <strong className="text-slate-800 text-xs">{Math.round(x.nivel)}</strong></> : "—"}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 truncate">
@@ -540,20 +627,29 @@ export default function PerfilesPage() {
                         {filtro?.tipo === "tema" && x.proporcion !== undefined
                           ? `${Math.round(x.proporcion * 100)} % de sus evidencias en este tema`
                           : x.patron !== null && x.patron !== undefined
-                            ? `Patrón ${x.patron + 1}${filtro?.tipo === "patron" && x.similitud_representante !== null && x.similitud_representante !== undefined ? ` · similitud con la persona más representativa ${Math.round(x.similitud_representante * 100)} %` : ""}${x.mixto ? " · entre dos patrones" : ""}`
+                            ? `Patrón ${x.patron + 1}${!filtro && d?.patrones?.patrones[x.patron]?.nombre ? `: ${d.patrones.patrones[x.patron].nombre}` : ""}${filtro?.tipo === "patron" ? textoSimilitud(x.similitud_representante, x.es_representante) : ""}${x.mixto ? " · entre dos patrones" : ""}`
                             : ""}
                       </p>
                     </button>
                   </li>
                 ))}
               </ul>
-              {personas.data && personas.data.total > personas.data.personas.length && (
-                <p className="text-[11px] text-slate-400 px-5 py-3">Se muestran las primeras {personas.data.personas.length}.</p>
+              {personas.data && (
+                <Paginacion
+                  pagina={pagina}
+                  total={personas.data.total}
+                  porPagina={porPagina}
+                  onCambiar={cambiarPagina}
+                  onPorPagina={(n) => {
+                    setPorPagina(n);
+                    guardarPorPagina(n);
+                    if (panelDerecho.current) panelDerecho.current.scrollTop = 0;
+                  }}
+                  cargando={personas.isFetching}
+                  nota={<>Nivel: percentil entre quienes tienen registros en la dimensión.{filtro?.tipo === "patron" ? " Similitud: frente a la persona más representativa del patrón (0 % = la más distinta)." : ""}</>}
+                />
               )}
-              <p className="text-[11px] text-slate-400 px-5 py-3">
-                Número a la derecha: intensidad en la dimensión, de 0 a 100, comparada con {NOMBRE_AMBITO[ambito]} (100 = quien
-                más evidencia tiene).{filtro?.tipo === "patron" ? " Similitud: cuánto se parece a la persona más representativa del patrón (100 % = ella misma; 0 % = la más distinta del patrón)." : ""}
-              </p>
+              </div>
             </div>
           )}
         </aside>
@@ -561,6 +657,15 @@ export default function PerfilesPage() {
       )}
     </div>
   );
+}
+
+// Similitud con la persona representativa del patrón. Con valores idénticos (empate) la distancia es
+// 0 y daría 100 % sin ser la representante: se dice en palabras.
+function textoSimilitud(sim: number | null | undefined, esRep: boolean | null | undefined) {
+  if (esRep) return " · persona más representativa";
+  if (sim === null || sim === undefined) return "";
+  if (sim >= 0.9995) return " · valores idénticos a la persona más representativa";
+  return ` · similitud con la persona más representativa ${Math.round(sim * 100)} %`;
 }
 
 function TarjetaPatron({ patron, seleccionado, onClick, onPersona }: {
@@ -577,7 +682,15 @@ function TarjetaPatron({ patron, seleccionado, onClick, onPersona }: {
             {patron.tamano_vigentes} vigentes · {patron.tamano} en total
           </span>
         </div>
-        <p className="text-xs text-slate-600 mt-1">{patron.etiqueta}</p>
+        {patron.nombre && (
+          <p className="text-xs font-medium text-slate-800 mt-1"
+            title={`Se cumple para todas sus personas · distingue del resto de la dimensión: ${Math.round((patron.nombre_distingue ?? 0) * 100)} %`}>
+            {patron.nombre}
+          </p>
+        )}
+        <p className={`text-xs mt-1 ${patron.nombre ? "text-slate-500" : "text-slate-600"}`}>
+          {patron.nombre ? `En promedio: ${patron.etiqueta}` : patron.etiqueta}
+        </p>
         <ul className="mt-2 space-y-1">
           {patron.componentes.map((c) => {
             const ancho = (Math.min(Math.abs(c.z), extremo) / extremo) * 50;

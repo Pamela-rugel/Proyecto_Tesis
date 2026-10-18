@@ -96,9 +96,72 @@ def con_nombres(df: pd.DataFrame, columna_id: str = "persona_id") -> pd.DataFram
 
 @lru_cache(maxsize=1)
 def evidencias() -> pd.DataFrame:
-    partes = [pd.read_csv(f, usecols=["evidencia_id", "persona_id", "tipo_id", "texto"])
+    """Todas las evidencias con sus atributos (JSON en texto), indexadas por persona_id."""
+    partes = [pd.read_csv(f, usecols=["evidencia_id", "persona_id", "tipo_id", "texto", "atributos"])
               for f in sorted(EVIDENCIAS_DIR.glob("*/evidencias_*.csv"))]
-    return pd.concat(partes, ignore_index=True)
+    return pd.concat(partes, ignore_index=True).set_index("persona_id", drop=False).sort_index()
+
+
+def evidencias_de(persona_id: int) -> pd.DataFrame:
+    ev = evidencias()
+    return ev.loc[[persona_id]] if persona_id in ev.index else ev.iloc[0:0]
+
+
+def _es_espanol(idioma) -> bool:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(idioma or "")).encode("ascii", "ignore").decode().upper()
+    return "ESPANOL" in t
+
+
+@lru_cache(maxsize=1)
+def idiomas_por_persona() -> dict[int, list[dict]]:
+    """Idiomas de cada persona (de sus evidencias de idiomas) con los niveles tal como se
+    registraron. Hacen de "temas" de la dimensión Idiomas: son categorías exactas, no agrupadas.
+    Comprensión no se incluye: en la fuente solo vale "BÁSICO" o vacío (posible valor por defecto,
+    sin confirmar)."""
+    salida: dict[int, list[dict]] = {}
+    texto = lambda v: " / ".join(str(x).capitalize() for x in v) if v else None  # noqa: E731
+    for f in sorted((EVIDENCIAS_DIR / "idiomas").glob("evidencias_*.csv")):
+        for p, s in pd.read_csv(f, usecols=["persona_id", "atributos"]).itertuples(index=False):
+            a = json.loads(s)
+            salida.setdefault(int(p), []).append({
+                "idioma": str(a.get("idioma") or "Sin nombre").capitalize(),
+                "conversacion": texto(a.get("niveles_conversacion")), "lectura": texto(a.get("niveles_lectura")),
+                "escritura": texto(a.get("niveles_escritura")), "mcer": " / ".join(a.get("niveles_mcer") or []) or None,
+            })
+    for lista in salida.values():
+        lista.sort(key=lambda x: x["idioma"])
+    return salida
+
+
+@lru_cache(maxsize=1)
+def registro_idiomas() -> dict[int, str]:
+    """Qué registró cada persona en la fuente de idiomas, para no confundir la falta de información
+    con la falta de idiomas extranjeros. Se lee de las evidencias de idiomas y de sus
+    `registros_no_considerados.csv` (02_evidencias: español nativo, nivel 'Ninguna', idioma sin
+    nombre). Valores:
+      "extranjero"  tiene al menos una evidencia de un idioma distinto del español;
+      "solo_espanol" todo lo que registró es español;
+      "sin_validos" registró idiomas, pero ninguno válido (nivel 'Ninguna' o idioma sin nombre).
+    Quien no está en el diccionario no aparece en la fuente de idiomas."""
+    carpeta = EVIDENCIAS_DIR / "idiomas"
+    idiomas: dict[int, list[tuple[str, bool]]] = {}  # persona -> [(idioma, es evidencia)]
+    for f in sorted(carpeta.glob("evidencias_*.csv")):
+        for p, a in pd.read_csv(f, usecols=["persona_id", "atributos"]).itertuples(index=False):
+            idiomas.setdefault(int(p), []).append((json.loads(a).get("idioma"), True))
+    nc = carpeta / "registros_no_considerados.csv"
+    if nc.exists():
+        for p, d in pd.read_csv(nc, usecols=["persona_id", "descripcion"]).itertuples(index=False):
+            idiomas.setdefault(int(p), []).append((d, False))
+    salida = {}
+    for p, regs in idiomas.items():
+        if any(ev and not _es_espanol(i) for i, ev in regs):
+            salida[p] = "extranjero"
+        elif all(_es_espanol(i) for i, _ in regs):
+            salida[p] = "solo_espanol"
+        else:
+            salida[p] = "sin_validos"
+    return salida
 
 
 @lru_cache(maxsize=3)
@@ -142,6 +205,25 @@ def patrones_globales(ambito: str) -> tuple[pd.DataFrame, dict]:
     if not (d / "patrones_globales.json").exists():
         return pd.DataFrame(columns=["persona_id", "patron_global"]), {}
     return pd.read_parquet(d / "patrones_globales.parquet"), json.loads((d / "patrones_globales.json").read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=3)
+def vecinos_dimension(ambito: str) -> pd.DataFrame:
+    """Personas parecidas dentro de cada dimensión (listas "actividad" y "tema", DEC-061), indexadas
+    por persona. Vacío si la versión es anterior."""
+    ruta = version_actual() / ambito / "vecinos_dimension.parquet"
+    if not ruta.exists():
+        return pd.DataFrame(columns=["persona_id", "dimension", "lista", "rango", "vecino_id"]).set_index("persona_id", drop=False)
+    return pd.read_parquet(ruta).set_index("persona_id", drop=False).sort_index()
+
+
+@lru_cache(maxsize=3)
+def temas_evidencia(ambito: str) -> pd.DataFrame:
+    """Tema de cada evidencia y si se asignó por cercanía (DEC-061), indexado por persona."""
+    ruta = version_actual() / ambito / "temas_evidencia.parquet"
+    if not ruta.exists():
+        return pd.DataFrame(columns=["persona_id", "dimension", "tema_id", "por_cercania"]).set_index("persona_id", drop=False)
+    return pd.read_parquet(ruta).set_index("persona_id", drop=False).sort_index()
 
 
 @lru_cache(maxsize=1)

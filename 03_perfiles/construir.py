@@ -33,7 +33,7 @@ import pandas as pd
 
 from perfiles import clustering as cl
 from perfiles import embeddings as emb
-from perfiles import dimensiones, interpretacion, micro_dimensiones, perfil_conjunto, snf, vistas
+from perfiles import dimensiones, interpretacion, micro_dimensiones, perfil_conjunto, perfil_multivista, snf, vistas
 from perfiles.comun import (
     AMBITOS, ARCHIVO_HISTORIAL_FEATURES, CLUSTERING_DIR, EMBEDDINGS_TEMA_DIR, archivos_evidencias, cargar_estado_personas, cargar_evidencias, en_ambito,
     huella_archivos,
@@ -318,6 +318,7 @@ def construir() -> dict:
     x_crudo.reset_index().to_parquet(carpeta / "vista_estructurada.parquet", index=False)
     comp_dim, n_ev_dim = dimensiones.componentes_crudos(ev, personas_ids)
     ev_dim = dimensiones.evidencias_de_dimension(ev)
+    ultimas = dimensiones.ultima_evidencia(ev_dim, corte=datetime.now().strftime("%Y-%m-%d"))
     textos_tema, vec_tema, _ = emb.cargar(EMBEDDINGS_TEMA_DIR)
     pos_tema = dict(zip(textos_tema["clave"], range(len(textos_tema))))
     (carpeta / "dimensiones.json").write_text(json.dumps(dimensiones.definiciones(), ensure_ascii=False, indent=2), encoding="utf-8")
@@ -338,21 +339,28 @@ def construir() -> dict:
         extra["vecinos"].to_parquet(d / "vecinos.parquet", index=False)
         ids = personas["persona_id"].to_numpy()[idx]
         dim = dimensiones.intensidades(comp_dim.loc[ids], n_ev_dim.loc[ids])
+        # fecha de su última evidencia en cada dimensión: descriptiva y desempate de vecinos (DEC-061)
+        dim = dim.merge(ultimas, on=["persona_id", "dimension"], how="left")
         dim.to_parquet(d / "dimensiones.parquet", index=False)
         t0 = time.time()
-        temas_p, patrones_p, mapas_p, micro_r = micro_dimensiones.construir_ambito(
-            ids, personas["vigente"].to_numpy()[idx], comp_dim, n_ev_dim, ev_dim, pos_tema, vec_tema)
+        micro = micro_dimensiones.construir_ambito(
+            ids, personas["vigente"].to_numpy()[idx], comp_dim, n_ev_dim, ev_dim, pos_tema, vec_tema, ultimas)
+        temas_p, patrones_p, mapas_p, micro_r = micro["temas"], micro["patrones"], micro["mapas"], micro["resumen"]
         temas_p.to_parquet(d / "temas_dimension.parquet", index=False)
         patrones_p.to_parquet(d / "patrones_dimension.parquet", index=False)
         mapas_p.to_parquet(d / "mapas_dimension.parquet", index=False)
+        micro["temas_evidencia"].to_parquet(d / "temas_evidencia.parquet", index=False)
+        micro["vecinos"].to_parquet(d / "vecinos_dimension.parquet", index=False)
         k_pat = {k: (v["patrones"] or {}).get("k", 0) for k, v in micro_r.items()}
-        mapa_c, vecinos_c = perfil_conjunto.construir_ambito(ids, dim, patrones_p, k_pat)
-        mapa_c.to_parquet(d / "perfil_conjunto_mapa.parquet", index=False)
-        vecinos_c.to_parquet(d / "perfil_conjunto_vecinos.parquet", index=False)
-        glob_p, glob_r = perfil_conjunto.patrones_globales(ids, personas["vigente"].to_numpy()[idx], dim, patrones_p, k_pat)
-        glob_p.to_parquet(d / "patrones_globales.parquet", index=False)
+        # perfil completo multivista (DEC-062): red NEMO de actividad + contenido; mismos archivos de salida
+        pm = perfil_multivista.construir_ambito(ids, personas["vigente"].to_numpy()[idx], dim, patrones_p, k_pat,
+                                                ev_dim, pos_tema, vec_tema, temas_p, micro_r)
+        pm["mapa"].to_parquet(d / "perfil_conjunto_mapa.parquet", index=False)
+        pm["vecinos"].to_parquet(d / "perfil_conjunto_vecinos.parquet", index=False)
+        glob_r = pm["resumen"]
+        pm["personas"].to_parquet(d / "patrones_globales.parquet", index=False)
         (d / "patrones_globales.json").write_text(json.dumps(glob_r, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(ambito, "patrones globales:", glob_r["k"], "ARI", glob_r["estabilidad_ari"],
+        print(ambito, "perfiles amplios:", glob_r["k"], "ARI", glob_r["estabilidad_ari"],
               "microarquetipos:", glob_r["n_microarquetipos"])
         (d / "micro_dimensiones.json").write_text(json.dumps(micro_r, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         print(ambito, "temas / patrones por dimensión:",
@@ -378,15 +386,23 @@ def construir() -> dict:
                             "centroide semántico V1/V2 aparte; nombres neutrales; ámbitos independientes"),
         "dimensiones": ("intensidad 0-100 = percentil, dentro del ámbito, de un índice ponderado de componentes "
                         "normalizados por el máximo del ámbito; 0 sin evidencias; dimensiones independientes (no suman 100); "
-                        "ver dimensiones.json"),
+                        "ultima_evidencia = fecha más reciente de sus evidencias de la dimensión (descriptiva); ver dimensiones.json"),
         "micro_dimensiones": ("sin categorías predefinidas, por dimensión y ámbito: TEMAS = UMAP + HDBSCAN sobre los embeddings "
-                              "del título/nombre de las evidencias (proporción por persona); PATRONES DE ACTIVIDAD = KMeans "
-                              "(k 3-6 por silueta) sobre componentes y proporciones estandarizados; "
+                              "del título/nombre de las evidencias (proporción por persona; tema de cada evidencia y si se "
+                              "asignó por cercanía en temas_evidencia.parquet); PATRONES DE ACTIVIDAD = KMeans (k 3-6 = mayor "
+                              "silueta entre los k con ARI >= 0,9) sobre componentes y proporciones estandarizados, con las "
+                              "proporciones 'parte de' contraídas (beta-binomial empírica; sin denominador = media del grupo) "
+                              "y las tasas sin denominador en la media (DEC-061); PERSONAS PARECIDAS por dimensión en "
+                              "vecinos_dimension.parquet (listas 'actividad' y 'tema'); "
                               f"no se subdivide con menos de {micro_dimensiones.MIN_PERSONAS} personas"),
-        "perfil_conjunto": ("por dimensión, afinidades con sus patrones x intensidad/100 (o solo la intensidad si no tiene "
-                            f"patrones); t-SNE para visualizar y {perfil_conjunto.N_VECINOS} vecinos por distancia euclidiana; sin grupos"),
-        "patrones_globales": ("KMeans sobre el vector de perfil completo; k entre 4 y 8 = mayor silueta entre los k con "
-                              "estabilidad ARI >= 0,9; descritos por dimensiones con intensidad media alta/baja frente al ámbito"),
+        "perfil_conjunto": ("DEC-062: red NEMO con 5 vistas (actividad = afinidades con los patrones x intensidad; contenido "
+                            "= embedding medio de tema por bloque: académico, docencia, formación, trayectoria); cada par se "
+                            f"compara solo en las vistas que ambos tienen; {perfil_multivista.N_VECINOS} vecinos con las vistas "
+                            "en que lo son; t-SNE de la red para visualizar"),
+        "patrones_globales": ("DEC-062: PERFILES AMPLIOS = espectral sobre la red NEMO, k por eigengap entre 4 y 8, con su "
+                              "estabilidad; MICROARQUETIPOS = red NEMO recalculada dentro de cada perfil >= 60 personas, k 2-5 "
+                              "(estables por eigengap; si ninguno, el más estable), con su estabilidad; descritos por dimensiones "
+                              "(intensidad media) y temas distintivos frente al padre"),
         "ambitos_doble_tipo": "quien tiene contratos activos administrativo y docente entra en ambos ámbitos (DEC-054)",
         "semilla": cl.SEMILLA,
     }

@@ -16,10 +16,16 @@ dimensión se descubren dos facetas, cada una con su método:
 2. **Patrones de actividad** (cómo participa). Se agrupan las PERSONAS con los componentes de la
    dimensión (`dimensiones.DIMENSIONES`) y proporciones que no dependen del volumen
    (`PROPORCIONES`, p. ej. qué parte de sus proyectos dirige), estandarizados entre quienes tienen
-   evidencias: KMeans, k entre 3 y 6 por mayor silueta. La etiqueta sale del centroide (rasgos muy
-   altos, altos y bajos frente al resto de la dimensión). Sobre estas variables (pocas, continuas o
+   evidencias: KMeans, k entre 3 y 6 = mayor silueta entre los k estables (ARI >= 0,9, la misma
+   regla que los patrones globales; DEC-061). La etiqueta sale del centroide (rasgos muy altos,
+   altos y bajos frente al resto de la dimensión). Sobre estas variables (pocas, continuas o
    discretas) KMeans separa roles mejor que el clustering espectral, que dejaba un grupo "típico"
    con el 75 % de las personas.
+   Proporciones (DEC-061): las de tipo "parte de" (casos / total) se estiman con contracción
+   bayesiana empírica beta-binomial, (casos + a) / (total + a + b), con a y b ajustados por máxima
+   verosimilitud en el ámbito: sin denominador quedan en la media del grupo (neutral, no penaliza a
+   quien no tiene publicaciones) y con pocos casos se suavizan (1 de 1 no es 100 %). Las tasas
+   ("por" materia, tesis, curso, cargo) sin denominador toman la media de quienes sí lo tienen.
 
 Con menos de `MIN_PERSONAS` personas con evidencias (o `MIN_TEXTOS` textos) no se subdivide.
 """
@@ -38,6 +44,7 @@ from perfiles.embeddings import clave_texto
 from perfiles.interpretacion import terminos_distintivos
 
 MIN_PERSONAS = 40
+ARI_MINIMO_PATRON = 0.9   # mismo umbral de estabilidad que los patrones globales (perfil_conjunto)
 MIN_TEXTOS = 60
 FRACCION_TEMA = 0.005
 UMAP_DIM, UMAP_VECINOS = 5, 15
@@ -68,21 +75,61 @@ PROPORCIONES = {
 }
 
 
-def variables_patron(dimension: str, comp: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str]]:
+def es_tasa(texto: str) -> bool:
+    """Tasas ("por" materia, tesis, curso, cargo): no son una parte de un total, van en log."""
+    return texto.startswith(("Horas por", "Estudiantes por", "Funciones adicionales por"))
+
+
+def ajustar_beta_binomial(casos: np.ndarray, totales: np.ndarray) -> tuple[float, float]:
+    """(a, b) de una Beta(a, b) por máxima verosimilitud beta-binomial con quienes tienen total > 0.
+    Con menos de 5 personas o si no converge, método de momentos; en último caso Beta(1, 1)."""
+    from scipy.optimize import minimize
+    from scipy.special import betaln
+
+    m = totales > 0
+    k, n = casos[m].astype(float), totales[m].astype(float)
+    if len(k) >= 5:
+        def nll(t):
+            a, b = np.exp(t)
+            return -np.sum(betaln(k + a, n - k + b) - betaln(a, b))
+        r = minimize(nll, x0=np.log([1.0, 1.0]), method="Nelder-Mead")
+        a, b = np.exp(r.x)
+        if r.success and np.isfinite([a, b]).all() and 1e-3 < a < 1e4 and 1e-3 < b < 1e4:
+            return float(a), float(b)
+    if len(k) >= 2:
+        p = k / n
+        media, var = p.mean(), p.var()
+        if 0 < media < 1 and 0 < var < media * (1 - media):
+            total = media * (1 - media) / var - 1
+            return float(media * total), float((1 - media) * total)
+    return 1.0, 1.0
+
+
+def variables_patron(dimension: str, comp: pd.DataFrame, contraccion: dict | None = None) -> tuple[pd.DataFrame, dict[str, str]]:
     """Componentes de la dimensión + sus proporciones (conteos reales, no log). Devuelve las
-    variables y {variable: descripción}."""
+    variables y {variable: descripción}. Las proporciones "parte de" se contraen hacia la media del
+    grupo (beta-binomial, DEC-061) y las tasas sin denominador toman la media de quienes lo tienen;
+    `contraccion`, si se pasa, recibe {variable: {a, b, media_previa, sin_denominador}}."""
     cfg = DIMENSIONES[dimension]
     cols = [f"{dimension}__{c}" for c in cfg["componentes"]]
     x = comp[cols].copy()
     desc = {c: cfg["componentes"][c.split("__", 1)[1]][1] for c in cols}
     for num, den, texto in PROPORCIONES.get(dimension, []):
-        n_ = np.expm1(comp[f"{dimension}__{num}"])
-        d_ = np.expm1(comp[f"{dimension}__{den}"])
+        n_ = np.expm1(comp[f"{dimension}__{num}"]).round().to_numpy()
+        d_ = np.expm1(comp[f"{dimension}__{den}"]).round().to_numpy()
         col = f"{dimension}__prop_{num}_{den}"
-        x[col] = np.where(d_ > 0, n_ / np.where(d_ > 0, d_, 1), 0.0)
-        if texto.startswith(("Horas por", "Estudiantes por", "Funciones adicionales por")):
-            x[col] = np.log1p(x[col])
+        if es_tasa(texto):
+            tasa = np.where(d_ > 0, n_ / np.where(d_ > 0, d_, 1), np.nan)
+            media = float(np.nanmean(tasa)) if (d_ > 0).any() else 0.0
+            x[col] = np.log1p(np.where(d_ > 0, tasa, media))
             texto += " (log)"
+            info = {"media_sin_denominador": round(media, 4)}
+        else:
+            a, b = ajustar_beta_binomial(n_, d_)
+            x[col] = (n_ + a) / (d_ + a + b)
+            info = {"a": round(a, 4), "b": round(b, 4), "media_previa": round(a / (a + b), 4)}
+        if contraccion is not None:
+            contraccion[col.split("__", 1)[1]] = {**info, "sin_denominador": int((d_ == 0).sum())}
         desc[col] = texto
     return x, desc
 
@@ -139,15 +186,18 @@ def descubrir_temas(textos: np.ndarray, vectores: np.ndarray) -> dict | None:
             "proporcion_ruido": round(float(ruido.mean()), 3)}
 
 
-def temas_dimension(e: pd.DataFrame, pos_tema: dict, vec_tema: np.ndarray, vigentes: set) -> tuple[pd.DataFrame, dict, pd.DataFrame] | None:
-    """`e`: evidencias de UNA dimensión de las personas del ámbito (columna `tema`)."""
+def temas_dimension(e: pd.DataFrame, pos_tema: dict, vec_tema: np.ndarray, vigentes: set) -> dict | None:
+    """`e`: evidencias de UNA dimensión de las personas del ámbito (columna `tema`). Devuelve
+    {proporciones, resumen, mapa, evidencias (tema de cada evidencia y si se asignó por cercanía),
+    embedding (por persona: promedio de los de sus evidencias, normalizado)}."""
     e = e.dropna(subset=["tema"])
     textos = np.array(sorted(e["tema"].unique()))
     res = descubrir_temas(textos, vec_tema[[pos_tema[clave_texto(t)] for t in textos]])
     if res is None:
         return None
     tema_de = dict(zip(textos, res["etiquetas"]))
-    e = e.assign(tema_id=e["tema"].map(tema_de))
+    cercania_de = dict(zip(textos, res["por_cercania"]))
+    e = e.assign(tema_id=e["tema"].map(tema_de), por_cercania=e["tema"].map(cercania_de).astype(bool))
     prop = (e.groupby(["persona_id", "tema_id"]).size() / e.groupby("persona_id").size()).rename("proporcion").reset_index()
     prop["dominante"] = prop["proporcion"] == prop.groupby("persona_id")["proporcion"].transform("max")
     # mapa: embedding de tema de cada persona = promedio de los de sus evidencias de la dimensión
@@ -156,7 +206,8 @@ def temas_dimension(e: pd.DataFrame, pos_tema: dict, vec_tema: np.ndarray, vigen
     personas_mapa = np.array(sorted(e["persona_id"].unique()))
     emb_persona = np.vstack([vec_texto[[fila_texto[t] for t in g]].mean(axis=0)
                              for _, g in e.groupby("persona_id")["tema"]])
-    xy = mapa_tsne(emb_persona / np.linalg.norm(emb_persona, axis=1, keepdims=True))
+    emb_persona = emb_persona / np.linalg.norm(emb_persona, axis=1, keepdims=True)
+    xy = mapa_tsne(emb_persona)
     mapa = pd.DataFrame({"persona_id": personas_mapa, "x": xy[:, 0], "y": xy[:, 1]})
     fichas = []
     for j in range(res["k"]):
@@ -173,7 +224,9 @@ def temas_dimension(e: pd.DataFrame, pos_tema: dict, vec_tema: np.ndarray, vigen
         })
     resumen = {"n_textos": len(textos), "k": res["k"], "tamano_minimo": res["tamano_minimo"],
                "proporcion_asignada_por_cercania": res["proporcion_ruido"], "temas": fichas}
-    return prop, resumen, mapa
+    evid = e[["evidencia_id", "persona_id", "tema_id", "por_cercania"]].reset_index(drop=True)
+    return {"proporciones": prop, "resumen": resumen, "mapa": mapa, "evidencias": evid,
+            "embedding": pd.DataFrame({"persona_id": personas_mapa, "vector": list(emb_persona.astype(np.float32))})}
 
 
 # ------------------------------------------------------------------ patrones de actividad
@@ -195,16 +248,22 @@ def _kmeans(z: np.ndarray, k: int, semilla: int = SEMILLA):
 
 
 def _seleccionar_k_patron(z: np.ndarray) -> tuple[int, dict]:
-    """k entre K_MIN_PATRON y K_MAX_PATRON con mayor silueta, sin grupos de menos del 3 % (>= 10)."""
+    """k entre K_MIN_PATRON y K_MAX_PATRON sin grupos de menos del 3 % (>= 10): mayor silueta entre
+    los k ESTABLES (ARI por submuestreo >= ARI_MINIMO_PATRON); si ninguno lo es, el más estable.
+    Misma regla que los patrones globales (DEC-057); con solo la silueta, Reconocimientos elegía
+    un k inestable (ARI 0,75 en docentes, DEC-061)."""
     from sklearn.metrics import silhouette_score
     minimo = max(10, int(0.03 * len(z)))
     tabla = []
     for k in range(K_MIN_PATRON, min(K_MAX_PATRON, len(z) // minimo) + 1):
         lab = _kmeans(z, k).labels_
-        tabla.append({"k": k, "silueta": round(float(silhouette_score(z, lab)), 4), "tamano_minimo": int(np.bincount(lab).min())})
+        tabla.append({"k": k, "silueta": round(float(silhouette_score(z, lab)), 4), "tamano_minimo": int(np.bincount(lab).min()),
+                      "estabilidad_ari": round(_estabilidad_kmeans(z, lab, k), 3)})
     validos = [t for t in tabla if t["tamano_minimo"] >= minimo] or tabla
-    k = max(validos, key=lambda t: t["silueta"])["k"]
-    return k, {"k_elegido": k, "criterio": f"mayor silueta (KMeans) con grupos de al menos {minimo} personas", "tabla": tabla}
+    estables = [t for t in validos if t["estabilidad_ari"] >= ARI_MINIMO_PATRON]
+    k = (max(estables, key=lambda t: t["silueta"]) if estables else max(validos, key=lambda t: t["estabilidad_ari"]))["k"]
+    return k, {"k_elegido": k, "criterio": f"mayor silueta (KMeans) entre los k con estabilidad ARI >= {ARI_MINIMO_PATRON} "
+                                           f"y grupos de al menos {minimo} personas", "tabla": tabla}
 
 
 def _estabilidad_kmeans(z: np.ndarray, lab: np.ndarray, k: int) -> float:
@@ -217,15 +276,21 @@ def _estabilidad_kmeans(z: np.ndarray, lab: np.ndarray, k: int) -> float:
     return float(np.mean(aris))
 
 
-def patrones_dimension(dimension: str, ids: np.ndarray, comp_todo: pd.DataFrame, vigente: np.ndarray) -> tuple[pd.DataFrame, dict] | None:
+def patrones_dimension(dimension: str, ids: np.ndarray, comp_todo: pd.DataFrame, vigente: np.ndarray,
+                       espacio: dict | None = None) -> tuple[pd.DataFrame, dict] | None:
     """KMeans sobre los componentes y proporciones estandarizados. Afinidad derivada con cada patrón
-    = inverso del cuadrado de la distancia al centroide, normalizado (no es probabilidad)."""
-    comp, descripciones = variables_patron(dimension, comp_todo)
+    = inverso del cuadrado de la distancia al centroide, normalizado (no es probabilidad).
+    `espacio`, si se pasa, recibe la matriz estandarizada ("z", alineada con `ids`) para las
+    personas parecidas por dimensión."""
+    contraccion: dict = {}
+    comp, descripciones = variables_patron(dimension, comp_todo, contraccion)
     desv = comp.std()
     z = ((comp - comp.mean()) / desv.where(desv > 0, 1)).loc[:, desv > 0]
     if len(ids) < MIN_PERSONAS or z.shape[1] == 0:
         return None
     zz = z.to_numpy()
+    if espacio is not None:
+        espacio["z"] = zz
     k, seleccion = _seleccionar_k_patron(zz)
     modelo = _kmeans(zz, k)
     # numeración por tamaño: Patrón 1 = el más grande
@@ -261,6 +326,9 @@ def patrones_dimension(dimension: str, ids: np.ndarray, comp_todo: pd.DataFrame,
         "mixto": segunda >= cl.UMBRAL_MIXTO * memb[fila, orden[:, 0]], "es_representante": np.isin(fila, reps),
         "afinidades": [json.dumps([round(float(v), 4) for v in fila_m]) for fila_m in memb],
     })
+    # nombre corto que se cumple para TODAS las personas del patrón (DEC-063)
+    from perfiles.nombres_patrones import nombrar
+    nombres = nombrar(dimension, comp_todo, list(DIMENSIONES[dimension]["componentes"]), lab)
     fichas = []
     for c in range(k):
         m = lab == c
@@ -271,41 +339,71 @@ def patrones_dimension(dimension: str, ids: np.ndarray, comp_todo: pd.DataFrame,
             componentes.append({"componente": col.split("__", 1)[1], "descripcion": desc, "z": round(float(centros[c, j]), 2),
                                 "media_grupo": round(float(np.expm1(media) if "(log" in desc else media), 2)})
         componentes.sort(key=lambda x: -x["z"])
-        fichas.append({"id": c, "etiqueta": _etiqueta_patron(componentes), "tamano": int(m.sum()),
+        fichas.append({"id": c, "nombre": nombres[c]["nombre"], "nombre_distingue": nombres[c]["distingue"],
+                       "etiqueta": _etiqueta_patron(componentes), "tamano": int(m.sum()),
                        "tamano_vigentes": int(vigente[m].sum()), "proporcion": round(float(m.mean()), 3),
                        "representante_id": int(ids[reps[c]]) if reps[c] >= 0 else None, "componentes": componentes})
     xy = mapa_tsne(zz)
     personas["x"], personas["y"] = xy[:, 0], xy[:, 1]
+    estab = next(t["estabilidad_ari"] for t in seleccion["tabla"] if t["k"] == k)
     return personas, {"k": k, "metodo": "KMeans sobre variables estandarizadas", "seleccion_k": seleccion,
-                      "estabilidad_ari": round(_estabilidad_kmeans(zz, lab, k), 3),
-                      "perfiles_mixtos": int(personas["mixto"].sum()), "patrones": fichas}
+                      "estabilidad_ari": estab, "perfiles_mixtos": int(personas["mixto"].sum()),
+                      "contraccion_proporciones": contraccion, "patrones": fichas}
 
 
 # ------------------------------------------------------------------ ámbito
 def construir_ambito(ids_ambito: np.ndarray, vigente: np.ndarray, comp_crudo: pd.DataFrame, n_ev: pd.DataFrame,
-                     ev_dim: pd.DataFrame, pos_tema: dict, vec_tema: np.ndarray) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
-    """(temas por persona, patrón por persona, mapas t-SNE, resumen por dimensión) de un ámbito.
-    Mapas: `patrones` sobre las variables de los patrones; `temas` sobre el promedio de los
-    embeddings de tema de las evidencias de la persona. Solo para visualizar."""
+                     ev_dim: pd.DataFrame, pos_tema: dict, vec_tema: np.ndarray, ultimas: pd.DataFrame | None = None) -> dict:
+    """Microarquetipos por dimensión de un ámbito. Devuelve {temas (proporción por persona),
+    patrones (patrón por persona), mapas (t-SNE, solo para visualizar: `patrones` sobre las
+    variables de los patrones; `temas` sobre el promedio de los embeddings de tema), resumen (por
+    dimensión), temas_evidencia (tema de cada evidencia y si se asignó por cercanía), vecinos
+    (personas parecidas por dimensión, ver `vecinos_dimension`)}. `ultimas`: salida de
+    `dimensiones.ultima_evidencia` (desempate de los vecinos)."""
+    from perfiles import vecinos_dimension as vd
+
     vig = dict(zip(ids_ambito, vigente))
     vigentes = {p for p, v in vig.items() if v}
     en_ambito = ev_dim[ev_dim["persona_id"].isin(vig)]
-    temas, patrones, mapas, resumen = [], [], [], {}
+    ult = {} if ultimas is None else {d: dict(zip(g["persona_id"], g["ultima_evidencia"])) for d, g in ultimas.groupby("dimension")}
+    temas, patrones, mapas, temas_ev, vecinos, resumen = [], [], [], [], [], {}
     for d, cfg in DIMENSIONES.items():
         ids = np.array([p for p in ids_ambito if n_ev.at[p, d] > 0])
         r = {"nombre": cfg["nombre"], "n_personas": int(len(ids))}
-        t = temas_dimension(en_ambito[en_ambito["dimension"] == d], pos_tema, vec_tema, vigentes) if len(ids) >= MIN_PERSONAS else None
+        e_d = en_ambito[en_ambito["dimension"] == d]
+        t = temas_dimension(e_d, pos_tema, vec_tema, vigentes) if len(ids) >= MIN_PERSONAS else None
         if t:
-            temas.append(t[0].assign(dimension=d))
-            mapas.append(t[2].assign(dimension=d, mapa="temas"))
-        r["temas"] = t[1] if t else None
-        p = patrones_dimension(d, ids, comp_crudo.loc[ids], np.array([bool(vig[x]) for x in ids])) if len(ids) else None
+            temas.append(t["proporciones"].assign(dimension=d))
+            mapas.append(t["mapa"].assign(dimension=d, mapa="temas"))
+            temas_ev.append(t["evidencias"].assign(dimension=d))
+        r["temas"] = t["resumen"] if t else None
+        espacio: dict = {}
+        p = patrones_dimension(d, ids, comp_crudo.loc[ids], np.array([bool(vig[x]) for x in ids]), espacio) if len(ids) else None
         if p:
             patrones.append(p[0].drop(columns=["x", "y"]).assign(dimension=d))
             mapas.append(p[0][["persona_id", "x", "y"]].assign(dimension=d, mapa="patrones"))
         r["patrones"] = p[1] if p else None
         if not t and not p:
             r["nota"] = f"menos de {MIN_PERSONAS} personas con evidencias: no se subdivide"
+        elif len(ids) >= MIN_PERSONAS:
+            con_tema = e_d.dropna(subset=["tema"])
+            textos = {q: list(dict.fromkeys(g)) for q, g in con_tema.groupby("persona_id")["tema"]}
+            vec_texto = {x: vec_tema[pos_tema[clave_texto(x)]] for x in con_tema["tema"].unique() if clave_texto(x) in pos_tema}
+            textos = {q: [x for x in xs if x in vec_texto] for q, xs in textos.items()}
+            idiomas = None
+            if d == "idiomas":
+                idiomas = {}
+                for q, a in zip(e_d["persona_id"], e_d["atributos"]):
+                    nombre = json.loads(a).get("idioma")
+                    if nombre and nombre != "ESPAÑOL":
+                        idiomas[q] = idiomas.get(q, frozenset()) | {nombre}
+            emb = dict(zip(t["embedding"]["persona_id"], t["embedding"]["vector"])) if t else {}
+            prop = {}
+            if t:
+                for q, tema, v in zip(t["proporciones"]["persona_id"], t["proporciones"]["tema_id"], t["proporciones"]["proporcion"]):
+                    prop.setdefault(q, {})[int(tema)] = float(v)
+            vecinos.append(vd.construir_dimension(d, ids, espacio.get("z"), emb, ult.get(d, {}), prop, textos, vec_texto, idiomas))
         resumen[d] = r
-    junta = lambda xs: pd.concat(xs, ignore_index=True) if xs else pd.DataFrame()  # noqa: E731
-    return junta(temas), junta(patrones), junta(mapas), resumen
+    junta = lambda xs: pd.concat([x for x in xs if len(x)], ignore_index=True) if any(len(x) for x in xs) else pd.DataFrame()  # noqa: E731
+    return {"temas": junta(temas), "patrones": junta(patrones), "mapas": junta(mapas), "resumen": resumen,
+            "temas_evidencia": junta(temas_ev), "vecinos": junta(vecinos)}

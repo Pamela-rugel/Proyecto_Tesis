@@ -59,7 +59,13 @@ function ubicar(tramos: TramoTrayectoria[], hoy: Date) {
 export default function TimelineTrayectoria({ personaId }: { personaId: number }) {
   const { data, isLoading } = useQuery({ queryKey: ["trayectoria", personaId], queryFn: () => getTrayectoria(personaId) });
   if (isLoading) return <p className="text-xs text-slate-500">Cargando trayectoria…</p>;
-  if (!data || data.tramos.length === 0) return <p className="text-xs text-slate-400">No hay trayectoria laboral registrada.</p>;
+  if (!data || data.tramos.length === 0)
+    return (
+      <p className="text-xs text-slate-400">
+        No hay trayectoria laboral con fechas registrada
+        {data?.sin_inicio ? ` (${data.sin_inicio} periodo${data.sin_inicio === 1 ? "" : "s"} sin fecha de inicio no se pueden ubicar en el tiempo)` : ""}.
+      </p>
+    );
 
   const hoy = new Date();
   const { preparados, ticks, filas } = ubicar(data.tramos, hoy);
@@ -143,8 +149,9 @@ export default function TimelineTrayectoria({ personaId }: { personaId: number }
         useResizeHandler
       />
       <p className="text-[11px] text-slate-400">
-        Cada barra es un periodo; el mismo cargo conserva su color. Pasa el cursor para ver el detalle.
-        {sinFin.length > 0 && " Las barras rayadas no tienen fecha de fin registrada y la persona ya no está vigente."}
+        Cada barra es un periodo; el mismo cargo conserva su color.
+        {sinFin.length > 0 && " Rayadas: sin fecha de fin registrada (su largo no indica duración)."}
+        {data.sin_inicio > 0 && ` ${data.sin_inicio} periodo${data.sin_inicio === 1 ? "" : "s"} sin fecha de inicio no se muestra${data.sin_inicio === 1 ? "" : "n"}.`}
       </p>
     </div>
   );

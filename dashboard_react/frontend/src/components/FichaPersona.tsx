@@ -1,39 +1,47 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { de } from "../lib/texto";
-import { getPersona, type Ambito } from "../api/client";
-import { NOMBRE_TIPO } from "../lib/colores";
+import { NOMBRE_AMBITO } from "../lib/texto";
+import { getPersona, type Ambito, type NavegacionFicha, type OrigenFicha } from "../api/client";
 import IntensidadDimensiones from "./IntensidadDimensiones";
 import TimelineTrayectoria from "./TimelineTrayectoria";
+import PerfilCompleto from "./PerfilCompleto";
+import DesgloseEvidencias from "./DesgloseEvidencias";
 
 interface Props {
   ambito: Ambito;
   personaId: number;
+  /** desde dónde se abrió: decide la pestaña inicial (dimensión → Dimensiones; perfil → Perfil completo; otra → Trayectoria) */
+  origen: OrigenFicha;
+  /** dimensión que se despliega al abrir la pestaña Dimensiones */
+  dimensionInicial?: string;
   /** volver a la vista anterior del panel */
   onVolver: () => void;
   textoVolver: string;
-  /** abrir la ficha de otra persona (personas parecidas) */
-  onPersona?: (id: number) => void;
+  /** enlaces hacia otras personas, patrones globales y dimensiones (los que falten no se enlazan) */
+  nav?: NavegacionFicha;
 }
 
-const NOMBRE_AMBITO: Record<Ambito, string> = {
-  todos: "todo el personal",
-  administrativos: "el personal administrativo",
-  docentes: "el personal docente",
-};
+type Pestana = "trayectoria" | "dimensiones" | "perfil" | "evidencias";
 
-const Seccion = ({ titulo, children }: { titulo: string; children: React.ReactNode }) => (
-  <div className="px-5 py-4 border-b">
-    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">{titulo}</h4>
-    {children}
-  </div>
-);
+const PESTANAS: { id: Pestana; texto: string }[] = [
+  { id: "trayectoria", texto: "Trayectoria" },
+  { id: "dimensiones", texto: "Dimensiones" },
+  { id: "perfil", texto: "Perfil completo" },
+  { id: "evidencias", texto: "Evidencias" },
+];
 
-// Ficha de la persona: intensidad, patrón y temas en cada dimensión, trayectoria y evidencias.
-export default function FichaPersona({ ambito, personaId, onVolver, textoVolver, onPersona }: Props) {
+const INICIAL: Record<OrigenFicha, Pestana> = { dimension: "dimensiones", perfil: "perfil", otra: "trayectoria" };
+
+// Ficha de la persona en cuatro pestañas. La pestaña inicial sale del contexto de origen; quien
+// la usa le da una `key` por persona y origen, así que abrir otra persona vuelve a calcularla y,
+// mientras se navega dentro de la misma ficha, la pestaña elegida se conserva.
+export default function FichaPersona({ ambito, personaId, origen, dimensionInicial, onVolver, textoVolver, nav = {} }: Props) {
   const { data, isLoading, isError } = useQuery({ queryKey: ["persona", ambito, personaId], queryFn: () => getPersona(personaId, ambito) });
+  const [pestana, setPestana] = useState<Pestana>(INICIAL[origen]);
+  const [dimensionEvidencias, setDimensionEvidencias] = useState<string | null>(null);
 
   const volver = (
-    <button onClick={onVolver} className="text-xs text-espol-blue hover:underline px-5 pt-4 block text-left">
+    <button onClick={onVolver} className="text-[10px] text-espol-blue hover:underline px-5 pt-2 block text-left">
       ← {textoVolver}
     </button>
   );
@@ -41,136 +49,73 @@ export default function FichaPersona({ ambito, personaId, onVolver, textoVolver,
   if (isError || !data)
     return <div>{volver}<p className="p-5 text-sm text-red-600">La persona seleccionada no está en {NOMBRE_AMBITO[ambito]}.</p></div>;
 
+  // cabecera y pestañas fijas; solo el contenido de la pestaña hace scroll (el panel que la contiene
+  // tiene alto fijo)
   return (
-    <section>
-      {volver}
-      <header className="px-5 pt-2 pb-4 border-b">
-        <h3 className="text-lg font-semibold leading-tight text-espol-navy">{data.nombre}</h3>
+    <section className="h-full flex flex-col">
+      <div className="shrink-0">{volver}</div>
+      <header className="shrink-0 px-5 pt-0.5 pb-1.5">
+        <h3 className="text-sm font-semibold leading-tight text-espol-navy">{data.nombre}</h3>
         {/* cargo_actual y unidad_actual son listas " / " alineadas, ya ordenadas por jerarquía de
             contrato (nombramiento, contrato, servicios); todas se muestran con el mismo peso */}
         {(() => {
           const cargos = (data.estado.cargo_actual ?? "").split(" / ").filter(Boolean);
           const unidades = (data.estado.unidad_actual ?? "").split(" / ");
-          if (!cargos.length) return <p className="text-sm text-slate-700 mt-1">Sin cargo actual</p>;
+          if (!cargos.length) return <p className="text-[11px] text-slate-700">Sin cargo actual</p>;
           return (
-            <ul className="mt-1 space-y-0.5">
+            <ul className="mt-0.5 space-y-0">
               {cargos.map((c, i) => (
-                <li key={i} className="text-sm text-slate-700">
+                <li key={i} className="text-[11px] leading-tight text-slate-800 font-medium">
                   {c}
-                  {unidades[i] && <span className="text-slate-500"> · {unidades[i]}</span>}
+                  {unidades[i] && <span className="text-slate-500 font-normal"> · {unidades[i]}</span>}
                 </li>
               ))}
             </ul>
           );
         })()}
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-[10px] text-slate-500">
           {data.estado.tipo_empleado ?? "tipo desconocido"} · {data.estado.vigente ? "vigente" : "no vigente"}
         </p>
       </header>
 
-      {data.patron_global && (() => {
-        const g = data.patron_global;
-        const similitud = (sim: number | null, esRep: boolean, rep: string | null, repId: number | null) =>
-          esRep ? (
-            <strong>Es la persona más representativa.</strong>
-          ) : sim !== null && rep ? (
-            <>
-              Se parece un {Math.round(sim * 100)} % a la persona más representativa (
-              <button className="text-espol-blue hover:underline disabled:no-underline disabled:text-slate-600" disabled={!onPersona}
-                onClick={() => repId !== null && onPersona?.(repId)}>
-                {rep}
-              </button>
-              ). 100 % = ella misma; 0 % = la más distinta del grupo.
-            </>
-          ) : (
-            "El grupo no tiene personas vigentes que lo representen."
-          );
-        return (
-          <Seccion titulo="Patrón global (todas las dimensiones)">
-            <p className="text-sm text-slate-800">Patrón global {g.patron + 1}</p>
-            <p className="text-xs text-slate-600">{g.etiqueta}</p>
-            <p className="text-[11px] text-slate-500 mt-1">
-              {g.tamano} personas {de(NOMBRE_AMBITO[ambito])} · {similitud(g.similitud_representante, g.es_representante, g.representante_nombre, g.representante_id)}
-            </p>
-            {g.mixto && (
-              <p className="text-[11px] text-amber-700 mt-1">
-                Está entre dos patrones: también se parece mucho al Patrón global {g.segundo + 1}.
-              </p>
-            )}
-            {g.micro && (
-              <div className="mt-2 pl-3 border-l">
-                <p className="text-xs text-slate-800">Microarquetipo {g.micro.codigo}</p>
-                <p className="text-[11px] text-slate-600">{g.micro.etiqueta}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {g.micro.tamano} personas ·{" "}
-                  {similitud(g.micro.similitud_representante, g.micro.es_representante, g.micro.representante_nombre, g.micro.representante_id)}
-                </p>
-                {g.micro.mixto && <p className="text-[11px] text-amber-700">Está entre dos microarquetipos.</p>}
-              </div>
-            )}
-          </Seccion>
-        );
-      })()}
+      <div role="tablist" aria-label="Secciones de la ficha" className="shrink-0 bg-white border-y px-3 flex gap-1">
+        {PESTANAS.map((p) => (
+          <button
+            key={p.id}
+            role="tab"
+            aria-selected={pestana === p.id}
+            onClick={() => {
+              setPestana(p.id);
+              if (p.id === "evidencias") setDimensionEvidencias(null);
+            }}
+            className={`px-2.5 py-2 text-xs whitespace-nowrap border-b-2 -mb-px ${
+              pestana === p.id ? "border-espol-blue text-espol-navy font-semibold" : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            {p.texto}
+          </button>
+        ))}
+      </div>
 
-      <Seccion titulo="Intensidad por dimensión">
-        <IntensidadDimensiones ambito={ambito} dimensiones={data.dimensiones} />
-      </Seccion>
-
-      {data.parecidos.length > 0 && (
-        <Seccion titulo="Personas con perfil parecido">
-          <p className="text-[11px] text-slate-500 mb-2">
-            Las más cercanas considerando todas las dimensiones a la vez (cuánto tiene en cada una y cómo participa). Se
-            indica en qué coinciden: dimensiones donde ambas tienen intensidad de 50 o más, y si siguen el mismo patrón.
-          </p>
-          <ol className="space-y-2">
-            {data.parecidos.map((x) => (
-              <li key={x.persona_id} className="text-xs">
-                <button
-                  className="text-espol-blue hover:underline font-medium text-left disabled:no-underline disabled:text-slate-800"
-                  disabled={!onPersona}
-                  onClick={() => onPersona?.(x.persona_id)}
-                >
-                  {x.rango}. {x.nombre}
-                </button>
-                <span className="text-slate-500"> · {x.cargo_actual ?? "Sin cargo actual"}</span>
-                {x.comparte.length > 0 && (
-                  <p className="text-slate-600 mt-0.5">
-                    Ambas:{" "}
-                    {x.comparte.map((c, i) => (
-                      <span key={c.dimension}>
-                        {i > 0 && ", "}
-                        {c.nombre}
-                        {c.mismo_patron && c.patron !== null && <span className="text-slate-500"> (Patrón {c.patron + 1})</span>}
-                      </span>
-                    ))}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ol>
-        </Seccion>
-      )}
-
-      <Seccion titulo="Trayectoria laboral">
-        <TimelineTrayectoria personaId={data.persona_id} />
-      </Seccion>
-
-      <Seccion titulo="Evidencias">
-        <div className="space-y-2">
-          {data.evidencias.map((g) => (
-            <details key={g.tipo_id} className="text-xs">
-              <summary className="cursor-pointer">
-                {NOMBRE_TIPO[g.tipo_id] ?? g.tipo_id} ({g.n})
-              </summary>
-              <ul className="mt-1 ml-3 list-disc space-y-0.5 text-slate-600">
-                {g.textos.map((t, i) => (
-                  <li key={i}>{t}</li>
-                ))}
-              </ul>
-            </details>
-          ))}
-        </div>
-      </Seccion>
+      <div role="tabpanel" className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+        {pestana === "trayectoria" && <TimelineTrayectoria personaId={data.persona_id} />}
+        {pestana === "dimensiones" && (
+          <IntensidadDimensiones
+            ambito={ambito}
+            dimensiones={data.dimensiones}
+            dimensionInicial={dimensionInicial}
+            nav={nav}
+            onVerEvidencias={(d) => {
+              setDimensionEvidencias(d);
+              setPestana("evidencias");
+            }}
+          />
+        )}
+        {pestana === "perfil" && (
+          <PerfilCompleto ambito={ambito} persona={data} nav={nav} />
+        )}
+        {pestana === "evidencias" && <DesgloseEvidencias personaId={data.persona_id} dimensionInicial={dimensionEvidencias} />}
+      </div>
     </section>
   );
 }

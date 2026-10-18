@@ -2,8 +2,7 @@
 %\thispagestyle{empty}
 \label{chapter:metodologia}
 
-El siguiente capítulo describe los pasos que atravesó el proyecto para convertir datos institucionales dispersos en información útil para la creación de un sistema de exploración de perfiles.
-La metodología sufrió cambios respectos a la propuesta inicial. Desde las técnicas para agrupar al personal hasta la forma en que se trató a los datos no estructurados con el fin de obtener una perspectiva 
+El capítulo actual describe los pasos que atravesó el proyecto para convertir datos institucionales dispersos en información útil para la creación de un sistema de exploración de perfiles. En la metodología se incorporaron cambios respectos a la propuesta inicial. Desde las técnicas para agrupar al personal hasta la forma en que se trató a los datos no estructurados con el fin de obtener una perspectiva 
 no estructurada de la información. A continuación , se presenta el proceso por el que pasaron los datos, la limpieza, transformación y el uso de técnicas de aprendizaje automático para obtener un perfil del personal que pueda ser consultado y explorado por los usuarios. 
 
 \section{Enfoque del trabajo}
@@ -48,13 +47,12 @@ La Figura \ref{fig:flujo_general} representa el flujo, la información con la qu
     \label{fig:flujo_general}
 \end{figure}
 
-Un aspecto que se cuidó durante todo el proyecto fue dejar constancia de cada decisión tomada. Mucha información representaba inconsistencia en los datos extraídas y casos particulares (como personal jubilado o fallecido) que requerían reglas de negocio para ser tratados. Cada regla fue documentada. La justificación de las decisiones fue validada con los involucrados en el proyecto (Director de Talento Humano y miembro del comité docente).
+Durante todo el proyecto se trabajó cuidadosamente para dejar constancia de cada decisión tomada con los datos, ya que presentaban incosistencias y casos particulares (como personal jubilado o fallecido) que requerían reglas de negocio para ser tratados. Las reglas fueron documentadas y la justificación de las decisiones fueron validadas con personal involucrado en el proyecto (Director de Talento Humano y miembro del comité docente).
 \section{Fuentes de datos}
 
 \subsection{Datos institucionales}
 
-La información se obtuvo de las bases de datos de los sistemas de Talento Humano, postgrados, académico y de investigación de ESPOL. La Tabla \ref{tab:fuentes} resume qué aporta cada uno. La información se exportó
-en formato csv para este prototipo y su limpieza, procesamiento y unión se realizó con herramientas de programación en Python. La información de cada extracto se mantiene en archivos separados, de manera que se pueda reprocesar cada fuente de dato si es necesario.
+La información se obtuvo de las bases de datos de los sistemas de Talento Humano, postgrados, académico y de investigación de ESPOL. La Tabla \ref{tab:fuentes} resume qué aporta cada uno. La información se exportó en formato csv para este prototipo y su limpieza, procesamiento y unión se realizó con herramientas de programación en Python. La información de cada extracto se mantiene en archivos separados, de manera que se pueda reprocesar cada fuente de dato si es necesario.
 
 \begin{table}[!htbp]
     \centering
@@ -86,11 +84,9 @@ en formato csv para este prototipo y su limpieza, procesamiento y unión se real
 
 \subsection{Población de estudio}
 
-La población se define como el personal docente, administrativo y auxiliar que estuvo contratado o vigente en algún momento de los últimos cinco años. Esa ventana delimita a quiénes se estudia, pero no recorta su historia: si una persona tiene registros anteriores, como materias dictadas en 2005 o un cargo de 2010, se conservan. De lo contrario, quien lleva veinte años en la institución aparecería con un perfil igual de corto como un recién contratado.
+La población se define como el personal docente, administrativo y auxiliar que estuvo contratado o vigente en algún momento de los últimos cinco años. Esa ventana delimita a quiénes se estudia, pero no recorta su historia: si una persona tiene registros anteriores, como materias dictadas en 2005 o un cargo de 2010, se conservan. De lo contrario, quien lleva veinte años en la institución aparecería con un perfil igual de corto como un recién contratado. Además, se excluyó a personal que no tiene ningún registro de trayectoria y a también a quienes aparecen en defunción. 
 
-Para la población final se filtró a los personas que no tienen ningún registro de trayectoria y a quienes aparecen en defunción. 
-
-La Tabla \ref{tab:poblacion} muestra cómo se llegó a la población final. Las personas identificadas en defunción se excluyen al definir la población.
+La Tabla \ref{tab:poblacion} muestra cómo se llegó a la población final. 
 
 \begin{table}[!htbp]
     \centering
@@ -99,7 +95,7 @@ La Tabla \ref{tab:poblacion} muestra cómo se llegó a la población final. Las 
     \small
     \begin{tabular}{p{10cm} r}
         \toprule
-        \textbf{Paso} & \textbf{Personas} \\
+        \textbf{Criterio} & \textbf{N.º de personas} \\
         \midrule
         Contratadas o vigentes en los últimos cinco años & 3\,195 \\
         Identificadas en defunción (excluidas) & $-24$ \\
@@ -114,9 +110,9 @@ La población final se puede definir como: todo el personal (3\,164 personas), e
 
 \subsection{Tratamiento de la información personal}
 
-Los extractos contienen datos personales, por lo que su manejo se ajustó a la Ley Orgánica de Protección de Datos Personales \parencite{LOPDP2021} y a criterios de minimización. Todo el procesamiento se realiza en equipos locales. Los modelos de embeddings y de reordenamiento se ejecutan en esos equipos, sin enviar textos institucionales a servicios externos. El único servicio externo es el modelo de lenguaje que interpreta las consultas del buscador, y a ese modelo solo llega el texto que escribe el usuario junto con un catálogo de tipos de evidencia ilustrado con ejemplos inventados; nunca recibe información de una persona.
+Debido a que los extractos contienen datos personales, se consideró la Ley Orgánica de Protección de Datos Personales (LOPDP) y se implementaron medidas para garantizar la privacidad y seguridad de la información del personal. El procesamiento se efectúa dentro de un servidor local de la institución, sin tranferencia de datos a plataformas externas. La única herramienta externa utilizada es un modelo de lenguaje para interpretar las consultas del buscador, pero este modelo solo recibe únicamente el texto ingresado por el usuario y un catálogo de tipos de evidencia con ejemplos ficticios, sin acceso a información personal.
 
-El sexo y la edad no forman parte de ningún modelo ni se ofrecen como filtro. Los identificadores internos no se muestran en la interfaz ni en los enlaces. Los nombres de las personas se leen del extracto original en el momento de la consulta y no se copian a los resultados del modelo.
+Por otra parte, el sexo y la edad no son consideradas variables de entrada en los modelos ni se ofrecen como criterios de búsqueda dentor del dashboard. Los identifcadores internos no son mostrados en la interfaz ni en los enlaces de consulta de información. 
 
 \section{Preprocesamiento y reglas de negocio}
 
@@ -126,27 +122,19 @@ Los problemas encontrados fueron muy variados y, en su mayoría, propios de sist
 
 En la experiencia externa se eliminaron registros sin cargo, con textos de relleno, sin fecha de inicio, anteriores al nacimiento de la persona o duplicados, y se fusionaron los registros del mismo cargo e institución que se solapaban. En la carga académica se consolidaron tres extractos que repetían los mismos cursos, se definió que antes de 2015 se toman todos los registros (el sistema anterior solo guardaba cursos aprobados) y se asignó el nombre de la facultad actual a unidades que ya no existen; por ejemplo, los antiguos institutos de Ciencias Matemáticas, Física y Química pasan a FCNM. Algunos textos traen caracteres dañados por problemas de codificación del sistema de origen. Se comprobó que no los introduce el procesamiento y que solo se pueden recuperar con una nueva extracción, así que se mantienen tal como llegan.
 
-\subsection{Reconstrucción de la trayectoria laboral}
+\subsection{Construcción del historial laboral}
 
-El historial laboral registra contratos, no cargos. Una misma persona puede acumular decenas de contratos consecutivos para el mismo puesto, contratos cortos superpuestos y actos administrativos de pocos días. Para obtener una trayectoria legible se construyeron \textit{tramos}: periodos continuos en un mismo cargo y unidad. Se toleran recesos de hasta 90 días entre contratos de un cargo estructural y de hasta 60 días entre contratos puntuales, este último para absorber las vacaciones entre periodos académicos.
+En la construcción del historial laboral y la determinación del estado de vigencia se requirieron depurar los registros de contratos para representar de forma más fiel a trayectoria de cada persona en ESPOL. Como el historial contiene múltiples contratos para un mismo cargo, períodos superpuestos y movimientos administrativos temporales se construyeron tramos de continuidad para según el cargo y la unidad, tolerando recesos entre periodos. Los cargos se clasificaron en categorías según el texto del nombre del cargo y el tipo (docente o administrtivo). Además, se unificaron los cargos anteriores a la reforma de la LOES con sus equivalentes actuales y se trataron aparte contratos puntuales, roles simultáneos y subrogaciones dentro de la institución para evitar cambios de cargo inexistentes.
 
-Los cargos se clasificaron con una taxonomía basada en reglas de texto sobre el nombre del cargo, con 11 categorías para el personal docente y 13 para el administrativo. Las reglas de cada rama se evalúan por separado para evitar confusiones por subcadenas; ``DIRECTOR'', por ejemplo, contiene la palabra ``RECTOR''. Los rótulos anteriores a la reforma de la LOES, como ``Profesor Principal'' o ``Profesor Agregado'', se unificaron con sus equivalentes actuales después de verificar que entre el 95\,\% y el 100\,\% de quienes los tuvieron aparecen más tarde con el cargo de titular correspondiente.
-
-Hubo que resolver además tres situaciones que generaban cambios de cargo inexistentes. La primera fueron los contratos puntuales de servicios profesionales, tribunales o actividades académicas específicas, que conviven con el cargo estable de la persona. Al incluirlos en la secuencia de cargos se obtenían 11\,854 transiciones, con una persona que llegaba a 103; al tratarlos como eventos aparte, las transiciones bajaron a 4\,468. La segunda fueron los roles simultáneos, como el de un profesor titular que fue decano durante un periodo sin dejar de ser profesor. En 510 personas había tramos de distinta categoría superpuestos; se decidió que la línea principal la ocupe el tramo de mayor duración y que el otro se muestre como rol adicional. La tercera fueron las subrogaciones, que nunca se consideran un cambio de cargo, sin importar cuánto duren.
-
-\subsection{Determinación de la vigencia}
-
-Saber si una persona trabaja hoy en ESPOL resultó más difícil de lo esperado y fue la regla que más veces se corrigió. La primera versión consideraba vigente un contrato sin fecha de fin, pero el área de Talento Humano suele registrar una fecha planificada incluso en contratos activos, y algunos contratos activos tenían esa fecha ya vencida por retrasos en la renovación. Luego se tomó el estado del contrato como criterio principal, pero los movimientos administrativos cortos, que se registran en la misma tabla con una mediana de tres días de duración, cerraban contratos que en realidad seguían activos. También ocurría que encargos de uno o dos días del mismo cargo cerraban nombramientos abiertos, lo que dejaba fuera, entre otros, a la máxima autoridad de la institución.
-
-La regla vigente reúne lo aprendido en esas correcciones:
-
+Para determinar la vigencia laboral, se establecieron las siguientes reglas:
 \begin{itemize}
-    \item La vinculación se calcula solo con los registros de tipo vinculación; los movimientos cortos no abren ni cierran periodos.
-    \item Un registro finalizado posterior no cierra un nombramiento abierto si corresponde al mismo cargo.
-    \item Un contrato activo hoy mantiene la vigencia aunque existan registros posteriores ya finalizados. Se entiende por activo un contrato en estado activo o por ejecutarse, ya iniciado, sin desvinculación pasada y con fecha de fin futura. Si no tiene fecha de fin, se exige además que la persona tenga algún registro en los últimos doce meses, para no revivir nombramientos antiguos que nunca se cerraron en el sistema.
+\item Tipo de registro: solo se consideran los registros de tipo vinculación para determinar la continuidad laboral. Los movimientos administrativos de corta duración no abren ni cierran períodos.
+\item Continuidad del cargo: un registro posterior finalizado no cierra un nombramiento abierto cuando corresponde al mismo cargo.
+\item Estado y fechas del contrato: se considera vigente un contrato en estado activo o por ejecutarse, cuya fecha de inicio ya haya ocurrido, que no tenga una desvinculación anterior y cuya fecha de fin sea futura.
+\item Contratos sin fecha de fin: cuando no existe una fecha de fin, se requiere que la persona tenga al menos un registro en los últimos doce meses, para evitar considerar vigentes nombramientos antiguos que no fueron cerrados en el sistema.
 \end{itemize}
 
-Se consideró dar un margen de gracia de 30 a 60 días después del último contrato para cubrir renovaciones que aún no se registran, pero se descartó: la vigencia debe reflejar lo que dice el dato hoy y no una renovación que nadie ha confirmado. Con estas reglas el número de personas vigentes en el historial pasó de 850 en la primera versión a 1\,737. La vigencia no entra en ningún modelo; solo sirve para filtrar listas y resultados en el prototipo.
+La vigencia laboral se utiliza para filtrar la población de estudio. Con estas reglas, se identificaron 1,737 personas con contrato vigente en ESPOL, equivalentes al 55,% de la población de estudio.
 
 \section{Modelado de perfiles profesionales}
 

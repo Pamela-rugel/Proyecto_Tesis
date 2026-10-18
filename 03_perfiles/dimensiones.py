@@ -273,6 +273,35 @@ def evidencias_de_dimension(ev: pd.DataFrame) -> pd.DataFrame:
     return e
 
 
+def _fecha_mas_reciente(atributos: str) -> str | None:
+    """Fecha más reciente registrada en los atributos de una evidencia (ISO), o None si no tiene
+    ninguna. Considera fecha_fin / fecha_inicio, listas `fechas` y `anios`, y los `periodos`
+    (objetos con inicio/fin, o semestres "2021-1S" -> fin del semestre)."""
+    a = json.loads(atributos)
+    fechas = [a.get("fecha_fin"), a.get("fecha_inicio")] + list(a.get("fechas") or [])
+    fechas += [f"{x}-07-01" for x in (a.get("anios") or [])]
+    for p in a.get("periodos") or []:
+        if isinstance(p, dict):
+            fechas += [p.get("fin"), p.get("inicio")]
+        elif isinstance(p, str) and p[:4].isdigit():
+            fechas.append(p[:4] + ("-06-30" if p[5:7] == "1S" else "-12-31" if p[5:7] == "2S" else "-07-01"))
+    fechas = [str(f)[:10] for f in fechas if f]
+    return max(fechas) if fechas else None
+
+
+def ultima_evidencia(ev_dim: pd.DataFrame, corte: str | None = None) -> pd.DataFrame:
+    """persona_id, dimension, ultima_evidencia (ISO; la fecha más reciente entre sus evidencias de
+    la dimensión). Es un dato DESCRIPTIVO (cuándo fue su última actividad registrada) y un criterio
+    de desempate en las personas parecidas por dimensión; no entra en los patrones (DEC-061: como
+    variable de agrupamiento dominaba y convertía el "cómo" en "cuándo"). Fechas posteriores al
+    corte se recortan al corte. Sin fechas (p. ej. Idiomas): no aparece."""
+    f = pd.to_datetime(ev_dim["atributos"].map(_fecha_mas_reciente), errors="coerce")
+    if corte:
+        f = f.clip(upper=pd.Timestamp(corte))
+    u = ev_dim.assign(_f=f).dropna(subset=["_f"]).groupby(["persona_id", "dimension"])["_f"].max()
+    return u.dt.strftime("%Y-%m-%d").rename("ultima_evidencia").reset_index()
+
+
 def percentil_positivo(x: np.ndarray) -> np.ndarray:
     """0 si x <= 0; si no, 100 x (personas con valor <= x) / total. El máximo da 100."""
     x = np.asarray(x, dtype=float)

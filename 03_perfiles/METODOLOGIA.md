@@ -1,5 +1,9 @@
 # Cómo se conectan las evidencias con los datos estructurados
 
+> **Documento histórico.** Describe el clustering multivista SNF (DEC-045/046), que el dashboard ya
+> no muestra. El método vigente (dimensiones, temas, patrones de actividad, perfil completo y
+> patrones globales) está en **[DOCUMENTACION_PERFILES.md](DOCUMENTACION_PERFILES.md)**.
+
 **Clustering multivista del personal con Similarity Network Fusion (SNF)**
 
 > Versión documentada: `20261001-0147_7424dd88` (1 de octubre de 2026). Decisiones relacionadas:

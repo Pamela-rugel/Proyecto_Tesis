@@ -247,3 +247,171 @@ def test_perfil_conjunto_version_vigente(ambito):
     assert set(m["persona_id"]) == set(p["persona_id"]) and np.isfinite(m[["x", "y"]].to_numpy()).all()
     assert (v["persona_id"] != v["vecino_id"]).all()
     assert (v.groupby("persona_id")["distancia"].apply(lambda s: s.is_monotonic_increasing)).all()
+
+
+# ---------------------------------------------------------------- DEC-061: proporciones, k estable, vecinos, fechas
+from perfiles import vecinos_dimension as vd  # noqa: E402
+
+
+def _comp_investigacion(filas):
+    cols = [f"investigacion__{c}" for c in dm.DIMENSIONES["investigacion"]["componentes"]] + ["investigacion__publicaciones_autor"]
+    comp = pd.DataFrame(0.0, index=range(len(filas)), columns=cols)
+    for i, f in enumerate(filas):
+        for k, v in f.items():
+            comp.at[i, f"investigacion__{k}"] = np.log1p(v)
+    return comp
+
+
+def test_proporcion_sin_denominador_queda_en_la_media_y_se_suaviza():
+    rng = np.random.default_rng(3)
+    filas = [{"proyectos": 1}] * 10   # sin publicaciones
+    filas += [{"proyectos": 1, "publicaciones": int(n), "publicaciones_q1q2": int(rng.integers(0, n + 1))} for n in rng.integers(1, 8, 60)]
+    filas += [{"proyectos": 1, "publicaciones": 1, "publicaciones_q1q2": 1}]   # 1 de 1 en Q1-Q2
+    info = {}
+    x, _ = md.variables_patron("investigacion", _comp_investigacion(filas), info)
+    col = "investigacion__prop_publicaciones_q1q2_publicaciones"
+    media = info["prop_publicaciones_q1q2_publicaciones"]["media_previa"]
+    assert np.allclose(x[col].iloc[:10], media, atol=1e-4)            # sin denominador: neutral, no 0
+    assert 0 < x[col].iloc[-1] < 1                                     # 1 de 1 no es 100 %
+    assert info["prop_publicaciones_q1q2_publicaciones"]["sin_denominador"] == 10
+
+
+def test_tasa_sin_denominador_toma_la_media():
+    cols = [f"docencia__{c}" for c in dm.DIMENSIONES["docencia"]["componentes"]]
+    comp = pd.DataFrame(0.0, index=range(4), columns=cols)
+    comp["docencia__materias"] = np.log1p([0, 2, 4, 1])
+    comp["docencia__estudiantes"] = np.log1p([0, 60, 80, 10])
+    x, _ = md.variables_patron("docencia", comp)
+    tasa = np.expm1(x["docencia__prop_estudiantes_materias"])
+    assert np.isclose(tasa.iloc[0], np.mean([30, 20, 10]))
+
+
+def test_seleccion_k_prefiere_k_estable():
+    rng = np.random.default_rng(4)
+    z = np.vstack([c + rng.normal(0, 0.2, (80, 3)) for c in rng.normal(0, 5, (3, 3))])
+    k, sel = md._seleccionar_k_patron(z)
+    fila = next(t for t in sel["tabla"] if t["k"] == k)
+    assert "estabilidad_ari" in fila and fila["estabilidad_ari"] >= md.ARI_MINIMO_PATRON
+
+
+def test_vecinos_desempatan_identicos_por_tema():
+    ids = np.array([10, 11, 12, 13])
+    z = np.zeros((4, 2))                                   # actividad idéntica para todos
+    e = np.array([[1, 0], [0.99, 0.14], [0, 1], [0.7, 0.7]], dtype=float)
+    emb = {p: v / np.linalg.norm(v) for p, v in zip(ids, e)}
+    v = vd.construir_dimension("ponencias", ids, z, emb, {}, {}, {}, {})
+    act = v[(v.persona_id == 10) & (v.lista == "actividad")].sort_values("rango")
+    assert list(act.vecino_id) == [11, 13, 12]             # entre idénticos, primero el tema más parecido
+    assert act.identico.all() and (act.n_identicos == 3).all()
+    assert not (v.persona_id == v.vecino_id).any()
+
+
+def test_ultima_evidencia_semestres_y_corte():
+    ev = pd.DataFrame({"persona_id": [1, 1, 2], "dimension": ["docencia", "docencia", "ponencias"],
+                       "atributos": [json.dumps({"periodos": ["2019-1S", "2021-2S"]}), json.dumps({}),
+                                     json.dumps({"fecha_fin": "2099-01-01"})]})
+    u = dm.ultima_evidencia(ev, corte="2026-10-01").set_index("persona_id")["ultima_evidencia"]
+    assert u[1] == "2021-12-31" and u[2] == "2026-10-01"
+
+
+@pytest.mark.parametrize("ambito", list(AMBITOS))
+def test_vecinos_y_temas_evidencia_version_vigente(ambito):
+    carpeta = _version()
+    if not (carpeta / ambito / "vecinos_dimension.parquet").exists():
+        pytest.skip("la versión vigente no tiene vecinos por dimensión")
+    v = pd.read_parquet(carpeta / ambito / "vecinos_dimension.parquet")
+    d = pd.read_parquet(carpeta / ambito / "dimensiones.parquet")
+    con_ev = set(map(tuple, d.loc[d["n_evidencias"] > 0, ["persona_id", "dimension"]].to_numpy()))
+    assert set(map(tuple, v[["persona_id", "dimension"]].to_numpy())) <= con_ev
+    assert set(map(tuple, v[["vecino_id", "dimension"]].to_numpy())) <= con_ev
+    assert not (v["persona_id"] == v["vecino_id"]).any()
+    assert set(v["lista"]) <= {"actividad", "tema"}
+    assert v.groupby(["persona_id", "dimension", "lista"])["rango"].max().le(vd.N_VECINOS).all()
+    te = pd.read_parquet(carpeta / ambito / "temas_evidencia.parquet")
+    t = pd.read_parquet(carpeta / ambito / "temas_dimension.parquet")
+    prop = te.groupby(["persona_id", "dimension", "tema_id"]).size() / te.groupby(["persona_id", "dimension"]).size()
+    unido = t.set_index(["persona_id", "dimension", "tema_id"])["proporcion"].align(prop, join="inner")
+    assert np.allclose(*unido)
+
+
+
+# ---------------------------------------------------------------- DEC-062: perfil completo multivista (NEMO)
+from perfiles import perfil_multivista as pmv  # noqa: E402
+
+
+def test_nemo_no_penaliza_la_vista_faltante():
+    """Sin contenido en un bloque, esa vista no cuenta para el par: la similitud sale solo de las
+    vistas que ambos tienen (no de un contenido inventado)."""
+    rng = np.random.default_rng(6)
+    act = rng.normal(size=(40, 3))
+    cont = rng.normal(size=(40, 8)); cont /= np.linalg.norm(cont, axis=1, keepdims=True)
+    presente = np.ones(40, bool); presente[:10] = False
+    w, vecindad = pmv.red_nemo(act, {"academico": cont}, {"academico": presente}, k=5)
+    solo_act = pmv._knn_normalizada(pmv._afinidad(act, 5), 5)
+    assert np.allclose(w[:10, :10], solo_act[:10, :10])          # pares sin el bloque: solo actividad
+    assert not vecindad["academico"][:10].any()                  # nadie sin bloque es vecino en esa vista
+    assert np.allclose(w, w.T) and (np.diag(w) == 0).all()
+
+
+@pytest.mark.parametrize("ambito", list(AMBITOS))
+def test_perfil_multivista_version_vigente(ambito):
+    carpeta = _version()
+    r = json.loads((carpeta / ambito / "patrones_globales.json").read_text(encoding="utf-8"))
+    if "vistas" not in r:
+        pytest.skip("la versión vigente no tiene el perfil completo multivista")
+    v = pd.read_parquet(carpeta / ambito / "perfil_conjunto_vecinos.parquet")
+    assert v["vistas"].map(lambda s: isinstance(json.loads(s), list)).all()
+    g = pd.read_parquet(carpeta / ambito / "patrones_globales.parquet")
+    assert g["patron_global"].between(0, r["k"] - 1).all() and pmv.K_MIN <= r["k"] <= pmv.K_MAX
+    for f in r["patrones"]:
+        m = f["microarquetipos"]
+        del_patron = g[g["patron_global"] == f["id"]]
+        if f["tamano"] < pmv.MIN_SUBDIVIDIR:
+            assert m is None and (del_patron["micro"] == -1).all()
+        else:
+            assert pmv.K_MIN_MICRO <= m["k"] <= pmv.K_MAX_MICRO
+            assert del_patron["micro"].value_counts().sort_index().tolist() == [x["tamano"] for x in m["lista"]]
+
+
+# ---------------------------------------------------------------- DEC-063: nombres de los patrones por dimensión
+from perfiles import nombres_patrones as nmp  # noqa: E402
+
+
+def test_nombre_se_cumple_para_todas_las_personas_del_patron():
+    cols = [f"ponencias__{c}" for c in dm.DIMENSIONES["ponencias"]["componentes"]]
+    filas = [(1, 0)] * 30 + [(2, 2)] * 10 + [(3, 2)] * 10 + [(5, 0)] * 10      # (ponencias, en el exterior)
+    comp = pd.DataFrame(np.log1p(np.array(filas, float)), columns=cols)
+    lab = np.array([0] * 30 + [1] * 20 + [2] * 10)
+    n = nmp.nombrar("ponencias", comp, list(dm.DIMENSIONES["ponencias"]["componentes"]), lab)
+    real = nmp.valores_reales("ponencias", comp, list(dm.DIMENSIONES["ponencias"]["componentes"]))
+    for c, info in enumerate(n):
+        m = lab == c
+        cands = {t: mk for t, mk, _ in nmp._candidatas("ponencias", real, comp, m)}
+        assert info["condiciones"] and all(cands[t][m].all() for t in info["condiciones"])   # 100 % del patrón
+    assert "1 ponencia" in n[0]["nombre"] and n[0]["distingue"] == 1.0
+    assert len({x["nombre"] for x in n}) == 3                                             # nombres distintos
+
+
+@pytest.mark.parametrize("ambito", list(AMBITOS))
+def test_patrones_por_dimension_tienen_nombre(ambito):
+    carpeta = _version()
+    r = json.loads((carpeta / ambito / "micro_dimensiones.json").read_text(encoding="utf-8"))
+    fichas = [f for x in r.values() if x["patrones"] for f in x["patrones"]["patrones"]]
+    if not any("nombre" in f for f in fichas):
+        pytest.skip("la versión vigente no tiene nombres de patrones")
+    for x in r.values():
+        if x["patrones"]:
+            nombres = [f["nombre"] for f in x["patrones"]["patrones"]]
+            assert all(nombres) and len(set(nombres)) == len(nombres)
+
+
+@pytest.mark.parametrize("ambito", list(AMBITOS))
+def test_similitud_con_representante_no_colapsa_en_cero(ambito):
+    """La similitud se mide en el embedding espectral: no debe quedar en 0 % para la mayoría."""
+    carpeta = _version()
+    g = pd.read_parquet(carpeta / ambito / "patrones_globales.parquet")
+    s = g["similitud_representante"].dropna()
+    if not len(s) or "nicho" in g.columns:
+        pytest.skip("versión anterior")
+    assert (s < 0.005).mean() < 0.2 and s.between(0, 1).all()
+    assert (g.loc[g["es_representante"], "similitud_representante"] == 1).all()
