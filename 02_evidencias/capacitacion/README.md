@@ -3,7 +3,7 @@
 Mismo esquema que las demás secciones: `evidencia_id | persona_id | tipo_id | texto | atributos`.
 El formato de los atributos está en [../ATRIBUTOS.md](../ATRIBUTOS.md).
 
-- **Ejecución:** `evidencias_capacitacion.ipynb`, o `python -m evidencias.capacitacion.construir`
+- **Ejecución:** `04_evidencias_capacitacion.ipynb`, o `python -m evidencias.capacitacion.construir`
   (unos 15 segundos).
 - **Salidas:** una carpeta por tipo, cada una con sus evidencias, su reporte y sus registros
   no considerados:

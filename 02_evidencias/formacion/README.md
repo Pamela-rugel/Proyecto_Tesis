@@ -4,7 +4,7 @@ Fuente: `data/processed/reporte_titulaciones_educacion.csv` (notebook 18 de prep
 Mismo esquema que Trayectoria: `evidencia_id | persona_id | tipo_id | texto | atributos`. El
 formato de los atributos está en [../ATRIBUTOS.md](../ATRIBUTOS.md).
 
-- **Ejecución:** `evidencias_formacion.ipynb`, o `python -m evidencias.formacion.construir`.
+- **Ejecución:** `02_evidencias_formacion.ipynb`, o `python -m evidencias.formacion.construir`.
 - **Salidas:** en `data/evidencias/formacion/`:
   - `evidencias_formacion.csv`
   - `reporte_evidencias_formacion.json`

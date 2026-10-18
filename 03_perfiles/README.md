@@ -15,7 +15,7 @@ dashboard (`dashboard_react/backend`) solo los lee.
 python -m perfiles.embeddings    # embeddings de evidencias con BAAI/bge-m3 (GPU; incremental)
 python -m perfiles.construir     # vistas + SNF + clustering + interpretación + t-SNE
 ```
-O el notebook `perfiles/clustering_perfiles.ipynb`. Requiere las evidencias de `data/evidencias/`
+O el notebook `03_perfiles/01_construir_perfiles.ipynb`. Requiere las evidencias de `data/evidencias/`
 y `data/processed/historial_laboral_features.csv` (vigencia y tipo de empleado, DEC-023).
 
 ## Datos que usa

@@ -38,7 +38,7 @@ stack/*.tar
 data/embeddings/
 
 # Trayectorias y evidencias: se regeneran localmente con
-# 01_preprocesamiento_features/04_trayectorias.ipynb y 02_evidencias/trayectoria/evidencias_trayectoria.ipynb
+# 01_preprocesamiento_features/02_trayectorias.ipynb y 02_evidencias/trayectoria/01_evidencias_trayectoria.ipynb
 # (derivados de datos institucionales, no versionar)
 data/trayectorias/
 data/evidencias/

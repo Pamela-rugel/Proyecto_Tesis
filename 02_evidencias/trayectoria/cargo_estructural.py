@@ -1,7 +1,7 @@
 """Subtipo CARGO ESTRUCTURAL: el rol principal continuo de la persona dentro de ESPOL.
 
 Fuente: `tramos_rol.csv` (contratos de categorias NO puntuales, sin ruido, ya fusionados
-por CATEGORIA_CARGO en 04_trayectorias), re-consolidado por cargo real + unidad con
+por CATEGORIA_CARGO en 02_trayectorias), re-consolidado por cargo real + unidad con
 tolerancia de receso de 90 dias mediante `tramos.construir_tramos_cargo_unidad_persona`
 (`evidencias/trayectoria/tramos.py`).
 Cada tramo consolidado es un PERIODO continuo.
@@ -73,7 +73,7 @@ def construir(fuentes: FuentesTrayectoria, fecha_corte: pd.Timestamp) -> tuple[p
     n_consolidados = len(tramos)
 
     # Periodo de un solo dia (todos sus tramos son de un dia, marcados como ruido con
-    # ES_TRAMO_UN_DIA en 04_trayectorias): no es evidencia (DEC-029).
+    # ES_TRAMO_UN_DIA en 02_trayectorias): no es evidencia (DEC-029).
     un_dia = tramos["FIN"].notna() & (tramos["FIN"] == tramos["INICIO"])
     futuro = tramos["INICIO"] > fecha_corte
     tramos = tramos[~un_dia & ~futuro].copy()

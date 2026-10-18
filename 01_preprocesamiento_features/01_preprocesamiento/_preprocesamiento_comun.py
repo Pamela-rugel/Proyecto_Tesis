@@ -52,7 +52,7 @@ def leer_csv(nombre_archivo: str, **kwargs) -> pd.DataFrame:
 # --- Personas excluidas de todo analisis (2026-09-28, decision del usuario, DEC-030) ---
 # `data/raw/defunciones_identificadas.txt`: una columna IDPERSONA con personas identificadas
 # en defuncion. No deben considerarse en ningun analisis (trayectoria, evidencias, clustering,
-# embeddings). Se filtran al definir la poblacion (07_datos_personales_ultimos_5anios), de
+# embeddings). Se filtran al definir la poblacion (01_datos_personales_ultimos_5anios), de
 # donde heredan todos los notebooks posteriores, y quedan registradas con su motivo en
 # `data/processed/personas_excluidas.csv`.
 ARCHIVO_DEFUNCIONES = RAW_DIR / "defunciones_identificadas.txt"
@@ -1568,7 +1568,7 @@ def procesar_registro_autoridades(
       conservan pero marcadas aparte, no se eliminan de la tabla.
     - `ES_RUIDO_FUERA_DE_POBLACION` (DEC-021, ver context/DECISION_LOG.md): si se pasa
       `poblacion_ids` (el conjunto de IDPERSONA de `datos_personales_ultimos_5anios.csv`,
-      la fuente que define la poblacion del proyecto desde `02_integracion_datos.ipynb`),
+      la fuente que define la poblacion del proyecto desde `_historico/01_preprocesamiento_features/02_integracion_datos.ipynb`),
       marca las filas cuyo IDPERSONA no pertenece a esa poblacion (109 personas
       confirmadas, tras excluir representantes estudiantiles) - designaciones de
       autoridad/funcion registradas para alguien que nunca aparece en la ventana
@@ -2192,7 +2192,7 @@ def construir_features_trayectoria(
       transiciones totales y por tipo (ver `detectar_transiciones_rol`).
     - TUVO_TRANSICION_AA_A_DD, TUVO_TRANSICION_DD_A_AA: version booleana de los conteos
       anteriores (mas robusta para clustering que el conteo crudo, que es sensible al
-      patron de "encargos cortos" documentado en DEC-004/`04_trayectorias.ipynb`).
+      patron de "encargos cortos" documentado en DEC-004/`02_trayectorias.ipynb`).
     - ANIOS_DESDE_ULTIMA_TRANSICION: años desde la transicion de rol mas reciente (NA si
       nunca tuvo una).
     - TUVO_ROL_ADICIONAL_SIMULTANEO: True si `roles_adicionales_simultaneos` (ver

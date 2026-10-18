@@ -6,7 +6,7 @@ cubren 1998–2026. Mismo esquema que las demás secciones:
 `evidencia_id | persona_id | tipo_id | texto | atributos`. El formato de los atributos está en
 [../ATRIBUTOS.md](../ATRIBUTOS.md).
 
-- **Ejecución:** `evidencias_docencia.ipynb`, o `python -m evidencias.docencia.construir`.
+- **Ejecución:** `07_evidencias_docencia.ipynb`, o `python -m evidencias.docencia.construir`.
 - **Salidas:** en `data/evidencias/docencia/`:
   - `evidencias_docencia.csv`
   - `reporte_evidencias_docencia.json`

@@ -5,7 +5,7 @@ que la limpieza descartó (unidas por `IDIDIOMAPERSONA`). Mismo esquema que las 
 `evidencia_id | persona_id | tipo_id | texto | atributos`. El formato de los atributos está en
 [../ATRIBUTOS.md](../ATRIBUTOS.md).
 
-- **Ejecución:** `evidencias_idiomas.ipynb`, o `python -m evidencias.idiomas.construir`.
+- **Ejecución:** `05_evidencias_idiomas.ipynb`, o `python -m evidencias.idiomas.construir`.
 - **Salidas:** en `data/evidencias/idiomas/`:
   - `evidencias_idiomas.csv`
   - `reporte_evidencias_idiomas.json`

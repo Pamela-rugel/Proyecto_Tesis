@@ -9,7 +9,7 @@ dashboard_react/backend/__pycache__/
 
 context/
 presentacion/
-logs_rerun/
+_historico/
 
 01_preprocesamiento_features/
 **/*.ipynb

@@ -5,7 +5,7 @@ Fuente: `data/processed/mencion_honor.csv`. El nombre del país sale de
 secciones: `evidencia_id | persona_id | tipo_id | texto | atributos`. El formato de los
 atributos está en [../ATRIBUTOS.md](../ATRIBUTOS.md).
 
-- **Ejecución:** `evidencias_reconocimientos.ipynb`, o `python -m evidencias.reconocimientos.construir`.
+- **Ejecución:** `06_evidencias_reconocimientos.ipynb`, o `python -m evidencias.reconocimientos.construir`.
 - **Salidas:** en `data/evidencias/menciones_honor/`:
   - `evidencias_menciones_honor.csv`
   - `reporte_evidencias_menciones_honor.json`

@@ -1,6 +1,6 @@
 # Evidencias de Trayectoria
 
-Transforma las salidas ya depuradas de trayectoria (`01_preprocesamiento`, `04_trayectorias`)
+Transforma las salidas ya depuradas de trayectoria (`01_preprocesamiento`, `02_trayectorias`)
 en un dataset de **evidencias individuales** con el esquema común de `02_evidencias/esquema.py`:
 
 ```
@@ -11,7 +11,7 @@ Esta etapa **no** genera embeddings ni clustering.
 
 ## Ejecución
 
-- Notebook: `evidencias_trayectoria.ipynb` (en esta carpeta).
+- Notebook: `01_evidencias_trayectoria.ipynb` (en esta carpeta).
 - Consola (desde la raíz del proyecto): `python -m evidencias.trayectoria.construir`
 
 Salidas en `data/evidencias/trayectoria/`:
@@ -100,7 +100,7 @@ en `data/evidencias/trayectoria/personas_no_consideradas.csv`. Hay dos grupos.
 Las personas de `data/raw/defunciones_identificadas.txt` no se consideran en **ningún**
 análisis (trayectoria, evidencias, clustering, embeddings), con el motivo
 `identificada en defunción` (DEC-030). Se quitan al definir la población en
-`01_preprocesamiento/07_datos_personales_ultimos_5anios.ipynb`, de donde heredan todos los
+`01_preprocesamiento/01_datos_personales_ultimos_5anios.ipynb`, de donde heredan todos los
 notebooks posteriores, y quedan registradas en `data/processed/personas_excluidas.csv`. Como
 resguardo, `fuentes.py` también las descarta si el archivo de población estuviera
 desactualizado.
@@ -171,7 +171,7 @@ Fuente: `data/trayectorias/funciones_adicionales_persona.csv`.
 
 ### Experiencia externa
 Fuente: `data/processed/experiencia_externa.csv`, **ya limpia en el notebook
-`01_preprocesamiento/08_experiencia_externa.ipynb`** (`pc.limpiar_experiencia_externa`):
+`01_preprocesamiento/03_experiencia_externa.ipynb`** (`pc.limpiar_experiencia_externa`):
 - Se eliminan los registros sin cargo, con cargo de relleno, sin fecha de inicio o que empiezan antes del nacimiento de la persona, además de los duplicados exactos.
 - Las instituciones nulas, de relleno o idénticas al cargo pasan a `DESCONOCIDA`.
 - Se quitan viñetas y espacios repetidos, y un mismo cargo escrito con distinta capitalización se unifica en mayúsculas.

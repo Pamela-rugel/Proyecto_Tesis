@@ -1,5 +1,5 @@
 """Carga de las fuentes YA DEPURADAS de trayectoria (salidas de 01_preprocesamiento y
-04_trayectorias). No se lee nada de data/raw: la depuracion (categorias de cargo, ruido,
+02_trayectorias). No se lee nada de data/raw: la depuracion (categorias de cargo, ruido,
 fechas efectivas, consolidacion de tramos) ya ocurrio en el pipeline y se reutiliza aqui.
 
 Reutiliza `_preprocesamiento_comun` (pc) en vez de reimplementar sus reglas. La consolidacion
