@@ -335,11 +335,25 @@ export interface PersonaPatronGlobal {
   entre_dos: boolean;
   micro: number;
 }
+/** Una página de una lista de personas. `total`: las que coinciden con la búsqueda (lo que se
+ *  pagina); `total_grupo`: todas las del grupo. `posicion`: lugar de cada una en el orden del grupo. */
+export interface PaginaPersonas<T> {
+  total: number;
+  total_grupo: number;
+  q: string | null;
+  personas: (T & { posicion: number })[];
+}
+/** búsqueda por nombre o apellidos (`q`) en una lista paginada; vacía = sin filtro */
+const paramBusqueda = (q?: string) => (q && q.trim() ? { q: q.trim() } : {});
+
 export const getPersonasPatronGlobal = async (a: Ambito, patron: number, micro: number | null, soloVigentes: boolean,
-  pagina = 0, porPagina = 20) =>
+  pagina = 0, porPagina = 20, q?: string) =>
   (
-    await api.get<{ total: number; personas: PersonaPatronGlobal[] }>(`/api/perfil/${a}/personas`, {
-      params: { patron, solo_vigentes: soloVigentes, offset: pagina * porPagina, limite: porPagina, ...(micro !== null ? { micro } : {}) },
+    await api.get<PaginaPersonas<PersonaPatronGlobal>>(`/api/perfil/${a}/personas`, {
+      params: {
+        patron, solo_vigentes: soloVigentes, offset: pagina * porPagina, limite: porPagina,
+        ...(micro !== null ? { micro } : {}), ...paramBusqueda(q),
+      },
     })
   ).data;
 export const getMapaPerfil = async (a: Ambito, dimension: string | null, soloVigentes: boolean) =>
@@ -355,10 +369,10 @@ export const getDimensiones = async (a: Ambito) =>
   (await api.get<{ ambito: Ambito; dimensiones: ResumenDimension[] }>(`/api/dimensiones/${a}`)).data.dimensiones;
 export const getDimension = async (a: Ambito, d: string) => (await api.get<DetalleDimension>(`/api/dimensiones/${a}/${d}`)).data;
 export const getPersonasDimension = async (a: Ambito, d: string, filtro: { patron?: number; tema?: number }, soloVigentes: boolean,
-  pagina = 0, porPagina = 20) =>
+  pagina = 0, porPagina = 20, q?: string) =>
   (
-    await api.get<{ total: number; personas: PersonaDimension[] }>(`/api/dimensiones/${a}/${d}/personas`, {
-      params: { ...filtro, solo_vigentes: soloVigentes, offset: pagina * porPagina, limite: porPagina },
+    await api.get<PaginaPersonas<PersonaDimension>>(`/api/dimensiones/${a}/${d}/personas`, {
+      params: { ...filtro, solo_vigentes: soloVigentes, offset: pagina * porPagina, limite: porPagina, ...paramBusqueda(q) },
     })
   ).data;
 export interface PuntoMapaDimension {

@@ -133,8 +133,9 @@ def dimension(ambito: str, dimension: str) -> dict:
 @app.get("/api/dimensiones/{ambito}/{dimension}/personas")
 def personas_dimension(ambito: str, dimension: str, patron: int | None = Query(None), tema: int | None = Query(None),
                        solo_vigentes: bool = Query(True), offset: int = Query(0, ge=0),
-                       limite: int = Query(500, ge=1, le=500)) -> dict:
-    """Personas con evidencias en la dimensión, opcionalmente de un patrón o con un tema. Orden:
+                       limite: int = Query(500, ge=1, le=500), q: str | None = Query(None)) -> dict:
+    """Personas con evidencias en la dimensión, opcionalmente de un patrón o con un tema, y con `q`
+    solo las que coinciden por nombre o apellidos (ver `_pagina_personas`). Orden:
     similitud con la persona representativa del patrón, proporción de sus evidencias en el tema, o
     nivel (percentil entre quienes tienen registros, DEC-060)."""
     _dimension(ambito, dimension)
@@ -162,7 +163,7 @@ def personas_dimension(ambito: str, dimension: str, patron: int | None = Query(N
         x = x[x["vigente"]]
     x = x.sort_values([orden, "nivel", "intensidad"], ascending=False, na_position="last")
     return {"ambito": ambito, "dimension": dimension, "patron": patron, "tema": tema, "solo_vigentes": solo_vigentes,
-            "total": len(x), "personas": repo.as_records(repo.con_nombres(x.iloc[offset:offset + limite].round(4)))}
+            **_pagina_personas(x, q, offset, limite)}
 
 
 @app.get("/api/dimensiones/{ambito}/{dimension}/mapa")
@@ -263,9 +264,10 @@ def _con_registros_y_nivel(ambito: str, dims: list[dict], grupo: set[int], refer
 @app.get("/api/perfil/{ambito}/personas")
 def personas_patron_global(ambito: str, patron: int = Query(...), micro: int | None = Query(None),
                            solo_vigentes: bool = Query(True), offset: int = Query(0, ge=0),
-                       limite: int = Query(500, ge=1, le=500)) -> dict:
+                       limite: int = Query(500, ge=1, le=500), q: str | None = Query(None)) -> dict:
     """Personas de un patrón global (o de uno de sus microarquetipos), ordenadas por similitud con
-    su persona representativa (100 % = la representante; 0 % = la más distinta del grupo)."""
+    su persona representativa (100 % = la representante; 0 % = la más distinta del grupo). Con `q`,
+    solo las que coinciden por nombre o apellidos (ver `_pagina_personas`)."""
     glob, _ = repo.patrones_globales(_ambito(ambito))
     x = glob[glob["patron_global"] == patron]
     if micro is not None:
@@ -279,8 +281,7 @@ def personas_patron_global(ambito: str, patron: int = Query(...), micro: int | N
     if solo_vigentes:
         x = x[x["vigente"]]
     x = x.sort_values(["similitud", "afinidad"], ascending=False, na_position="last")
-    return {"ambito": ambito, "patron": patron, "micro": micro, "total": len(x),
-            "personas": repo.as_records(repo.con_nombres(x.iloc[offset:offset + limite].round(4)))}
+    return {"ambito": ambito, "patron": patron, "micro": micro, **_pagina_personas(x, q, offset, limite)}
 
 
 def _patron_global_persona(ambito: str, persona_id: int) -> dict | None:
@@ -369,34 +370,51 @@ def _nombre_dimension(dim: str) -> str:
     return repo.definiciones_dimensiones().get(dim, {}).get("nombre", dim)
 
 
+def _norm(x) -> str:
+    """Texto sin tildes y en minúsculas, para comparar nombres."""
+    return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
+
+
+def _puntaje(terminos: list[str], texto: str) -> float:
+    """Cada término debe aparecer en `texto` (ya normalizado); si no aparece tal cual, se acepta una
+    palabra parecida (errores de tipeo como "ciclia" -> "cecilia"). 0 = no coincide; más alto, mejor."""
+    palabras = texto.replace("|", " ").split()
+    total = 0.0
+    for x in terminos:
+        if x in texto:
+            total += 1.0
+            continue
+        mejor = max((SequenceMatcher(None, x, w).ratio() for w in palabras), default=0.0)
+        if len(x) < 4 or mejor < 0.75:
+            return 0.0
+        total += mejor
+    return total
+
+
+def _pagina_personas(x: pd.DataFrame, q: str | None, offset: int, limite: int) -> dict:
+    """Una página de una lista de personas YA ordenada. Con `q`, solo quienes coinciden por nombre o
+    apellidos (sin tildes ni mayúsculas, tolerando errores de tipeo), sin cambiar el orden del grupo.
+    `posicion` es el lugar de cada persona en ese orden (se conserva al filtrar); `total` cuenta las
+    que quedan tras el filtro (lo que se pagina) y `total_grupo`, todas las del grupo."""
+    x = repo.con_nombres(x.assign(posicion=range(1, len(x) + 1)))
+    total_grupo = len(x)
+    if q and q.strip():
+        terminos = _norm(q).split()
+        x = x[x["nombre"].map(lambda n: _puntaje(terminos, _norm(n)) > 0)]
+    return {"q": q.strip() if q and q.strip() else None, "total": len(x), "total_grupo": total_grupo,
+            "personas": repo.as_records(x.iloc[offset:offset + limite].round(4))}
+
+
 @app.get("/api/personas/buscar")
 def buscar(ambito: str = Query("todos"), q: str = Query(..., min_length=2), solo_vigentes: bool = Query(True)) -> dict:
-    """Busca personas del ámbito por nombre, cargo o unidad (sin distinguir tildes ni mayúsculas)."""
-    def norm(x) -> str:
-        return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
-
+    """Busca personas del ámbito por nombre, cargo o unidad (sin distinguir tildes ni mayúsculas).
+    Primero las coincidencias exactas (ver `_puntaje`)."""
     p = repo.con_nombres(repo.personas(_ambito(ambito)))
     if solo_vigentes:
         p = p[p["vigente"]]
-    texto = (p["nombre"].map(norm) + " | " + p["cargo_actual"].map(norm) + " | " + p["unidad_actual"].map(norm))
-    terminos = norm(q).split()
-
-    # cada término debe aparecer; si no aparece tal cual, se acepta una palabra parecida
-    # (errores de tipeo como "ciclia" -> "cecilia"). Primero las coincidencias exactas.
-    def puntaje(t: str) -> float:
-        palabras = t.replace("|", " ").split()
-        total = 0.0
-        for x in terminos:
-            if x in t:
-                total += 1.0
-                continue
-            mejor = max((SequenceMatcher(None, x, w).ratio() for w in palabras), default=0.0)
-            if len(x) < 4 or mejor < 0.75:
-                return 0.0
-            total += mejor
-        return total
-
-    puntos = texto.map(puntaje)
+    texto = (p["nombre"].map(_norm) + " | " + p["cargo_actual"].map(_norm) + " | " + p["unidad_actual"].map(_norm))
+    terminos = _norm(q).split()
+    puntos = texto.map(lambda t: _puntaje(terminos, t))
     m = p.assign(_p=puntos)[puntos > 0].sort_values("_p", ascending=False).head(30)
     return {"resultados": [{"persona_id": int(r.persona_id), "nombre": r.nombre, "cargo_actual": r.cargo_actual,
                             "unidad_actual": r.unidad_actual} for r in m.itertuples()]}

@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { de } from "../lib/texto";
 import { getPersonasPatronGlobal, type Ambito, type DimensionPatronGlobal, type FiltroDimension, type PatronGlobal } from "../api/client";
 import Enlace from "./Enlace";
 import { Chip } from "./Bloques";
 import Paginacion from "./Paginacion";
+import BuscadorLista, { Resaltado } from "./BuscadorLista";
 import { guardarPorPagina, porPaginaGuardado } from "../lib/paginacion";
 import { colorPatron } from "../lib/colores";
 
@@ -38,15 +39,20 @@ export default function PanelPatronGlobal({
   const micros = patron.microarquetipos?.lista ?? [];
   const micro = microSel !== null ? micros[microSel] ?? null : null;
   const activa: PestanaPerfil = pestana === "micro" && !micros.length ? "distingue" : pestana;
-  // página de la lista: vuelve a la primera al cambiar de perfil, microarquetipo o vigencia
+  // búsqueda por nombre en la lista: se vacía al cambiar de perfil, microarquetipo o vigencia
+  const claveGrupo = JSON.stringify([ambito, patron.id, micro?.id ?? null, soloVigentes]);
+  const [busqueda, setBusqueda] = useState({ clave: claveGrupo, q: "" });
+  const q = busqueda.clave === claveGrupo ? busqueda.q : "";
+  const buscar = useCallback((nuevo: string) => setBusqueda({ clave: claveGrupo, q: nuevo }), [claveGrupo]);
+  // página de la lista: vuelve a la primera al cambiar de perfil, microarquetipo, vigencia o búsqueda
   const [porPagina, setPorPagina] = useState(porPaginaGuardado);
-  const clave = JSON.stringify([ambito, patron.id, micro?.id ?? null, soloVigentes, porPagina]);
+  const clave = JSON.stringify([ambito, patron.id, micro?.id ?? null, soloVigentes, porPagina, q]);
   const [paginaLista, setPaginaLista] = useState({ clave, n: 0 });
   const pagina = paginaLista.clave === clave ? paginaLista.n : 0;
   const tituloLista = useRef<HTMLDivElement | null>(null);
   const personas = useQuery({
-    queryKey: ["personas-global", ambito, patron.id, micro?.id ?? null, soloVigentes, pagina, porPagina],
-    queryFn: () => getPersonasPatronGlobal(ambito, patron.id, micro?.id ?? null, soloVigentes, pagina, porPagina),
+    queryKey: ["personas-global", ambito, patron.id, micro?.id ?? null, soloVigentes, pagina, porPagina, q],
+    queryFn: () => getPersonasPatronGlobal(ambito, patron.id, micro?.id ?? null, soloVigentes, pagina, porPagina, q),
     placeholderData: keepPreviousData,
   });
   const grupo = micro ?? patron;
@@ -55,7 +61,7 @@ export default function PanelPatronGlobal({
   const pestanas: { id: PestanaPerfil; texto: string }[] = [
     ...(micros.length ? [{ id: "micro" as const, texto: `Microarquetipos (${micros.length})` }] : []),
     { id: "distingue", texto: "En qué se distingue" },
-    { id: "personas", texto: `Personas${personas.data ? ` (${personas.data.total})` : ""}` },
+    { id: "personas", texto: `Personas${personas.data ? ` (${personas.data.total_grupo})` : ""}` },
   ];
 
   return (
@@ -179,13 +185,24 @@ export default function PanelPatronGlobal({
             ) : (
               <p className="text-[11px] text-slate-500">Este grupo no tiene personas vigentes que lo representen.</p>
             )}
+            <div className="mt-2">
+              <BuscadorLista
+                valor={q}
+                onCambiar={buscar}
+                contexto={nombreGrupo}
+                coincidencias={personas.data?.q ? personas.data.total : undefined}
+                totalGrupo={personas.data?.total_grupo}
+              />
+            </div>
           </div>
           <ul className="divide-y">
             {personas.data?.personas.map((x) => (
               <li key={x.persona_id}>
                 <button onClick={() => onPersona(x.persona_id)} className="w-full text-left px-5 py-2 hover:bg-slate-50">
                   <span className="flex items-baseline gap-2">
-                    <span className="text-sm text-slate-800 flex-1">{x.nombre}</span>
+                    <span className="text-sm text-slate-800 flex-1">
+                      <Resaltado texto={x.nombre} q={q} />
+                    </span>
                     {x.similitud !== null && (
                       <span className="text-xs tabular-nums text-slate-700"
                         title={x.similitud >= 0.9995 && !x.es_rep ? "Valores idénticos a la persona más representativa" : "Similitud con la persona más representativa"}>
@@ -197,6 +214,7 @@ export default function PanelPatronGlobal({
                     {x.cargo_actual ?? "Sin cargo actual"}
                     {!x.vigente && " · no vigente"}
                     {!micro && x.micro >= 0 && ` · ${micros[x.micro]?.codigo ?? ""}`}
+                    {q && ` · n.º ${x.posicion} de ${personas.data?.total_grupo ?? ""}`}
                   </p>
                 </button>
               </li>

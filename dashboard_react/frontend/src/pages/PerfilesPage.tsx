@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NOMBRE_AMBITO } from "../lib/texto";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
@@ -12,6 +12,7 @@ import FichaPersona from "../components/FichaPersona";
 import MapaDimension from "../components/MapaDimension";
 import BuscadorPersonas from "../components/BuscadorPersonas";
 import Paginacion from "../components/Paginacion";
+import BuscadorLista, { Resaltado } from "../components/BuscadorLista";
 import { guardarPorPagina, porPaginaGuardado } from "../lib/paginacion";
 import { colorPatron } from "../lib/colores";
 
@@ -131,9 +132,15 @@ export default function PerfilesPage() {
     enabled: vista === "perfil",
   });
   const globalesConColor = (globales.data?.patrones?.length ?? 0) <= 6;
-  // página de la lista de personas: vuelve a la primera al cambiar ámbito, dimensión, filtro o vigencia
+  // búsqueda por nombre en la lista: se vacía al cambiar ámbito, dimensión, filtro o vigencia
+  const claveGrupo = JSON.stringify([ambito, dimension, filtro, soloVigentes]);
+  const [busquedaLista, setBusquedaLista] = useState({ clave: claveGrupo, q: "" });
+  const qLista = busquedaLista.clave === claveGrupo ? busquedaLista.q : "";
+  const buscarEnLista = useCallback((q: string) => setBusquedaLista({ clave: claveGrupo, q }), [claveGrupo]);
+  // página de la lista de personas: vuelve a la primera al cambiar ámbito, dimensión, filtro,
+  // vigencia o búsqueda
   const [porPagina, setPorPagina] = useState(porPaginaGuardado);
-  const claveLista = JSON.stringify([ambito, dimension, filtro, soloVigentes, porPagina]);
+  const claveLista = JSON.stringify([ambito, dimension, filtro, soloVigentes, porPagina, qLista]);
   const [paginaLista, setPaginaLista] = useState({ clave: claveLista, n: 0 });
   const pagina = paginaLista.clave === claveLista ? paginaLista.n : 0;
   const cambiarPagina = (n: number) => {
@@ -141,9 +148,9 @@ export default function PerfilesPage() {
     if (panelDerecho.current) panelDerecho.current.scrollTop = 0;
   };
   const personas = useQuery({
-    queryKey: ["personas-dimension", ambito, dimension, filtro, soloVigentes, pagina, porPagina],
+    queryKey: ["personas-dimension", ambito, dimension, filtro, soloVigentes, pagina, porPagina, qLista],
     queryFn: () =>
-      getPersonasDimension(ambito, dimension, filtro ? { [filtro.tipo]: filtro.id } : {}, soloVigentes, pagina, porPagina),
+      getPersonasDimension(ambito, dimension, filtro ? { [filtro.tipo]: filtro.id } : {}, soloVigentes, pagina, porPagina, qLista),
     placeholderData: keepPreviousData,
   });
 
@@ -589,7 +596,7 @@ export default function PerfilesPage() {
                   {tituloFiltro ? `Personas · ${tituloFiltro}` : `Personas con evidencias de ${d?.nombre ?? ""}`}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {personas.data ? `${personas.data.total} personas. ` : ""}
+                  {personas.data ? `${personas.data.total_grupo} personas. ` : ""}
                   {filtro?.tipo === "patron"
                     ? "Ordenadas por afinidad con el patrón."
                     : filtro?.tipo === "tema"
@@ -607,6 +614,15 @@ export default function PerfilesPage() {
                     </button>
                   )}
                 </div>
+                <div className="mt-2">
+                  <BuscadorLista
+                    valor={qLista}
+                    onCambiar={buscarEnLista}
+                    contexto={tituloFiltro ?? d?.nombre ?? "la lista"}
+                    coincidencias={personas.data?.q ? personas.data.total : undefined}
+                    totalGrupo={personas.data?.total_grupo}
+                  />
+                </div>
               </div>
               <div>
               <ul className="divide-y">
@@ -614,7 +630,9 @@ export default function PerfilesPage() {
                   <li key={x.persona_id}>
                     <button onClick={() => setPersona(x.persona_id)} className="w-full text-left px-5 py-2 hover:bg-slate-50">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-sm text-slate-800 flex-1">{x.nombre}</span>
+                        <span className="text-sm text-slate-800 flex-1">
+                          <Resaltado texto={x.nombre} q={qLista} />
+                        </span>
                         <span className="text-[11px] tabular-nums text-slate-600" title="Nivel: percentil entre quienes tienen registros en esta dimensión">
                           {x.nivel != null ? <>nivel <strong className="text-slate-800 text-xs">{Math.round(x.nivel)}</strong></> : "—"}
                         </span>
@@ -622,6 +640,7 @@ export default function PerfilesPage() {
                       <p className="text-[11px] text-slate-500 truncate">
                         {x.cargo_actual ?? "Sin cargo actual"}
                         {!x.vigente && " · no vigente"}
+                        {qLista && ` · n.º ${x.posicion} de ${personas.data?.total_grupo ?? ""} en el orden de la lista`}
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {filtro?.tipo === "tema" && x.proporcion !== undefined
