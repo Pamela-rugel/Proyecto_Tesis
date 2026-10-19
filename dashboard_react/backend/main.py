@@ -284,6 +284,33 @@ def personas_patron_global(ambito: str, patron: int = Query(...), micro: int | N
     return {"ambito": ambito, "patron": patron, "micro": micro, **_pagina_personas(x, q, offset, limite)}
 
 
+UMBRAL_PUNTOS_GRUPO = 15  # = perfiles.perfil_conjunto.UMBRAL_PUNTOS (misma regla que la etiqueta)
+
+
+def _rasgos_grupo(dims: list[dict]) -> list[dict]:
+    """La etiqueta de un perfil amplio o microarquetipo ("Alto: … · Bajo: … · En Docencia: …") por
+    piezas y con sus datos, para mostrar cada dimensión como un enlace a su detalle. Misma regla que
+    `perfil_conjunto.describir`: dimensiones con intensidad media 15 puntos o más por encima o por
+    debajo de la referencia (hasta 3 de cada lado) y hasta 2 patrones de dimensión mucho más
+    frecuentes que en la referencia (lift >= 1,5, >= 50 % de quienes tienen evidencias y >= 30 % del
+    grupo)."""
+    def base(e: dict, tipo: str) -> dict:
+        return {"tipo": tipo, "dimension": e["dimension"], "nombre": e["nombre"], "media": e["intensidad_media"],
+                "media_referencia": e["intensidad_media_referencia"], "diferencia": e["diferencia"]}
+
+    orden = sorted(dims, key=lambda e: -e["diferencia"])
+    altos = [base(e, "alto") for e in orden if e["diferencia"] >= UMBRAL_PUNTOS_GRUPO][:3]
+    bajos = [base(e, "bajo") for e in reversed(orden) if e["diferencia"] <= -UMBRAL_PUNTOS_GRUPO][:3]
+    distintivos = sorted(
+        (e for e in dims if e.get("patron_frecuente") and (e["patron_frecuente"].get("lift") or 0) >= 1.5
+         and e["patron_frecuente"]["proporcion"] >= 0.5 and e["con_evidencia"] * e["patron_frecuente"]["proporcion"] >= 0.3),
+        key=lambda e: -(e["patron_frecuente"].get("lift") or 0))[:2]
+    patrones = [{**base(e, "patron"), "patron": e["patron_frecuente"]["patron"], "patron_nombre": e["patron_frecuente"].get("nombre"),
+                 "proporcion": e["patron_frecuente"]["proporcion"], "proporcion_referencia": e["patron_frecuente"]["proporcion_referencia"]}
+                for e in distintivos]
+    return altos + bajos + patrones
+
+
 def _patron_global_persona(ambito: str, persona_id: int) -> dict | None:
     """Patrón global y microarquetipo de la persona, con su similitud con cada representante."""
     glob, fichas = repo.patrones_globales(ambito)
@@ -302,6 +329,7 @@ def _patron_global_persona(ambito: str, persona_id: int) -> dict | None:
               "representante_nombre": repo.nombre(ficha["representante_id"]) if ficha.get("representante_id") else None,
               "temas": [{**t, "nombre_dimension": _nombre_dimension(t["dimension"])} for t in ficha.get("temas", [])],
               "k": fichas.get("k"), "estabilidad": fichas.get("estabilidad_ari"),
+              "rasgos": _rasgos_grupo(ficha.get("dimensiones", [])),
               "micro": None}
     info_micro = ficha.get("microarquetipos") or {}
     micros = info_micro.get("lista", [])
@@ -315,7 +343,8 @@ def _patron_global_persona(ambito: str, persona_id: int) -> dict | None:
                            "representante_nombre": repo.nombre(m["representante_id"]) if m.get("representante_id") else None,
                            "temas": [{**t, "nombre_dimension": _nombre_dimension(t["dimension"])} for t in m.get("temas", [])],
                            "k": info_micro.get("k"), "estabilidad": info_micro.get("estabilidad_ari"),
-                           "estable": info_micro.get("estable")}
+                           "estable": info_micro.get("estable"),
+                           "rasgos": _rasgos_grupo(m.get("dimensiones", []))}
     return salida
 
 
@@ -406,6 +435,111 @@ def _pagina_personas(x: pd.DataFrame, q: str | None, offset: int, limite: int) -
         x = x[x["nombre"].map(lambda n: _puntaje(terminos, _norm(n)) > 0)]
     return {"q": q.strip() if q and q.strip() else None, "total": len(x), "total_grupo": total_grupo,
             "personas": repo.as_records(x.iloc[offset:offset + limite].round(4))}
+
+
+@app.get("/api/perfil/{ambito}/comparar")
+def comparar_perfiles(ambito: str, a: int = Query(...), b: int = Query(...), max_textos: int = Query(8, ge=1, le=50)) -> dict:
+    """Dos personas lado a lado en las vistas del perfil completo (DEC-062), para comprobar si de
+    verdad se parecen. "Cómo participa": su nivel y patrón en cada dimensión. Vistas de contenido
+    (académico, docencia, formación, trayectoria): las evidencias de las dimensiones de la vista,
+    en una tabla de temas (en común, solo de una, solo de la otra, sin tema) con cuántas evidencias
+    tiene cada una y sus textos. En todas, `contenido`: qué dimensiones y tipos de evidencia forman
+    la vista y cuántas tiene cada una. Si `b` está entre las parecidas de `a`, se indica en qué
+    vistas son vecinas y su puesto en cada una (entre las personas vigentes)."""
+    from perfiles.perfil_multivista import BLOQUES
+
+    p = repo.personas(_ambito(ambito)).set_index("persona_id")
+    for x in (a, b):
+        if x not in p.index:
+            raise HTTPException(404, f"La persona {x} no está en el ámbito {ambito}")
+
+    # en qué vistas b es vecina de a, y su puesto en cada una (guardado al construir la red)
+    _, vecinos = repo.perfil_conjunto(ambito)
+    par = vecinos[(vecinos["persona_id"] == a) & (vecinos["vecino_id"] == b)]
+    vistas_par: dict[str, int | None] = {}
+    if len(par) and isinstance(par.iloc[0].get("vistas"), str):
+        for x in json.loads(par.iloc[0]["vistas"]):
+            x = x if isinstance(x, dict) else {"vista": x, "rango": None}
+            vistas_par[x["vista"]] = x.get("rango")
+
+    def persona(pid: int) -> dict:
+        g = _patron_global_persona(ambito, pid)
+        return {"persona_id": pid, "nombre": repo.nombre(pid), "cargo_actual": p.at[pid, "cargo_actual"],
+                "vigente": bool(p.at[pid, "vigente"]),
+                "perfil": None if g is None else {"patron": g["patron"], "micro": (g.get("micro") or {}).get("codigo")}}
+
+    defs = repo.definiciones_dimensiones()
+    _, patrones, fichas_dim = repo.micro_dimensiones(ambito)
+    nombre_patron = {(dim, f["id"]): f.get("nombre") for dim, x in fichas_dim.items() if x.get("patrones")
+                     for f in x["patrones"]["patrones"]}
+    tema_etiqueta = {(dim, int(t["id"])): t["etiqueta"] for dim, x in fichas_dim.items() if x.get("temas")
+                     for t in x["temas"]["temas"]}
+
+    # --- vista "Cómo participa": nivel y patrón de cada una en las 12 dimensiones
+    d = repo.dimensiones(ambito)
+    d = d[d["persona_id"].isin([a, b])].set_index(["persona_id", "dimension"])
+    pat = patrones[patrones["persona_id"].isin([a, b])].set_index(["persona_id", "dimension"]) if len(patrones) else None
+    niveles = _niveles(ambito)
+
+    def en_dimension(pid: int, dim: str) -> dict:
+        n_ev = int(d.at[(pid, dim), "n_evidencias"]) if (pid, dim) in d.index else 0
+        patron = int(pat.at[(pid, dim), "patron"]) if pat is not None and (pid, dim) in pat.index else None
+        return {"n_evidencias": n_ev, "nivel": niveles.get((pid, dim)),
+                "patron": patron, "patron_nombre": nombre_patron.get((dim, patron)) if patron is not None else None}
+
+    actividad = []
+    for dim, cfg in defs.items():
+        x, y = en_dimension(a, dim), en_dimension(b, dim)
+        actividad.append({"dimension": dim, "nombre": cfg.get("nombre", dim), "a": x, "b": y,
+                          "mismo_patron": x["patron"] is not None and x["patron"] == y["patron"]})
+    vistas = [{"vista": "actividad", "nombre": NOMBRES_VISTAS["actividad"], "vecinas": "actividad" in vistas_par,
+               "rango": vistas_par.get("actividad"), "dimensiones_actividad": actividad}]
+
+    # --- vistas de contenido: las evidencias que las forman, por tema
+    dim_de_tipo = {t: dim for dim, cfg in defs.items() for t in cfg.get("tipos_evidencia", [])}
+    te = repo.temas_evidencia(ambito)
+
+    def evidencias(pid: int) -> pd.DataFrame:
+        ev = repo.evidencias_de(pid)[["evidencia_id", "tipo_id", "texto"]].reset_index(drop=True)
+        ev = ev.assign(dimension=ev["tipo_id"].map(dim_de_tipo))
+        suyos = te.loc[[pid], ["evidencia_id", "tema_id"]].reset_index(drop=True) if pid in te.index else None
+        if suyos is not None:
+            ev = ev.merge(suyos.drop_duplicates("evidencia_id"), on="evidencia_id", how="left")
+        else:
+            ev = ev.assign(tema_id=float("nan"))
+        return ev.assign(tema=ev["tema_id"].fillna(-1).astype(int))
+
+    ev_a, ev_b = evidencias(a), evidencias(b)
+
+    def contenido(dims: list[str]) -> list[dict]:
+        """Qué forma la vista: sus dimensiones, sus tipos de evidencia y cuántas tiene cada una."""
+        return [{"dimension": dim, "nombre": _nombre_dimension(dim), "tipos": defs.get(dim, {}).get("tipos_evidencia", []),
+                 "n_a": int((ev_a["dimension"] == dim).sum()), "n_b": int((ev_b["dimension"] == dim).sum())} for dim in dims]
+
+    vistas[0]["contenido"] = contenido(list(defs))
+    for vista, dims in BLOQUES.items():
+        ea, eb = ev_a[ev_a["dimension"].isin(dims)], ev_b[ev_b["dimension"].isin(dims)]
+        por_a = {k: g for k, g in ea.groupby(["dimension", "tema"])}
+        por_b = {k: g for k, g in eb.groupby(["dimension", "tema"])}
+        temas = []
+        for clave in set(por_a) | set(por_b):
+            dim, tema = clave
+            ga, gb = por_a.get(clave), por_b.get(clave)
+            temas.append({"dimension": dim, "nombre_dimension": _nombre_dimension(dim),
+                          "tema": int(tema) if tema >= 0 else None,
+                          "etiqueta": tema_etiqueta.get((dim, int(tema))) if tema >= 0 else None,
+                          "n_a": 0 if ga is None else int(len(ga)), "n_b": 0 if gb is None else int(len(gb)),
+                          "comun": tema >= 0 and ga is not None and gb is not None,
+                          "textos_a": [] if ga is None else ga["texto"].fillna("").astype(str).tolist()[:max_textos],
+                          "textos_b": [] if gb is None else gb["texto"].fillna("").astype(str).tolist()[:max_textos]})
+        # en común, solo de a, solo de b y al final sin tema; dentro, de más a menos evidencias
+        orden = lambda t: (0 if t["comun"] else 3 if t["tema"] is None else 1 if t["n_a"] else 2, -(t["n_a"] + t["n_b"]))  # noqa: E731
+        vistas.append({
+            "vista": vista, "nombre": NOMBRES_VISTAS.get(vista, vista), "vecinas": vista in vistas_par,
+            "rango": vistas_par.get(vista), "contenido": contenido(dims), "temas": sorted(temas, key=orden),
+            "a": {"n": int(len(ea))}, "b": {"n": int(len(eb))},
+        })
+    return {"ambito": ambito, "a": persona(a), "b": persona(b), "son_parecidas": bool(len(par)), "vistas": vistas}
 
 
 @app.get("/api/personas/buscar")

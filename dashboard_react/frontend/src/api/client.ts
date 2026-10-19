@@ -198,16 +198,37 @@ export interface Persona {
     /** número de perfiles amplios del ámbito y estabilidad (ARI) del agrupamiento */
     k?: number | null;
     estabilidad?: number | null;
+    /** la etiqueta por piezas: dimensiones por encima/debajo del promedio y patrones típicos */
+    rasgos?: RasgoGrupo[];
     micro: {
       micro: number; codigo: string; etiqueta: string; tamano: number; mixto: boolean;
       similitud_representante: number | null; es_representante: boolean;
       representante_id: number | null; representante_nombre: string | null;
       /** temas distintivos frente a su perfil amplio, y estabilidad de la subdivisión */
       temas?: TemaDistintivo[]; k?: number | null; estabilidad?: number | null; estable?: boolean | null;
+      rasgos?: RasgoGrupo[];
     } | null;
   } | null;
   /** personas vigentes con el perfil completo más parecido (DEC-056), en orden */
   parecidos: Parecido[];
+}
+
+/** Una pieza de la etiqueta de un perfil amplio o microarquetipo: una dimensión en la que el grupo
+ *  está por encima (alto) o por debajo (bajo) del promedio de su referencia (el ámbito, o su perfil
+ *  amplio), o un patrón de esa dimensión mucho más frecuente en el grupo (patron). */
+export interface RasgoGrupo {
+  tipo: "alto" | "bajo" | "patron";
+  dimension: string;
+  nombre: string;
+  /** intensidad media (0–100) del grupo y de su referencia, y su diferencia en puntos */
+  media: number;
+  media_referencia: number;
+  diferencia: number;
+  /** solo en "patron": el patrón, su nombre y en qué parte de quienes tienen evidencias aparece */
+  patron?: number;
+  patron_nombre?: string | null;
+  proporcion?: number;
+  proporcion_referencia?: number;
 }
 
 /** desde dónde se abre la ficha: decide la pestaña inicial */
@@ -224,7 +245,70 @@ export interface NavegacionFicha {
   patronGlobal?: (patron: number, micro: number | null) => void;
   /** ir a una dimensión en la vista Por dimensión, opcionalmente filtrada por un patrón o un tema */
   dimension?: (dimension: string, filtro: FiltroDimension) => void;
+  /** comparar a la persona `a` con `b` en las vistas del perfil completo (pestaña Comparar) */
+  comparar?: (a: { id: number; nombre: string }, b: { id: number; nombre: string }) => void;
 }
+
+// ---- Comparar dos perfiles en las vistas del perfil completo (DEC-062) ----
+export interface EnDimensionComparada {
+  n_evidencias: number;
+  nivel: number | null;
+  patron: number | null;
+  patron_nombre: string | null;
+}
+/** qué forma una vista: una de sus dimensiones, sus tipos de evidencia y cuántas tiene cada persona */
+export interface ContenidoVista {
+  dimension: string;
+  nombre: string;
+  tipos: string[];
+  n_a: number;
+  n_b: number;
+}
+/** una fila de la tabla de temas de una vista de contenido */
+export interface TemaComparado {
+  dimension: string;
+  nombre_dimension: string;
+  /** null = evidencias sin tema asignado */
+  tema: number | null;
+  etiqueta: string | null;
+  n_a: number;
+  n_b: number;
+  /** las dos tienen evidencias en este tema */
+  comun: boolean;
+  textos_a: string[];
+  textos_b: string[];
+}
+export interface VistaComparada {
+  vista: string;
+  nombre: string;
+  /** en esta vista, `b` está entre las más parecidas a `a`, y en qué puesto (entre vigentes) */
+  vecinas: boolean;
+  rango: number | null;
+  contenido: ContenidoVista[];
+  /** solo en "actividad": nivel y patrón de cada una en las 12 dimensiones */
+  dimensiones_actividad?: { dimension: string; nombre: string; a: EnDimensionComparada; b: EnDimensionComparada; mismo_patron: boolean }[];
+  /** en las vistas de contenido: temas (en común, solo de una, sin tema) y total de evidencias */
+  temas?: TemaComparado[];
+  a?: { n: number };
+  b?: { n: number };
+}
+export interface PersonaEnComparacion {
+  persona_id: number;
+  nombre: string;
+  cargo_actual: string | null;
+  vigente: boolean;
+  perfil: { patron: number; micro: string | null } | null;
+}
+export interface ComparacionPerfiles {
+  ambito: Ambito;
+  a: PersonaEnComparacion;
+  b: PersonaEnComparacion;
+  /** `b` está entre las personas más parecidas a `a` */
+  son_parecidas: boolean;
+  vistas: VistaComparada[];
+}
+export const getComparacionPerfiles = async (ambito: Ambito, a: number, b: number) =>
+  (await api.get<ComparacionPerfiles>(`/api/perfil/${ambito}/comparar`, { params: { a, b, max_textos: 30 } })).data;
 
 export type ValorAtributo = string | number | boolean | null | ValorAtributo[] | { [k: string]: ValorAtributo };
 export interface EvidenciaDetalle {

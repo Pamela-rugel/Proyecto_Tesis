@@ -1,3 +1,4 @@
+import { useLocation, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NOMBRE_AMBITO } from "../lib/texto";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ import {
 import MapaPerfil, { type ColorPerfil } from "../components/MapaPerfil";
 import PanelPatronGlobal, { type PestanaPerfil } from "../components/PanelPatronGlobal";
 import FichaPersona from "../components/FichaPersona";
+import type { EntradaComparar } from "./CompararPage";
 import MapaDimension from "../components/MapaDimension";
 import BuscadorPersonas from "../components/BuscadorPersonas";
 import Paginacion from "../components/Paginacion";
@@ -27,7 +29,10 @@ type Filtro = FiltroDimension;
 // Perfiles por dimensión de evidencia (DEC-053/055): dimensiones a la izquierda; al centro, los
 // patrones de actividad y los temas descubiertos en la dimensión; a la derecha, las personas del
 // patrón o tema elegido (o la ficha de una persona).
-export default function PerfilesPage() {
+export default function PerfilesPage({ activa = true }: { activa?: boolean }) {
+  // la página sigue montada (oculta) en las otras pestañas, para que al volver todo siga igual
+  const navigate = useNavigate();
+  const location = useLocation();
   const [inicial] = useState(() => new URLSearchParams(window.location.search));
   const [ambito, setAmbito] = useState<Ambito>(
     AMBITOS.some((a) => a.id === inicial.get("ambito")) ? (inicial.get("ambito") as Ambito) : "todos",
@@ -88,8 +93,21 @@ export default function PerfilesPage() {
     return () => window.removeEventListener("resize", f);
   }, []);
 
-  // enlace compartible sin identificadores de personas
+  // al volver a la pestaña: los mapas se dibujaron ocultos y necesitan medir su ancho de nuevo
   useEffect(() => {
+    if (activa) window.dispatchEvent(new Event("resize"));
+  }, [activa]);
+  // abrir una ficha pedida desde otra pestaña (p. ej. Comparar)
+  useEffect(() => {
+    const id = (location.state as { abrirFicha?: number } | null)?.abrirFicha;
+    if (activa && typeof id === "number") setFicha({ id, origen: vista, dimension: vista === "dimension" ? dimension : undefined });
+    // solo cuando llega una navegación nueva
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
+
+  // enlace compartible sin identificadores de personas (solo con la pestaña a la vista)
+  useEffect(() => {
+    if (!activa) return;
     const url = new URL(window.location.href);
     url.searchParams.set("ambito", ambito);
     url.searchParams.set("dimension", dimension);
@@ -100,13 +118,13 @@ export default function PerfilesPage() {
     else url.searchParams.delete("micro");
     url.searchParams.delete("patron");
     url.searchParams.delete("tema");
-    window.history.replaceState(null, "", url);
-  }, [ambito, dimension, vista, globalSel, microSel]);
+    window.history.replaceState(window.history.state, "", url);
+  }, [activa, ambito, dimension, vista, globalSel, microSel]);
 
   // Esc vuelve un paso atrás
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || !activa) return;
       if (persona !== null) volverDeFicha();
       else setFiltro(null);
     };
@@ -207,6 +225,7 @@ export default function PerfilesPage() {
     persona: (id, origen, dim) => setFicha({ id, origen, dimension: dim }),
     patronGlobal: irPatronGlobal,
     dimension: irDimension,
+    comparar: (a, b) => navigate("/comparar", { state: { ambito, a, b, desdeFicha: true } satisfies EntradaComparar }),
   };
 
   if (ambitos.isError) {

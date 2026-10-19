@@ -1,6 +1,6 @@
 import { de, NOMBRE_AMBITO } from "../lib/texto";
 import { colorPatron } from "../lib/colores";
-import type { Ambito, NavegacionFicha, Persona, TemaDistintivo } from "../api/client";
+import type { Ambito, NavegacionFicha, Persona, RasgoGrupo, TemaDistintivo } from "../api/client";
 import Enlace from "./Enlace";
 import { Bloque, Chip } from "./Bloques";
 
@@ -8,6 +8,8 @@ interface Props {
   ambito: Ambito;
   persona: Persona;
   nav: NavegacionFicha;
+  /** ver el detalle de una dimensión en la pestaña Dimensiones de esta misma ficha */
+  onVerDimension?: (dimension: string) => void;
 }
 
 // qué significa parecerse en cada vista de la red (tooltip de las pastillas)
@@ -29,19 +31,92 @@ const rasgos = (etiqueta: string) =>
     return acc;
   }, []);
 
+// Temas (de qué tratan las evidencias) mucho más frecuentes en el grupo que en su referencia, con
+// un título que dice qué son y la dimensión en cada pastilla.
 function Temas({ temas, nav }: { temas: TemaDistintivo[]; nav: NavegacionFicha }) {
   if (!temas.length) return null;
   return (
-    <div className="flex flex-wrap gap-1 mt-1.5">
-      {temas.map((t) => (
-        <Chip key={`${t.dimension}-${t.tema}`} fuerte
-          titulo={`${t.nombre_dimension ?? t.dimension}: ${Math.round(t.proporcion * 100)} % del grupo tiene evidencias en este tema (${t.lift}× más que en el total)`}>
-          <span className="text-slate-500">{t.nombre_dimension ?? t.dimension}:</span>
-          <Enlace onClick={nav.dimension ? () => nav.dimension!(t.dimension, { tipo: "tema", id: t.tema }) : undefined}>
-            {t.etiqueta.split(",").slice(0, 3).join(",")}
-          </Enlace>
-        </Chip>
-      ))}
+    <div className="mt-1.5">
+      <p className="text-[11px] text-slate-500 mb-1"
+        title="Temas descubiertos en el texto de las evidencias (títulos, materias, proyectos…) que aparecen mucho más en este grupo que en el total">
+        <span className="text-espol-blue">◆</span> Temas frecuentes en el grupo (de qué tratan sus evidencias):
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {temas.map((t) => (
+          <Chip key={`${t.dimension}-${t.tema}`} fuerte
+            titulo={`Tema de ${t.nombre_dimension ?? t.dimension}: ${Math.round(t.proporcion * 100)} % del grupo tiene evidencias en este tema (${t.lift}× más que en el total)`}>
+            <span className="text-slate-500">{t.nombre_dimension ?? t.dimension}:</span>
+            <Enlace onClick={nav.dimension ? () => nav.dimension!(t.dimension, { tipo: "tema", id: t.tema }) : undefined}>
+              {t.etiqueta.split(",").slice(0, 3).join(",")}
+            </Enlace>
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const GRUPOS_RASGO: { tipo: RasgoGrupo["tipo"]; titulo: string; icono: string }[] = [
+  { tipo: "alto", titulo: "Más que el promedio en", icono: "▲" },
+  { tipo: "bajo", titulo: "Menos que el promedio en", icono: "▼" },
+  { tipo: "patron", titulo: "Patrón típico en", icono: "●" },
+];
+
+// La etiqueta del perfil por piezas: cada dimensión es un enlace a su detalle en la pestaña
+// Dimensiones de esta ficha. El título dice qué tiene el grupo frente a su referencia y qué tiene
+// la persona en esa dimensión.
+function RasgosGrupo({ rasgos, referencia, persona, onVerDimension, sinDiferencias = "Cerca del promedio en todo" }: {
+  rasgos: RasgoGrupo[]; referencia: string; persona: Persona; onVerDimension?: (dimension: string) => void; sinDiferencias?: string;
+}) {
+  if (!rasgos.length) return <p className="text-[11px] text-slate-500">{sinDiferencias}.</p>;
+  const suya = (dim: string) => persona.dimensiones.find((x) => x.dimension === dim);
+  const titulo = (r: RasgoGrupo) => {
+    const d = suya(r.dimension);
+    const grupoTxt = r.tipo === "patron"
+      ? `En ${r.nombre}, el ${Math.round((r.proporcion ?? 0) * 100)} % de quienes tienen evidencias sigue «${r.patron_nombre ?? `Patrón ${(r.patron ?? 0) + 1}`}» (en ${referencia}: ${Math.round((r.proporcion_referencia ?? 0) * 100)} %).`
+      : `${r.nombre}: intensidad media ${Math.round(r.media)} de 100 en el grupo, frente a ${Math.round(r.media_referencia)} en ${referencia}.`;
+    const suyoTxt = !d
+      ? ""
+      : d.estado !== "con_registros"
+        ? " Esta persona no tiene registros en la dimensión."
+        : ` Esta persona: ${d.nivel != null ? `nivel ${Math.round(d.nivel)}` : "con registros"}${d.patron ? ` · ${d.patron.nombre ?? `Patrón ${d.patron.patron + 1}`}` : ""}.`;
+    return `${grupoTxt}${suyoTxt}${onVerDimension ? " Clic para ver su detalle en Dimensiones." : ""}`;
+  };
+  return (
+    <div className="space-y-1">
+      {GRUPOS_RASGO.map(({ tipo, titulo: t, icono }) => {
+        const lista = rasgos.filter((r) => r.tipo === tipo);
+        if (!lista.length) return null;
+        return (
+          <div key={tipo} className="flex flex-wrap items-center gap-1">
+            <span className="text-[11px] text-slate-500 mr-0.5">
+              <span className={tipo === "bajo" ? "text-slate-500" : "text-espol-blue"}>{icono}</span> {t}:
+            </span>
+            {lista.map((r) => {
+              const contenido = (
+                <>
+                  {r.nombre}
+                  {tipo === "patron" && r.patron_nombre && <span className="text-slate-500">: {r.patron_nombre}</span>}
+                  {onVerDimension && <span aria-hidden className="text-slate-400">›</span>}
+                </>
+              );
+              return onVerDimension ? (
+                <button
+                  key={`${tipo}-${r.dimension}`}
+                  type="button"
+                  title={titulo(r)}
+                  onClick={() => onVerDimension(r.dimension)}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] max-w-full bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-espol-navy hover:ring-1 hover:ring-blue-200 text-left"
+                >
+                  {contenido}
+                </button>
+              ) : (
+                <Chip key={`${tipo}-${r.dimension}`} titulo={titulo(r)}>{contenido}</Chip>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -49,7 +124,7 @@ function Temas({ temas, nav }: { temas: TemaDistintivo[]; nav: NavegacionFicha }
 // Pestaña "Perfil completo" (DEC-062): la persona en la red multivista que une cómo participa y de
 // qué trata su evidencia (NEMO). Lo principal son las personas parecidas y en qué se parecen; el
 // perfil amplio y su microarquetipo orientan (los datos son casi continuos, no grupos cerrados).
-export default function PerfilCompleto({ ambito, persona, nav }: Props) {
+export default function PerfilCompleto({ ambito, persona, nav, onVerDimension }: Props) {
   const g = persona.patron_global;
   const grupo = NOMBRE_AMBITO[ambito];
   const irPersona = nav.persona ? (id: number) => nav.persona!(id, "perfil") : undefined;
@@ -77,11 +152,15 @@ export default function PerfilCompleto({ ambito, persona, nav }: Props) {
             </Enlace>
             <span className="text-[11px] text-slate-400">· {g.tamano} personas {de(grupo)}</span>
           </div>
-          <div className="flex flex-wrap gap-1">
-            {rasgos(g.etiqueta).map((r) => (
-              <Chip key={r}>{r}</Chip>
-            ))}
-          </div>
+          {g.rasgos ? (
+            <RasgosGrupo rasgos={g.rasgos} referencia={grupo} persona={persona} onVerDimension={onVerDimension} />
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {rasgos(g.etiqueta).map((r) => (
+                <Chip key={r}>{r}</Chip>
+              ))}
+            </div>
+          )}
           <Temas temas={g.temas ?? []} nav={nav} />
           <p className="text-[11px] text-slate-500 mt-1.5">
             {g.es_representante ? (
@@ -117,11 +196,16 @@ export default function PerfilCompleto({ ambito, persona, nav }: Props) {
             <span className="text-[11px] text-slate-400">· {g.micro.tamano} personas del Perfil {g.patron + 1}</span>
           </div>
           <p className="text-[11px] text-slate-500 mb-1">Subgrupo dentro de su perfil amplio; se describe frente a él.</p>
-          <div className="flex flex-wrap gap-1">
-            {rasgos(g.micro.etiqueta).map((r) => (
-              <Chip key={r}>{r}</Chip>
-            ))}
-          </div>
+          {g.micro.rasgos ? (
+            <RasgosGrupo rasgos={g.micro.rasgos} referencia={`el Perfil ${g.patron + 1}`} persona={persona} onVerDimension={onVerDimension}
+              sinDiferencias="Como su perfil amplio, sin diferencias marcadas" />
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {rasgos(g.micro.etiqueta).map((r) => (
+                <Chip key={r}>{r}</Chip>
+              ))}
+            </div>
+          )}
           <Temas temas={g.micro.temas ?? []} nav={nav} />
           {!g.micro.es_representante && g.micro.representante_nombre && g.micro.representante_id !== null && (
             <p className="text-[11px] text-slate-500 mt-1.5">
@@ -142,7 +226,17 @@ export default function PerfilCompleto({ ambito, persona, nav }: Props) {
               <li key={x.persona_id} className="leading-tight">
                 <span className="flex items-baseline gap-1.5">
                   <span className="text-[10px] text-slate-400 tabular-nums w-4 text-right" title="Orden de cercanía entre las personas vigentes">{i + 1}</span>
-                  <Enlace className="font-medium" onClick={irPersona ? () => irPersona(x.persona_id) : undefined}>{x.nombre}</Enlace>
+                  <Enlace className="font-medium flex-1" onClick={irPersona ? () => irPersona(x.persona_id) : undefined}>{x.nombre}</Enlace>
+                  {nav.comparar && (
+                    <button
+                      type="button"
+                      onClick={() => nav.comparar!({ id: persona.persona_id, nombre: persona.nombre }, { id: x.persona_id, nombre: x.nombre })}
+                      title="Comparar las dos personas vista por vista, con las evidencias que forman cada una"
+                      className="shrink-0 rounded border border-slate-200 px-1.5 py-px text-[10px] text-espol-blue hover:bg-blue-50 hover:border-blue-200"
+                    >
+                      Comparar
+                    </button>
+                  )}
                 </span>
                 <span className="block ml-5 text-[11px] text-slate-500 leading-snug">{x.cargo_actual ?? "Sin cargo actual"}</span>
                 {(x.vistas?.length ?? 0) > 0 && (
@@ -167,7 +261,10 @@ export default function PerfilCompleto({ ambito, persona, nav }: Props) {
             ))}
           </ol>
         )}
-        <p className="text-[10px] text-slate-400 mt-1.5">En orden de cercanía. Pasa el cursor por cada pastilla para ver qué significa. No mide competencia ni idoneidad.</p>
+        <p className="text-[10px] text-slate-400 mt-1.5">
+          En orden de cercanía. Clic en el nombre para ver su ficha, o en «Comparar» para ver vista por vista las evidencias de
+          ambas. Pasa el cursor por cada pastilla para ver qué significa. No mide competencia ni idoneidad.
+        </p>
       </Bloque>
     </div>
   );

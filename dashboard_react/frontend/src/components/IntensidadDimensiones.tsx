@@ -38,19 +38,79 @@ const DETALLE_ESTADO: Record<EstadoRegistros, string> = {
 // frente a todo el grupo (DEC-053), su patrón de actividad, sus temas (DEC-055) y de dónde sale el
 // número.
 export default function IntensidadDimensiones({ ambito, dimensiones, dimensionInicial, nav, onVerEvidencias }: Props) {
-  // acordeón: el detalle (corto, en mini pestañas) se abre debajo de su fila; una dimensión abierta a
-  // la vez y la fila elegida sube al inicio, así la siguiente queda a la vista
+  // acordeón: el detalle (corto, en mini pestañas) se abre debajo de su fila, una dimensión a la vez.
+  // Mientras está abierta, su fila pasa al primer lugar (con un resaltado breve) para que su detalle
+  // quede a la vista; al cerrarla vuelve a su lugar.
   const [abierta, setAbierta] = useState<string | null>(dimensionInicial ?? null);
-  const filas = useRef<Record<string, HTMLLIElement | null>>({});
+  const [destello, setDestello] = useState<string | null>(dimensionInicial ?? null);
+  const lista = useRef<HTMLUListElement | null>(null);
   const elegir = (dim: string | null) => {
     setAbierta(dim);
-    if (dim) requestAnimationFrame(() => filas.current[dim]?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    if (dim) {
+      setDestello(dim);
+      requestAnimationFrame(() => lista.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    }
   };
   useEffect(() => {
-    if (dimensionInicial) filas.current[dimensionInicial]?.scrollIntoView({ block: "start" });
+    if (dimensionInicial) lista.current?.scrollIntoView({ block: "start" });
   }, [dimensionInicial]);
+  useEffect(() => {
+    if (!destello) return;
+    const t = setTimeout(() => setDestello(null), 1600);
+    return () => clearTimeout(t);
+  }, [destello]);
   if (!dimensiones.length) return <p className="text-xs text-slate-500">Esta versión de resultados no tiene dimensiones.</p>;
   const grupo = NOMBRE_AMBITO[ambito];
+  const elegida = abierta ? dimensiones.find((d) => d.dimension === abierta) : undefined;
+  const resto = elegida ? dimensiones.filter((d) => d !== elegida) : dimensiones;
+
+  const fila = (d: DimensionPersona) => {
+    const desplegada = abierta === d.dimension;
+    const con = d.estado === "con_registros";
+    return (
+      <li
+        key={d.dimension}
+        className={`rounded-md transition-shadow duration-700 ${destello === d.dimension ? "ring-2 ring-espol-blue/50" : "ring-0"}`}
+      >
+        <button
+          type="button"
+          onClick={() => elegir(desplegada ? null : d.dimension)}
+          aria-expanded={desplegada}
+          title={
+            con
+              ? d.nivel != null
+                ? `Nivel ${Math.round(d.nivel)} entre las ${d.n_con_registros} personas con registros.`
+                : `Solo ${d.n_con_registros} personas tienen registros: muy pocas para comparar.`
+              : DETALLE_ESTADO[d.estado]
+          }
+          className={`w-full grid grid-cols-[7.5rem_minmax(0,1fr)_2rem_3.25rem] items-center gap-2 py-1.5 px-1 rounded text-left ${
+            desplegada ? "bg-slate-50" : "hover:bg-slate-50"
+          }`}
+        >
+          <span className={`text-xs truncate ${desplegada ? "font-semibold text-espol-navy" : "text-slate-700"}`}>{d.nombre}</span>
+          {con && d.nivel != null ? (
+            <span className="relative h-2 rounded-sm bg-slate-100" aria-hidden>
+              <span
+                className="absolute top-1/2 w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-espol-blue ring-2 ring-white"
+                style={{ left: `${d.nivel}%` }}
+              />
+            </span>
+          ) : (
+            <span className="text-[11px] italic text-slate-400 truncate">
+              {con ? "Muy pocas personas para comparar" : TEXTO_ESTADO[d.estado]}
+            </span>
+          )}
+          <span className={`text-xs tabular-nums text-right ${con && d.nivel != null ? "text-slate-800 font-medium" : "text-slate-400"}`}>
+            {con && d.nivel != null ? Math.round(d.nivel) : "—"}
+          </span>
+          <span className="text-[11px] tabular-nums text-right text-slate-500">
+            {d.n_evidencias > 0 ? `${d.n_evidencias} ev.` : ""}
+          </span>
+        </button>
+        {desplegada && <Detalle d={d} ambito={ambito} nav={nav} onVerEvidencias={onVerEvidencias} />}
+      </li>
+    );
+  };
 
   return (
     <div>
@@ -62,51 +122,15 @@ export default function IntensidadDimensiones({ ambito, dimensiones, dimensionIn
         Nivel entre quienes tienen registros (percentil).
       </p>
 
-      <ul className="mt-3 space-y-0.5">
-        {dimensiones.map((d) => {
-          const desplegada = abierta === d.dimension;
-          const con = d.estado === "con_registros";
-          return (
-            <li key={d.dimension} ref={(el) => { filas.current[d.dimension] = el; }} className="scroll-mt-1">
-              <button
-                type="button"
-                onClick={() => elegir(desplegada ? null : d.dimension)}
-                aria-expanded={desplegada}
-                title={
-                  con
-                    ? d.nivel != null
-                      ? `Nivel ${Math.round(d.nivel)} entre las ${d.n_con_registros} personas con registros.`
-                      : `Solo ${d.n_con_registros} personas tienen registros: muy pocas para comparar.`
-                    : DETALLE_ESTADO[d.estado]
-                }
-                className={`w-full grid grid-cols-[7.5rem_minmax(0,1fr)_2rem_3.25rem] items-center gap-2 py-1.5 px-1 rounded text-left ${
-                  desplegada ? "bg-slate-50" : "hover:bg-slate-50"
-                }`}
-              >
-                <span className={`text-xs truncate ${desplegada ? "font-semibold text-espol-navy" : "text-slate-700"}`}>{d.nombre}</span>
-                {con && d.nivel != null ? (
-                  <span className="relative h-2 rounded-sm bg-slate-100" aria-hidden>
-                    <span
-                      className="absolute top-1/2 w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-espol-blue ring-2 ring-white"
-                      style={{ left: `${d.nivel}%` }}
-                    />
-                  </span>
-                ) : (
-                  <span className="text-[11px] italic text-slate-400 truncate">
-                    {con ? "Muy pocas personas para comparar" : TEXTO_ESTADO[d.estado]}
-                  </span>
-                )}
-                <span className={`text-xs tabular-nums text-right ${con && d.nivel != null ? "text-slate-800 font-medium" : "text-slate-400"}`}>
-                  {con && d.nivel != null ? Math.round(d.nivel) : "—"}
-                </span>
-                <span className="text-[11px] tabular-nums text-right text-slate-500">
-                  {d.n_evidencias > 0 ? `${d.n_evidencias} ev.` : ""}
-                </span>
-              </button>
-              {desplegada && <Detalle d={d} ambito={ambito} nav={nav} onVerEvidencias={onVerEvidencias} />}
-            </li>
-          );
-        })}
+      <ul ref={lista} className="mt-3 space-y-0.5 scroll-mt-12">
+        {elegida && fila(elegida)}
+        {elegida && (
+          <li aria-hidden className="flex items-center gap-2 px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+            <span>Demás dimensiones</span>
+            <span className="flex-1 border-t border-slate-200" />
+          </li>
+        )}
+        {resto.map(fila)}
       </ul>
       <div className="grid grid-cols-[7.5rem_minmax(0,1fr)_2rem_3.25rem] gap-2 px-1 mt-1 text-[10px] text-slate-400" aria-hidden>
         <span />

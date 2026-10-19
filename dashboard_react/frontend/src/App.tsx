@@ -1,13 +1,18 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import PerfilesPage from "./pages/PerfilesPage";
 import BusquedaPage from "./pages/BusquedaPage";
+import CompararPage from "./pages/CompararPage";
 
 const pestana = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1.5 rounded-md text-sm ${isActive ? "bg-white/15 text-white" : "text-slate-300 hover:text-white"}`;
 
 // Perfiles del personal por dimensión de evidencia (DEC-053/055): intensidad, patrones y temas descubiertos.
 // Búsqueda (04_busqueda_semantica): personas a partir de una consulta en lenguaje natural.
+// Comparar: dos personas lado a lado en las vistas del perfil completo (DEC-062).
+// Perfiles queda montada (oculta) en las otras pestañas: al volver, su ficha y su vista siguen igual.
 export default function App() {
+  const { pathname } = useLocation();
+  const enPerfiles = !pathname.startsWith("/busqueda") && !pathname.startsWith("/comparar");
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-espol-navy text-white border-b border-black/10">
@@ -23,15 +28,20 @@ export default function App() {
             <nav className="ml-8 flex gap-1">
               <NavLink to="/" end className={pestana}>Perfiles</NavLink>
               <NavLink to="/busqueda" className={pestana}>Búsqueda</NavLink>
+              <NavLink to="/comparar" className={pestana}>Comparar</NavLink>
             </nav>
           </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-4">
+        <div hidden={!enPerfiles}>
+          <PerfilesPage activa={enPerfiles} />
+        </div>
         <Routes>
           <Route path="/busqueda" element={<BusquedaPage />} />
-          <Route path="*" element={<PerfilesPage />} />
+          <Route path="/comparar" element={<CompararPage />} />
+          <Route path="*" element={null} />
         </Routes>
       </main>
 
