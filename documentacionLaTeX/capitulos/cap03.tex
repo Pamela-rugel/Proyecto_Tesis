@@ -68,30 +68,104 @@ De las 1\,389 personas vigentes, la Figura \ref{fig:vigentes} muestra el porcent
 Para cada dimensión se obtuvieron patrones de actividad, que describen como participa cada persona dentro de ese patrón. A continuación se presentan los resultados de cada dimensión,
 así como la descripción de los patrones obtenidos y su interpretación.
 
+% Colores de los patrones, iguales a los del dashboard (frontend/src/lib/colores.ts)
+\definecolor{patronP1}{HTML}{2A78D6}
+\definecolor{patronP2}{HTML}{1BAF7A}
+\definecolor{patronP3}{HTML}{EDA100}
+\definecolor{patronP4}{HTML}{E87BA4}
+\definecolor{patronP5}{HTML}{008300}
+\definecolor{patronP6}{HTML}{4A3AA7}
+\providecommand{\patron}[1]{\textcolor{patronP#1}{\rule{0.65em}{0.65em}}\,P#1}
+
 \subsubsection{Tesis dirigidas}
 \label{sec:res_tesis}
 
-En Tesis dirigidas se obtuvieron 4 patrones para las 549 personas con registros del ámbito de todo el personal, de las cuales 331 están vigentes;la partición fue estable (ARI de 0,978). 
+En Tesis dirigidas se obtuvieron 4 patrones de actividad para las 549 personas con registros del ámbito de todo el personal, de las cuales 331 están vigentes. Para los administrativos solo se identificaron 32 personas con registros, por lo que no se conformaron patrones para este grupo.
 
-La Figura \ref{fig:patrones_tesis} muestra el mapa de los patrones con el personal vigente, una tarjeta por patrón con su tamaño y su persona representativa, y la posición de cada patrón en las cinco variables consideradas: tesis dirigidas, estudiantes dirigidos, tesis de maestría de investigación o doctorado, proporción de estas últimas y estudiantes por tesis.
 
 \begin{figure}[!htbp]
     \centering
-    \caption{Patrones de actividad en Tesis dirigidas (ámbito de todo el personal). (a) Mapa t-SNE del personal vigente coloreado por patrón. (b) Tamaño de cada patrón y valores de su persona representativa (anonimizada). (c) Posición de cada patrón frente al promedio de la dimensión en las variables consideradas.}
-    \includegraphics[width=\linewidth]{figuras/cap03_patrones_tesis_dirigidas.pdf}
-    \label{fig:patrones_tesis}
+    \caption{Mapa t-SNE de los patrones de actividad en Tesis dirigidas.}
+    \includegraphics[width=0.9\linewidth]{figuras/cap03_mapa_patrones_tesis_dirigidas.pdf}
+    \par\smallskip
+    \parbox{0.9\linewidth}{\raggedright\footnotesize Nota: cada punto representa a una persona; quienes tienen valores idénticos se reparten alrededor de una misma posición. La posición se obtiene con t-SNE a partir de las variables de la dimensión y solo sirve para visualizar; los colores indican el patrón asignado.}
+    \label{fig:mapa_tesis}
 \end{figure}
 
-Los cuatro patrones ocupan regiones diferenciadas del mapa, con mezcla solo en sus bordes, y describen formas distintas de dirigir tesis:
+Existen 4 patrones debidamente diferenciados en el mapa : P4 se ubica en la zona superior izquierda, P1 en la inferior y P2 y P3 en el centro y la derecha, con contacto solo en sus bordes. Existen 18 personas que tienen un perfil mixto (se encuentran entre dos patrones).
 
-\begin{itemize}
-    \item \textbf{P1, dirección ocasional} (187 personas, 34\,\%; 109 vigentes). Quedó por debajo del promedio en todas las variables; su persona representativa dirigió 2 tesis con 2 estudiantes.
-    \item \textbf{P2, alto volumen} (146 personas, 27\,\%; 94 vigentes). Reúne a quienes suman 9 o más estudiantes, con el número de tesis y de estudiantes más alto de la dimensión; su persona representativa dirigió 19 tesis con 24 estudiantes.
-    \item \textbf{P3, tesis con varios estudiantes} (134 personas, 24\,\%; 57 vigentes). Dirige pocas tesis, pero con más estudiantes por tesis que el resto; su persona representativa dirigió 3 tesis con 5 estudiantes.
-    \item \textbf{P4, orientación a la investigación} (82 personas, 15\,\%; 71 vigentes). Concentra las tesis de maestría de investigación y de doctorado, con una proporción muy superior al promedio; su persona representativa dirigió 3 tesis, 2 de ellas de este tipo.
-\end{itemize}
 
-P4 es el patrón más pequeño, pero el que tiene la mayor parte de personal vigente (71 de 82 personas), lo que lo vuelve un punto de partida para tareas como la conformación de tribunales de posgrado. P2 y P4 representan dos perfiles de dirección distintos, por volumen y por nivel de las tesis, que un conteo total de tesis no separaría.
+
+La Tabla \ref{tab:resumen_tesis} muestra la cantidad y la proporción de personas de cada patrón, junto con una interpretación breve.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Cantidad y proporción de personas por patrón en Tesis dirigidas.}
+    \label{tab:resumen_tesis}
+    \small
+    \begin{tabular}{l r r r >{\raggedright\arraybackslash}p{5.6cm}}
+        \toprule
+        \textbf{Patrón} & \textbf{Personas} & \textbf{Proporción} & \textbf{Vigentes} & \textbf{Interpretación breve} \\
+        \midrule
+        \patron{1} & 187 & 34,1\,\% & 109 & Dirección ocasional \\
+        \patron{2} & 146 & 26,6\,\% & 94 & Alto volumen de dirección \\
+        \patron{3} & 134 & 24,4\,\% & 57 & Tesis con varios estudiantes \\
+        \patron{4} & 82 & 14,9\,\% & 71 & Orientación a la investigación \\
+        \midrule
+        \textbf{Total} & \textbf{549} & \textbf{100\,\%} & \textbf{331} & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+
+
+\paragraph{Descripción de cada patrón.}
+La Tabla \ref{tab:perfil_tesis} resume las características principales de cada patrón.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Características principales de cada patrón en Tesis dirigidas.}
+    \label{tab:perfil_tesis}
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{*{4}{>{\raggedright\arraybackslash}p{3.55cm}}}
+        \toprule
+        \cellcolor{patronP1!18}\textbf{Patrón 1} (n = 187) &
+        \cellcolor{patronP2!18}\textbf{Patrón 2} (n = 146) &
+        \cellcolor{patronP3!22}\textbf{Patrón 3} (n = 134) &
+        \cellcolor{patronP4!22}\textbf{Patrón 4} (n = 82) \\
+        \midrule
+        \textbf{Dirección ocasional} &
+        \textbf{Alto volumen de dirección} &
+        \textbf{Tesis con varios estudiantes} &
+        \textbf{Orientación a la investigación} \\[3pt]
+        \textcolor{patronP1}{\textbullet}~Pocas tesis, casi siempre con un solo estudiante. &
+        \textcolor{patronP2}{\textbullet}~El mayor número de tesis y de estudiantes dirigidos. &
+        \textcolor{patronP3}{\textbullet}~Pocas tesis, con más de un estudiante por tesis en promedio. &
+        \textcolor{patronP4}{\textbullet}~Todas sus personas dirigieron tesis de maestría de investigación o de doctorado. \\[2pt]
+        \textcolor{patronP1}{\textbullet}~Casi sin tesis de investigación o doctorado. &
+        \textcolor{patronP2}{\textbullet}~Concentra cerca de tres cuartas partes de las tesis de la dimensión. &
+        \textcolor{patronP3}{\textbullet}~Casi sin tesis de investigación o doctorado. &
+        \textcolor{patronP4}{\textbullet}~Concentra el 85\,\% de ese tipo de tesis. \\[2pt]
+        \textcolor{patronP1}{\textbullet}~Aporta cerca del 11\,\% de las tesis. &
+        \textcolor{patronP2}{\textbullet}~Pocas tesis de investigación o doctorado. &
+        \textcolor{patronP3}{\textbullet}~Menor proporción de personal vigente. &
+        \textcolor{patronP4}{\textbullet}~Volumen moderado y mayoría de personal vigente. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Los patrones distinguen tres formas de participar en la dirección de tesis: por volumen (P2), por el número de estudiantes de cada tesis (P3) y por el nivel de las tesis (P4), además de una participación ocasional (P1). La diferencia entre P2 y P4 es la más relevante para la gestión: P2 reúne a quienes dirigen la mayor parte de las tesis de la dimensión, mientras que P4, con un volumen moderado, concentra la dirección de tesis de investigación y de doctorado. Un conteo total de tesis ubicaría a las personas de P4 junto a las de P1 y P3, y no permitiría reconocerlas como un grupo de referencia para el posgrado de investigación.
+
+La Figura \ref{fig:captura_tesis} muestra cómo se presenta esta dimensión en el prototipo. Al pasar sobre un punto del mapa se ve el patrón, el tema principal y el nivel de esa persona; cada patrón puede seleccionarse para ver a sus integrantes, y cada tarjeta resume en qué se aleja el grupo del promedio de la dimensión.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Vista de Tesis dirigidas en el prototipo (ámbito de todo el personal, solo vigentes): mapa por patrones y tarjetas de los patrones. Se reemplazó el nombre de la persona señalada por ``Persona A'' y se omitió su cargo.}
+    \captura{dimension-tesis-dirigidas}{Perfiles, vista por dimensión, ámbito Todo el personal, dimensión Tesis dirigidas: patrones P1--P4, temas y mapa; sin la lista de nombres.}
+    \label{fig:captura_tesis}
+\end{figure}
 
 % ---------------------------------------------------------------------------------------------
 % Contenido anterior de la sección 3.2 (intensidad, temas y tabla de patrones de todas las
@@ -192,7 +266,106 @@ Investigación entre docentes ilustra cómo se leen los patrones. Con $k = 4$, e
 \subsection{Perfil completo}
 \label{sec:res_perfil_completo}
 
-El perfil completo reúne las 12 dimensiones y el contenido de las evidencias de cada persona. La Tabla \ref{tab:perfil_completo} resume, por ámbito, los perfiles amplios, su estabilidad y los microarquetipos obtenidos al subdividirlos.
+El perfil completo reúne las 12 dimensiones y el contenido de las evidencias de cada persona para ubicarla frente al resto del personal. Esta sección presenta el ámbito docente (1\,883 personas), en el que se obtuvieron 6 perfiles amplios.
+
+\paragraph{Distribución de los perfiles.}
+La Figura \ref{fig:mapas} presenta el mapa t-SNE del perfil completo: cada panel resalta, con los colores del prototipo, a las personas de un perfil sobre el resto del personal docente.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Mapa t-SNE del perfil completo del personal docente (1\,883 personas), con un panel por perfil amplio.}
+    \includegraphics[width=\linewidth]{figuras/cap03_mapa_docentes.pdf}
+    \par\smallskip
+    \parbox{\linewidth}{\raggedright\footnotesize Nota: en cada panel, los puntos de color son las personas del perfil y los grises, el resto del ámbito. Los nombres de los perfiles son interpretativos (el sistema los identifica con códigos) y la posición en el mapa solo sirve para visualizar.}
+    \label{fig:mapas}
+\end{figure}
+
+Los perfiles ocupan regiones contiguas del mapa, sin espacios vacíos entre ellas. P1, el más extenso, cubre la zona central y derecha; P2 y P4 se ubican a la izquierda y P3 en la parte inferior, mientras que P5 y P6 forman regiones más pequeñas y algunos nichos compactos. Esta continuidad indica que el personal docente no se divide en tipos cerrados: 464 personas (24,6\,\%) tienen un perfil mixto, cercano a la vez a dos perfiles.
+
+\paragraph{Resumen de los perfiles.}
+La Tabla \ref{tab:resumen_perfiles} muestra la cantidad y la proporción de personas de cada perfil, su personal vigente y el número de microarquetipos en que se subdivide.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Cantidad y proporción de personas por perfil amplio en el personal docente.}
+    \label{tab:resumen_perfiles}
+    \small
+    \begin{tabular}{l >{\raggedright\arraybackslash}p{5.4cm} r r r r}
+        \toprule
+        \textbf{Perfil} & \textbf{Nombre} & \textbf{Personas} & \textbf{Proporción} & \textbf{Vigentes} & \textbf{Microarq.} \\
+        \midrule
+        \patron{1} & Docencia y vinculación & 616 & 32,7\,\% & 357 & 4 \\
+        \patron{2} & Tercer nivel y menor actividad docente & 359 & 19,1\,\% & 113 & 2 \\
+        \patron{3} & Investigación y difusión & 315 & 16,7\,\% & 180 & 2 \\
+        \patron{4} & Poca actividad académica registrada & 269 & 14,3\,\% & 13 & 2 \\
+        \patron{5} & Docencia con varios cargos en ESPOL & 219 & 11,6\,\% & 118 & 2 \\
+        \patron{6} & Economía y ciencias sociales & 105 & 5,6\,\% & 25 & 2 \\
+        \midrule
+        \textbf{Total} & & \textbf{1\,883} & \textbf{100\,\%} & \textbf{806} & \textbf{14} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+P1 reúne a un tercio del personal docente, y los demás perfiles se reparten de forma decreciente hasta P6, con el 5,6\,\%. La vigencia separa dos grupos: en P1, P3 y P5 más de la mitad del personal está vigente, mientras que en P2, P4 y P6 la mayoría ya no lo está; en P4, solo 13 de 269 personas.
+
+\paragraph{Descripción de cada perfil.}
+La Tabla \ref{tab:perfil_perfiles} resume las características que distinguen a cada perfil frente al conjunto del personal docente.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Características principales de cada perfil amplio del personal docente.}
+    \label{tab:perfil_perfiles}
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{*{3}{>{\raggedright\arraybackslash}p{4.9cm}}}
+        \toprule
+        \cellcolor{patronP1!18}\textbf{Perfil 1} (n = 616) &
+        \cellcolor{patronP2!18}\textbf{Perfil 2} (n = 359) &
+        \cellcolor{patronP3!22}\textbf{Perfil 3} (n = 315) \\
+        \midrule
+        \textbf{Docencia y vinculación} & \textbf{Tercer nivel y menor actividad docente} & \textbf{Investigación y difusión} \\[3pt]
+        \textcolor{patronP1}{\textbullet}~Mayor intensidad en Vinculación, Docencia, Reconocimientos y Capacitación. &
+        \textcolor{patronP2}{\textbullet}~Menor intensidad en Docencia, Formación y Reconocimientos. &
+        \textcolor{patronP3}{\textbullet}~Intensidad en Investigación muy superior al promedio, junto con Ponencias y Capacitación. \\[2pt]
+        \textcolor{patronP1}{\textbullet}~Temas distintivos: proyectos integradores y consejería en computación y electricidad. &
+        \textcolor{patronP2}{\textbullet}~Predominan los títulos de tercer nivel, sin posgrado en curso. &
+        \textcolor{patronP3}{\textbullet}~Es frecuente tener publicaciones en revistas Q1--Q2. \\[2pt]
+        \textcolor{patronP1}{\textbullet}~Uno de sus microarquetipos reúne a docentes con doctorado y más actividad de investigación. &
+        \textcolor{patronP2}{\textbullet}~Temas distintivos: pasantías, cargos técnicos e ingeniería mecánica y mecatrónica. &
+        \textcolor{patronP3}{\textbullet}~Temas distintivos: biología, ecosistemas del Pacífico y de la cuenca del Guayas, y nutrición. \\
+        \midrule
+        \cellcolor{patronP4!22}\textbf{Perfil 4} (n = 269) &
+        \cellcolor{patronP5!15}\textbf{Perfil 5} (n = 219) &
+        \cellcolor{patronP6!15}\textbf{Perfil 6} (n = 105) \\
+        \midrule
+        \textbf{Poca actividad académica registrada} & \textbf{Docencia con varios cargos en ESPOL} & \textbf{Economía y ciencias sociales} \\[3pt]
+        \textcolor{patronP4}{\textbullet}~Menor intensidad en Capacitación, Docencia e Investigación. &
+        \textcolor{patronP5}{\textbullet}~Es frecuente haber tenido dos o más cargos en la institución. &
+        \textcolor{patronP6}{\textbullet}~Menor intensidad en Certificaciones, Reconocimientos y Capacitación. \\[2pt]
+        \textcolor{patronP4}{\textbullet}~Más títulos obtenidos en el exterior, hasta maestría. &
+        \textcolor{patronP5}{\textbullet}~Mayor intensidad en Docencia y Capacitación; menor en Investigación, Tesis dirigidas y Vinculación. &
+        \textcolor{patronP6}{\textbullet}~Es frecuente la carga docente sin materias dictadas; predominan los títulos de tercer nivel. \\[2pt]
+        \textcolor{patronP4}{\textbullet}~Casi todo su personal ya no está vigente. &
+        \textcolor{patronP5}{\textbullet}~Temas distintivos: cálculo y álgebra, clubes estudiantiles, lengua y educación. &
+        \textcolor{patronP6}{\textbullet}~Temas distintivos: economía, econometría y ciencias sociales y humanísticas. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Los perfiles distinguen tres formas de actividad académica en el personal vigente, centradas en la docencia y la vinculación (P1), en la investigación (P3) y en la docencia junto con cargos institucionales (P5), y otros tres perfiles de menor actividad registrada (P2, P4 y P6), formados en su mayoría por personal que ya no está vigente. Para la gestión, los primeros orientan sobre dónde se concentra cada tipo de actividad, y los microarquetipos permiten afinar la búsqueda dentro de cada perfil; por ejemplo, el microarquetipo de P1 con doctorado y más investigación.
+
+La Figura \ref{fig:captura_perfil} muestra la vista del perfil completo del personal docente en el prototipo, con el personal vigente. Al seleccionar un perfil amplio, el mapa resalta sus microarquetipos y el panel lateral los describe junto con su persona más representativa; al pasar sobre un punto, se identifica el perfil y el microarquetipo de esa persona.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Vista del perfil completo del personal docente en el prototipo (solo vigentes), con el Perfil 1 y sus cuatro microarquetipos seleccionados. Los nombres de las personas se reemplazaron por ``Persona A'' a ``Persona D''.}
+    \captura{perfil-completo}{Perfiles, vista Perfil completo, con un perfil seleccionado; sin nombres de representantes ni de personas.}
+    \label{fig:captura_perfil}
+\end{figure}
+
+\paragraph{Aspectos técnicos.}
+La Tabla \ref{tab:perfil_completo} resume los perfiles amplios y microarquetipos de los tres ámbitos.
 
 \begin{table}[!htbp]
     \centering
@@ -214,33 +387,67 @@ El perfil completo reúne las 12 dimensiones y el contenido de las evidencias de
     \raggedright\footnotesize Nota: ``Mayor'' es el porcentaje del ámbito en el perfil amplio más grande. ``Estables'' cuenta las subdivisiones con ARI de al menos 0,9 sobre el total de perfiles subdivididos.
 \end{table}
 
-Los resultados muestran un continuo más que grupos separados. En los tres ámbitos, entre el 23\,\% y el 26\,\% de las personas tiene un perfil mixto, cuya segunda afinidad alcanza al menos el 80\,\% de la primera. La silueta de los perfiles amplios fue cercana a cero en todos los $k$ evaluados (entre 0,003 y 0,005 para el $k$ elegido). La estabilidad fue moderada en todo el personal (0,888) y en administrativos (0,891) y baja en docentes (0,622), el único ámbito en que las fronteras entre perfiles cambiaron de forma apreciable entre submuestras. De las 17 subdivisiones en microarquetipos, solo 5 alcanzaron una estabilidad de 0,9, y las demás se marcan como orientativas.
-
-La Figura \ref{fig:mapas} muestra el mapa del perfil completo con cada perfil amplio resaltado. Los perfiles ocupan regiones contiguas, sin espacios vacíos entre ellas, y junto a perfiles extensos aparecen nichos pequeños y compactos.
-
-\begin{figure}[!htbp]
-    \centering
-    \caption{Mapa t-SNE del perfil completo. Cada panel resalta en azul a las personas de un perfil amplio sobre el resto del ámbito, en gris.}
-    \begin{subfigure}{\linewidth}
-        \centering
-        \caption{Personal docente}
-        \includegraphics[width=0.92\linewidth]{figuras/cap03_mapa_docentes.pdf}
-    \end{subfigure}
-    \par\medskip
-    \begin{subfigure}{\linewidth}
-        \centering
-        \caption{Personal administrativo}
-        \includegraphics[width=0.92\linewidth]{figuras/cap03_mapa_administrativos.pdf}
-    \end{subfigure}
-    \label{fig:mapas}
-\end{figure}
-
-Los perfiles amplios se describen por las dimensiones en que su intensidad media se aleja de la del ámbito y por sus temas distintivos. Entre docentes, el perfil más grande (616 personas, 32,7\,\%) destaca en Vinculación, Docencia y Reconocimientos; otro (315 personas) destaca en Investigación, Ponencias y Capacitación, con temas distintivos de biología y nutrición. Entre administrativos, el 51,3\,\% del ámbito forma un perfil cercano al promedio en todas las dimensiones, y el segundo (407 personas) se distingue por una mayor intensidad en Trayectoria en ESPOL y por temas de contratación pública y contabilidad.
-
-Estos resultados indican que el personal no se divide en tipos cerrados. Los perfiles amplios funcionan como zonas de orientación y los microarquetipos como referencias de detalle, por lo que los grupos deben leerse como orientativos y la comparación entre personas debe apoyarse en las personas parecidas y en la evidencia individual.
+La estabilidad de los perfiles amplios fue moderada en todo el personal (0,888) y en administrativos (0,891), y baja en docentes (0,622), el ámbito en que las fronteras entre perfiles más cambiaron entre submuestras. La silueta fue cercana a cero en todos los ámbitos y, en cada uno, entre el 23\,\% y el 26\,\% de las personas tiene un perfil mixto. De las 17 subdivisiones en microarquetipos, solo 5 alcanzaron una estabilidad de 0,9, y las demás se marcan como orientativas. Estos resultados confirman que los perfiles funcionan como zonas de orientación y no como grupos cerrados, por lo que la comparación entre personas debe apoyarse en las personas parecidas y en la evidencia individual.
 
 \section{Búsqueda semántica de personas}
 \label{sec:res_busqueda}
+
+El buscador recibe una necesidad escrita en lenguaje natural y devuelve a las personas que la cubren, junto con la evidencia que respalda cada capacidad. Esta sección presenta primero un ejemplo de su uso y después su evaluación técnica.
+
+\subsection{Resultados de una consulta}
+\label{sec:res_busqueda_ejemplo}
+
+Como ejemplo se usó la consulta ``alguien con doctorado y al menos 5 años de experiencia docente en estadística'', limitada al personal vigente. La Tabla \ref{tab:consulta_interpretacion} muestra cómo la interpretó el sistema.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Interpretación de la consulta de ejemplo por el sistema.}
+    \label{tab:consulta_interpretacion}
+    \small
+    \begin{tabular}{>{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}p{9.6cm}}
+        \toprule
+        \textbf{Elemento} & \textbf{Interpretación del sistema} \\
+        \midrule
+        Capacidad obligatoria & Docencia en estadística \\
+        Dónde se busca & Materias dictadas, actividades de carga politécnica y capacitaciones \\
+        Requisito de la persona & Formación mínima de doctorado \\
+        Requisito de experiencia & Al menos 5 años en la capacidad \\
+        Vigencia & Solo personal vigente \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+El requisito de doctorado limitó la búsqueda a 263 personas vigentes, de las cuales 96 tienen alguna evidencia relacionada con la docencia en estadística. Entre los 30 primeros resultados, 11 cubren la capacidad con relevancia suficiente. La Tabla \ref{tab:consulta_resultados} presenta los cinco primeros candidatos, todos docentes, con los años de experiencia que el sistema verificó a partir de las fechas de sus evidencias.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Primeros cinco candidatos de la consulta de ejemplo (datos anonimizados).}
+    \label{tab:consulta_resultados}
+    \small
+    \begin{tabular}{l c c >{\raggedright\arraybackslash}p{7.4cm}}
+        \toprule
+        \textbf{Candidato} & \textbf{Relevancia} & \textbf{Años verificados} & \textbf{Evidencia que la respalda} \\
+        \midrule
+        Persona A & Alta & 11,5 & Materias de estadística y tutorías de proyecto integrador \\
+        Persona B & Alta & 14,8 & Materias de estadística y tutorías académicas \\
+        Persona C & Alta & 5,3 & Materias de estadística y tutorías académicas \\
+        Persona D & Alta & 6,5 & Materias de estadística y tutorías académicas \\
+        Persona E & Alta & 6,0 & Materias de estadística y estadística computacional \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Los cinco candidatos cumplen el requisito de cinco años, y el orden no depende de cuántas evidencias tiene cada persona, sino de qué tan bien la mejor de ellas responde a la consulta. Cuando la necesidad combina varias capacidades, el sistema muestra cuáles cubre cada candidato. Por ejemplo, para una persona con experiencia en inteligencia artificial, proyectos de investigación en aprendizaje automático y docencia en programación, el sistema separó tres capacidades obligatorias; ninguno de los 30 primeros candidatos vigentes cubrió las tres, y 16 cubrieron dos. En lugar de descartar a esos candidatos, la lista indica qué capacidad les falta, información que la persona responsable puede contrastar o completar. La Figura \ref{fig:busqueda} muestra cómo se presenta una búsqueda en el prototipo.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Resultado de la consulta de ejemplo en el prototipo: interpretación de la consulta (``Entendí''), primeros candidatos y evidencias que respaldan la capacidad. Los nombres se reemplazaron por ``Persona A'' a ``Persona C'' y se omitieron los cargos.}
+    \captura{busqueda-estadistica}{Pestaña Búsqueda, filtro Vigentes, consulta ``alguien con doctorado y al menos 5 años de experiencia docente en estadística'': bloque ``Entendí'' y primeros candidatos, con nombres reemplazados por ``Persona A'', ``Persona B''.}
+    \label{fig:busqueda}
+\end{figure}
+
+\subsection{Evaluación técnica}
+\label{sec:res_busqueda_evaluacion}
 
 La búsqueda se evaluó con 80 consultas de tipo \textit{known-item}, en las que se conoce a la persona dueña de la evidencia buscada: 40 parafraseadas a partir de títulos de publicaciones y 40 a partir de nombres de materias\footnote{La evaluación se ejecutó el 1 de octubre de 2026, con la versión de evidencias vigente en esa fecha.}. La Tabla \ref{tab:busqueda} compara cinco configuraciones, desde la búsqueda densa global hasta la configuración final con cross-encoder.
 
@@ -262,18 +469,9 @@ La búsqueda se evaluó con 80 consultas de tipo \textit{known-item}, en las que
     \end{tabular}
 \end{table}
 
-La búsqueda densa sobre todas las evidencias ubicó a la persona correcta entre las diez primeras en el 34\,\% de las consultas. Añadir BM25 a esa búsqueda global no la mejoró (recall@10 de 0,35 y MRR de 0,16). Interpretar la consulta y buscar por tipo de evidencia elevó el recall@10 a 0,41, pero la persona correcta casi nunca quedó primera (recall@1 de 0,04), porque el percentil dentro de cada tipo siempre marca alguna evidencia como relevante y ordena mal. La fusión de rangos con el reranker alcanzó 0,56 y 0,37, y la configuración final, en la que el cross-encoder decide la relevancia de cada evidencia, obtuvo los mejores valores: recall@10 de 0,65, MRR de 0,49 y la persona correcta en primer lugar en el 41\,\% de las consultas. El mayor aporte provino, por tanto, de juzgar la relevancia evidencia por evidencia, no de ampliar la recuperación.
+La configuración final ubicó a la persona correcta entre las diez primeras en el 65\,\% de las consultas y en primer lugar en el 41\,\%, frente al 34\,\% y el 13\,\% de la búsqueda densa global. Añadir BM25 a la búsqueda global no la mejoró, y buscar por tipo de evidencia elevó el recall@10 a 0,41, aunque la persona correcta casi nunca quedó primera. El mayor aporte provino de que el cross-encoder decidiera la relevancia de cada evidencia. Por tipo de consulta, las derivadas de publicaciones alcanzaron un recall@10 de 0,90 y las de materias, 0,40; en estas últimas, muchas personas dictan materias equivalentes y existen varias respuestas legítimas además de la buscada, por lo que la métrica subestima la utilidad real.
 
-El desempeño difirió por tipo de consulta. Con la configuración final, las consultas derivadas de publicaciones alcanzaron un recall@10 de 0,90 y un MRR de 0,78; las de materias, 0,40 y 0,20. Los nombres de materias son cortos y muchas personas dictan materias equivalentes, de modo que esas consultas tienen varias respuestas legítimas además de la buscada y la métrica subestima su utilidad real. El umbral de relevancia influyó poco: entre 0,05 y 0,7, el recall@10 se mantuvo entre 0,65 y 0,66.
-
-En la evaluación, la configuración final tardó en promedio 2,2\,s por consulta, con los modelos cargados y la interpretación en caché. En uso normal, una búsqueda tomó entre 2,7 y 5\,s; una consulta nueva sumó entre 2 y 20\,s por la interpretación con el modelo de lenguaje, y la primera búsqueda tras iniciar el servicio, unos 30\,s por la carga de los modelos. La Figura \ref{fig:busqueda} muestra una búsqueda en el prototipo.
-
-\begin{figure}[!htbp]
-    \centering
-    \caption{Resultado de una búsqueda en el prototipo: interpretación de la consulta, candidatos y evidencias que respaldan cada capacidad (datos anonimizados).}
-    \figpendiente{Captura de la pestaña Búsqueda con la interpretación (``Entendí'') y los primeros candidatos, con nombres reemplazados por ``Persona A'', ``Persona B''.}{Usuario: captura del dashboard}
-    \label{fig:busqueda}
-\end{figure}
+En cuanto al tiempo de respuesta, una búsqueda tomó entre 2,7 y 5\,s con los modelos cargados; una consulta nueva sumó entre 2 y 20\,s por la interpretación con el modelo de lenguaje, y la primera búsqueda tras iniciar el servicio, unos 30\,s por la carga de los modelos.
 
 \section{Interpretabilidad de los resultados}
 \label{sec:res_interpretabilidad}
@@ -292,71 +490,9 @@ La Figura \ref{fig:ficha} muestra cómo se presentan estas explicaciones en la f
 
 \begin{figure}[!htbp]
     \centering
-    \caption{Ficha de una persona en el prototipo: nivel, patrón y temas por dimensión, con la evidencia que los respalda (datos anonimizados).}
-    \figpendiente{Captura de la ficha (pestaña Dimensiones con una dimensión desplegada, o pestaña Perfil completo), con el nombre reemplazado por ``Persona A'' y sin cargo ni unidad identificables.}{Usuario: captura del dashboard}
+    \caption{Ficha de una persona en el prototipo, abierta desde la vista de Tesis dirigidas del personal docente: la persona se resalta en el mapa de patrones y la pestaña Evidencias muestra los registros que sustentan su perfil. Se ocultaron el nombre, el cargo, los títulos de las tesis y las cantidades.}
+    \captura{ficha-persona}{Ficha de una persona, pestaña Dimensiones con Tesis dirigidas desplegada, con el nombre reemplazado por ``Persona A'' y sin cargo ni unidad.}
     \label{fig:ficha}
 \end{figure}
 
 La estabilidad sirvió como validación interna. Todos los patrones por dimensión superaron un ARI de 0,9; los perfiles amplios quedaron entre 0,62 y 0,89, y la mayoría de los microarquetipos, por debajo de 0,9. La confianza en los grupos disminuye, por tanto, con el nivel de detalle, y la interfaz lo comunica marcando como orientativos los grupos inestables. Una silueta baja no invalida los grupos, porque mide la separación entre ellos y, en datos que forman un continuo, quienes están en la frontera siempre quedan cerca del grupo vecino; el ARI, en cambio, comprueba si la misma partición reaparece al cambiar la muestra.
-
-\pendiente{resultados de la validación con Talento Humano y el comité docente}
-
-\section{Prototipo de apoyo a la decisión}
-\label{sec:res_prototipo}
-
-El prototipo reunió los resultados anteriores en una aplicación web con cinco módulos. La Tabla \ref{tab:modulos} relaciona cada módulo con la decisión que apoya.
-
-\begin{table}[!htbp]
-    \centering
-    \caption{Módulos del prototipo y decisión que apoya cada uno.}
-    \label{tab:modulos}
-    \footnotesize
-    \begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{6.2cm} >{\raggedright\arraybackslash}p{5.6cm}}
-        \toprule
-        \textbf{Módulo} & \textbf{Qué muestra} & \textbf{Decisión que apoya} \\
-        \midrule
-        Perfiles por dimensión & Patrones con nombre, temas, mapa y lista de personas ordenada por nivel, por ámbito y vigencia & Identificar a quienes concentran actividad en un área para asignar tareas \\
-        Perfil completo & Perfiles amplios, microarquetipos, mapa y comparación de cada grupo con su ámbito & Conocer la composición del personal para la planificación académica y administrativa \\
-        Ficha de persona & Trayectoria, dimensiones, perfil completo, evidencias y personas parecidas & Verificar a un candidato con su evidencia y encontrar alternativas \\
-        Búsqueda & Candidatos para una consulta en lenguaje natural, con la evidencia de cada capacidad & Formar una lista inicial de candidatos para una tarea o comisión \\
-        Comparar & Dos personas lado a lado en las vistas del perfil completo & Elegir entre candidatos o equilibrar un equipo \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-Los módulos quedaron conectados entre sí: desde la ficha se navega a los patrones, temas, perfiles amplios y personas parecidas de cada persona, y desde la búsqueda a la ficha de cada candidato. Todas las vistas comparten dos filtros, el ámbito y la vigencia, de modo que una misma consulta puede limitarse al personal vigente sin perder el historial de quienes ya no lo están. Los enlaces que se comparten no incluyen identificadores de personas. Las Figuras \ref{fig:vista_dimension} y \ref{fig:vista_perfil} muestran las dos vistas de perfiles.
-
-\begin{figure}[!htbp]
-    \centering
-    \caption{Vista de perfiles por dimensión en el prototipo.}
-    \figpendiente{Captura de Perfiles, vista por dimensión (por ejemplo, Investigación, ámbito docentes, solo vigentes) con los patrones, los temas y el mapa; la lista de personas recortada u ocultando nombres.}{Usuario: captura del dashboard}
-    \label{fig:vista_dimension}
-\end{figure}
-
-\begin{figure}[!htbp]
-    \centering
-    \caption{Vista del perfil completo en el prototipo.}
-    \figpendiente{Captura de Perfiles, vista Perfil completo (ámbito docentes) con la lista de perfiles amplios, el mapa y el panel de un perfil seleccionado; sin nombres de representantes.}{Usuario: captura del dashboard}
-    \label{fig:vista_perfil}
-\end{figure}
-
-Para el caso de uso de conformar una comisión, se recorrieron los módulos en cuatro pasos, que ilustra la Figura \ref{fig:caso_uso}. Primero, se escribió en la búsqueda la necesidad, por ejemplo docentes vigentes con experiencia en proyectos de vinculación sobre energías renovables, y el sistema mostró cómo la interpretó, separando capacidades obligatorias y deseables. Segundo, se revisó la lista de candidatos, cada uno con las capacidades que cubre y las evidencias que lo respaldan. Tercero, se abrió la ficha de cada candidato para revisar su trayectoria, su nivel y patrón en Vinculación y sus personas parecidas, que amplían la lista con perfiles cercanos que la consulta no recuperó. Cuarto, se compararon dos candidatos lado a lado para equilibrar la comisión, por ejemplo entre experiencia en dirección de proyectos y producción académica. La selección final quedó en manos de la persona responsable, que contrasta esta información con criterios institucionales que el sistema no contiene.
-
-\begin{figure}[!htbp]
-    \centering
-    \caption{Flujo del caso de uso para conformar una comisión: de la consulta a la comparación de candidatos (datos anonimizados).}
-    \begin{subfigure}{\linewidth}
-        \centering
-        \caption{Consulta y candidatos}
-        \figpendiente{Captura de la pestaña Búsqueda con la consulta del caso de uso y la lista de candidatos (nombres como ``Persona A'', ``Persona B'').}{Usuario: captura del dashboard}
-    \end{subfigure}
-    \par\medskip
-    \begin{subfigure}{\linewidth}
-        \centering
-        \caption{Comparación de dos candidatos}
-        \figpendiente{Captura de la pestaña Comparar con dos candidatos del caso de uso, rotulados ``Persona A'' y ``Persona B''.}{Usuario: captura del dashboard}
-    \end{subfigure}
-    \label{fig:caso_uso}
-\end{figure}
-
-El prototipo cumplió así su propósito de apoyo a la decisión: concentró en una consulta y una ficha información que antes estaba dispersa en varios extractos y, en cada paso, mostró la evidencia en que se basa, sin emitir recomendaciones automáticas sobre las personas.

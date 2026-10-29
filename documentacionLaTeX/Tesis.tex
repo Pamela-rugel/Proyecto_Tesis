@@ -96,6 +96,11 @@
 \newcommand{\pendiente}[1]{\textcolor{red}{\textbf{[PENDIENTE: #1]}}}
 \newcommand{\figpendiente}[2]{% #1 = descripción, #2 = quién la genera
   \fbox{\parbox{0.9\linewidth}{\centering\small\textcolor{red}{\textbf{[FIGURA PENDIENTE]}}\\ #1\\ \textit{Genera: #2}}}}
+% Captura del dashboard: inserta figuras/capturas/<#1>.png si existe; si no, muestra el recuadro pendiente
+\newcommand{\captura}[2]{% #1 = nombre del archivo sin extensión, #2 = qué capturar
+  \IfFileExists{figuras/capturas/#1.png}%
+    {\includegraphics[width=\linewidth,height=0.45\textheight,keepaspectratio]{figuras/capturas/#1.png}}%
+    {\figpendiente{#2\\ Guardar como \texttt{figuras/capturas/#1.png}}{Usuario: captura del dashboard}}}
 \usepackage{lipsum} % Para usar texto de relleno, sirve para tener una idea de cómo queda
 
 \usepackage{booktabs} % para los comandos toprule, midrule, cmidrule y bottomrule: líneas horizontales de las tablas
