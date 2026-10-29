@@ -1,104 +1,362 @@
 \chapter{Resultados y análisis}
 %\thispagestyle{empty}
-Los resultados del proyecto ofrecen una visión detallada sobre el desempeño del modelo de detección de ademanes, evaluando su capacidad para mejorar la precisión y utilidad del sistema de retroalimentación automática. A continuación, se presentan y analizan los datos obtenidos, proporcionando una evaluación comprensiva del rendimiento del modelo y su efectividad en la retroalimentación durante las presentaciones orales.
+\label{chapter:resultados}
 
-\section{Plan de Implementación}
-    El diagrama de Gantt (Figura \ref{fig:diagrama_gantt}) proporciona una visión detallada y estructurada del cronograma del proyecto, desde su inicio hasta la entrega final. El diagrama ilustra claramente las etapas clave del proyecto, incluyendo la socialización del problema, la identificación de objetivos y requerimientos, el desarrollo y ajuste del modelo, y la integración final al Sistema RAP. Además, se detallan las fases de documentación y pruebas, que son fundamentales para asegurar la calidad y efectividad del proyecto. La secuencia temporal de cada tarea y la interdependencia entre las fases destacan la planificación rigurosa necesaria para cumplir con los objetivos del proyecto y asegurar una implementación exitosa.
-    
-    \begin{figure}[!htbp]
-        \centering
-        \caption{Diagrama de Gantt}
-        %\includegraphics[width=0.9\linewidth, height=0.9\textheight]{recursos/diagrama_de_gantt.jpg}
-        \label{fig:diagrama_gantt}
-    \end{figure}
+El presente capitulo se centra en los resultados obtenidos a partir de la metodologia implementada. Se describe los resultados de cada objetivo planteado desde la integración de la información, generación de perfiles, búsqueda semántica, interpretabilidad de los resultados hasta la implemetación de un prototipo web para visualizar resultados y realizar consultas.
 
-\section{Pruebas}
-     Se analizaron tres enfoques principales: entrenamiento con datos históricos, entrenamiento con datos generados en un entorno controlado, y entrenamiento con una combinación de datos históricos y generados. Cada enfoque fue evaluado tanto en entornos controlados como reales, utilizando matrices de confusión para medir la confiabilidad y precisión del modelo en la detección de ademanes. Los resultados muestran variaciones significativas en el desempeño del modelo según el tipo de datos y el entorno de prueba, proporcionando una visión integral de sus fortalezas y áreas de mejora.
+\section{Integración de la información}
+\label{sec:res_integracion}
 
-    \subsection{Pruebas de modelo entrenado únicamente con datos históricos}
-    Para entrenar el modelo, se utilizó un conjunto de datos compuesto exclusivamente por exposiciones grabadas en las aulas RAP. El conjunto de datos históricos incluyó específicamente los ademanes más comunes identificados, proporcionando una representación auténtica de los movimientos y comportamientos de los expositores en el entorno natural del aula. El modelo fue entrenado utilizando solo estos datos históricos para aprender las características y patrones específicos de los ademanes observados en las grabaciones, con el objetivo de asegurar que el sistema pudiera identificar y clasificar los ademanes en contextos similares a los del entorno de origen.
 
-        \subsubsection{Evaluación del modelo con datos de un entorno controlado.}
-        A través de la matriz de confusión (Figura \ref{fig:matriz1}), utilizando datos de validación generados en un entorno controlado, se obtuvo de manera general una \textbf{confiabilidad del 50.00\%}, además se observó que el modelo tiene un alto desempeño en la predicción de los ademanes \textit{Caminar} y \textit{Mano a Cabeza}. Sin embargo, el ademán \textit{Apuntar} se confunde frecuentemente con \textit{Caminar}. Además, el modelo detectó \textit{Girar} como \textit{Caminar} en un 62\% de los casos, y \textit{Mover Brazos} se confundió con \textit{Mano a Cabeza} en un 69\% de las ocasiones.
-        
-        \begin{figure}[!htbp]
-            \centering
-            \caption{Matriz de confusión con datos de un entorno controlado para la evaluación del modelo con datos históricos}
-            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_historicos_test_entorno_controlado.jpg}
-            \label{fig:matriz1}
-        \end{figure}
-        
-        \subsubsection{Evaluación del modelo con datos de un entorno real.}
-        A través de la matriz de confusión (Figura \ref{fig:matriz2}), utilizando datos de validación obtenidos de videos grabados por usuarios en las aulas RAP, se obtuvo de manera general una \textbf{confiabilidad del 44.31\%}, además se observó que el modelo detecta correctamente los ademanes \textit{Caminar} y \textit{Mano a Cabeza}. Sin embargo, el ademán \textit{Girar} fue clasificado erróneamente como \textit{Caminar} en un 100\% de los casos.
 
-        
-        \begin{figure}[!htbp]
-            \centering
-            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos históricos}
-            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_historicos_test_entorno_real.jpg}
-            \label{fig:matriz2}
-        \end{figure}
-    
-    \subsection{Pruebas de modelo entrenado únicamente con datos generados bajo un entorno controlado}
+Durante la integración de la información se generaron 126\,012 evidencias de 17 tipos para las 3\,164 personas de la población. La Tabla \ref{tab:evidencias_dimension} presenta el número de evidencias por dimensión, y la Figura \ref{fig:cobertura}, el porcentaje de personas con al menos un registro en cada una.
 
-    Se realizaron pruebas con un modelo entrenado exclusivamente con datos generados en un entorno controlado. Este enfoque permitió evaluar el desempeño del modelo en condiciones artificialmente optimizadas, garantizando que los datos de entrenamiento fueran consistentes y específicos para el entorno simulado. Las pruebas se centraron en determinar cómo el modelo generaliza a partir de estos datos controlados y en identificar posibles áreas de mejora antes de su aplicación en escenarios más variados y reales.
+\begin{table}[!htbp]
+    \centering
+    \caption{Número de evidencias por dimensión.}
+    \label{tab:evidencias_dimension}
+    \small
+    \begin{tabular}{l r}
+        \toprule
+        \textbf{Dimensión} & \textbf{Evidencias} \\
+        \midrule
+        Capacitación & 42\,348 \\
+        Docencia & 26\,980 \\
+        Investigación & 14\,170 \\
+        Trayectoria en ESPOL & 10\,299 \\
+        Experiencia externa & 7\,994 \\
+        Formación & 6\,589 \\
+        Tesis dirigidas & 4\,626 \\
+        Certificaciones & 3\,733 \\
+        Reconocimientos & 3\,291 \\
+        Idiomas & 2\,594 \\
+        Vinculación & 2\,479 \\
+        Ponencias & 909 \\
+        \midrule
+        \textbf{Total} & \textbf{126\,012} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-        \subsubsection{Evaluación del modelo con datos de un entorno controlado.}
-        A través de la matriz de confusión (Figura \ref{fig:matriz3}), utilizando datos de validación generados en un entorno controlado, se obtuvo de manera general una \textbf{confiabilidad del 98.95\%}, además se observó que el modelo muestra un alto desempeño en la predicción de todos los ademanes, siendo \textit{Mover Brazos} el menos preciso con un 94\% de aciertos.
-        
-        \begin{figure}[!htbp]
-            \centering
-            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos de un entorno controlado}
-            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_test_entorno_controlado.jpg}
-            \label{fig:matriz3}
-        \end{figure}
-        
-        \subsubsection{Evaluación del modelo con datos de un entorno real.}
-        A través de la matriz de confusión (Figura \ref{fig:matriz4}), utilizando datos de validación obtenidos de videos grabados por usuarios en las aulas RAP, se obtuvo de manera general una \textbf{confiabilidad del 85.22\%}, además se observó que el modelo predice \textit{Girar} con un 67\% de precisión y \textit{Mover Brazos} con un 60\%, siendo estas las predicciones con menor acierto. En contraste, el ademán \textit{Sin Acción} fue detectado con un 100\% de precisión.
+\begin{figure}[!htbp]
+    \centering
+    \caption{Porcentaje de personas con al menos un registro en cada una de las 12 dimensiones, por ámbito.}
+    \includegraphics[width=0.95\linewidth]{figuras/cap03_cobertura_dimensiones.pdf}
+    \label{fig:cobertura}
+\end{figure}
 
-        
-        \begin{figure}[!htbp]
-            \centering
-            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos de un entorno controlado}
-            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_test_entorno_real.jpg}
-            \label{fig:matriz4}
-        \end{figure}
 
-    \subsection{Pruebas de modelo entrenado con datos históricos y datos generados bajo un entorno controlado.}
-    
-    Se llevaron a cabo pruebas con un modelo entrenado utilizando una combinación de datos históricos y datos generados en un entorno controlado. Este enfoque híbrido permitió evaluar cómo el modelo se desempeña al integrar información proveniente de exposiciones reales en las aulas RAP junto con datos sintéticos creados en condiciones optimizadas. Las pruebas se enfocaron en analizar la capacidad del modelo para generalizar y adaptarse a una variedad de escenarios, combinando la riqueza de datos históricos con la precisión y uniformidad de los datos generados artificialmente.
+La recolección de información de distintos sistemas nos permitió obtener un panorama más completo de lo que el personal de ESPOL puede tener en su perfil. Consideramos que la estandarización de la información a un solo formato (sus evidencias)  permitió analizar de manera consistente los perfiles de las personas y sus capacidades. 
 
-        \subsubsection{Evaluación del modelo con datos de un entorno controlado.}
-        A través de la matriz de confusión (Figura \ref{fig:matriz5}), utilizando datos de validación generados en un entorno controlado, se obtuvo de manera general una \textbf{confiabilidad del 57.29\%}, además se observó que el modelo muestra un buen desempeño en la detección de \textit{Caminar} y \textit{Mano a Cabeza}, con precisiones promedio del 81\% y 88\% respectivamente. Sin embargo, el ademán \textit{Girar} se detecta erróneamente como \textit{Apuntar} en un 62\% de los casos, y \textit{Mover Brazos} se confunde con \textit{Mano a Cabeza} en un 56\% de las ocasiones. El resto de los ademanes se predice con un promedio del 52\%.
-        
-        \begin{figure}[!htbp]
-            \centering
-            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos históricos y de un entorno controlado}
-            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_e_historicos_test_entorno_controlado.jpg}
-            \label{fig:matriz5}
-        \end{figure}
-        
-        \subsubsection{Evaluación del modelo con datos de un entorno real.}
-        A través de la matriz de confusión (Figura \ref{fig:matriz6}), utilizando datos de validación obtenidos de videos grabados por usuarios en las aulas RAP, se obtuvo de manera general una \textbf{confiabilidad del 78.41\%}, además se observó que el modelo predice los ademanes con una precisión promedio de alrededor del 70\%. Los ademanes \textit{Sin Acción} y \textit{Mano a Cabeza} muestran las tasas de precisión más bajas y más altas respectivamente, con un 50\% y un 89\%.
+\section{Perfiles del personal}
+\label{sec:res_perfiles}
 
-        
-        \begin{figure}[!htbp]
-            \centering
-            \caption{Matriz de confusión con datos de un entorno real para la evaluación del modelo con datos históricos y de un entorno controlado}
-            %\includegraphics[width=0.7\linewidth]{recursos/matriz_datos_controlado_e_historicos_test_entorno_real.jpg}
-            \label{fig:matriz6}
-        \end{figure}
+Para los perfiles se obtuvieron diferentes resultados según la dimensión, el ámbito y el nivel de detalle. Por lo cual tenemos dos grupos principales: el perfil completo y perfiles por dimensión.
 
-    
-\section{Resultados}
-    \begin{itemize}
-    \item El modelo entrenado únicamente con datos históricos mostró alta precisión en \textit{Caminar} y \textit{Mano a Cabeza} en un entorno controlado. Sin embargo, en un entorno real, \textit{Girar} fue clasificado erróneamente como \textit{Caminar} en un 100\% de los casos.
-    
-    \item El modelo entrenado únicamente con datos generados en un entorno controlado mostró un alto desempeño general. En un entorno real, \textit{Girar} tuvo un 67\% de precisión y \textit{Mover Brazos} un 60\%, mientras que \textit{Sin Acción} fue detectado con un 100\% de precisión. En promedio, este modelo tuvo el mejor desempeño global.
-    
-    \item El modelo entrenado con una combinación de datos históricos y datos generados en un entorno controlado mostró una precisión promedio del 81\% para \textit{Caminar} y del 88\% para \textit{Mano a Cabeza} en un entorno controlado. En un entorno real, el modelo logró una precisión promedio del 70\%, con \textit{Sin Acción} alcanzando un 50\% y \textit{Mano a Cabeza} un 89\%.
-    
+\subsection{Perfiles por dimensión}
+\label{sec:res_dimensiones}
+
+De las 1\,389 personas vigentes, la Figura \ref{fig:vigentes} muestra el porcentaje que tiene información en cada dimensión. Trayectoria en ESPOL, Formación y Capacitación cubren a casi todo el personal vigente (entre el 96,0\,\% y el 100\,\%), mientras que Tesis dirigidas, Ponencias y Vinculación no llegan a la cuarta parte (23,8\,\%, 19,2\,\% y 18,6\,\%).
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Porcentaje del personal vigente con al menos un registro en cada dimensión.}
+    \includegraphics[width=0.95\linewidth]{figuras/cap03_vigentes_dimensiones.pdf}
+    \label{fig:vigentes}
+\end{figure}
+
+Para cada dimensión se obtuvieron patrones de actividad, que describen como participa cada persona dentro de ese patrón. A continuación se presentan los resultados de cada dimensión,
+así como la descripción de los patrones obtenidos y su interpretación.
+
+\subsubsection{Tesis dirigidas}
+\label{sec:res_tesis}
+
+En Tesis dirigidas se obtuvieron 4 patrones para las 549 personas con registros del ámbito de todo el personal, de las cuales 331 están vigentes;la partición fue estable (ARI de 0,978). 
+
+La Figura \ref{fig:patrones_tesis} muestra el mapa de los patrones con el personal vigente, una tarjeta por patrón con su tamaño y su persona representativa, y la posición de cada patrón en las cinco variables consideradas: tesis dirigidas, estudiantes dirigidos, tesis de maestría de investigación o doctorado, proporción de estas últimas y estudiantes por tesis.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Patrones de actividad en Tesis dirigidas (ámbito de todo el personal). (a) Mapa t-SNE del personal vigente coloreado por patrón. (b) Tamaño de cada patrón y valores de su persona representativa (anonimizada). (c) Posición de cada patrón frente al promedio de la dimensión en las variables consideradas.}
+    \includegraphics[width=\linewidth]{figuras/cap03_patrones_tesis_dirigidas.pdf}
+    \label{fig:patrones_tesis}
+\end{figure}
+
+Los cuatro patrones ocupan regiones diferenciadas del mapa, con mezcla solo en sus bordes, y describen formas distintas de dirigir tesis:
+
+\begin{itemize}
+    \item \textbf{P1, dirección ocasional} (187 personas, 34\,\%; 109 vigentes). Quedó por debajo del promedio en todas las variables; su persona representativa dirigió 2 tesis con 2 estudiantes.
+    \item \textbf{P2, alto volumen} (146 personas, 27\,\%; 94 vigentes). Reúne a quienes suman 9 o más estudiantes, con el número de tesis y de estudiantes más alto de la dimensión; su persona representativa dirigió 19 tesis con 24 estudiantes.
+    \item \textbf{P3, tesis con varios estudiantes} (134 personas, 24\,\%; 57 vigentes). Dirige pocas tesis, pero con más estudiantes por tesis que el resto; su persona representativa dirigió 3 tesis con 5 estudiantes.
+    \item \textbf{P4, orientación a la investigación} (82 personas, 15\,\%; 71 vigentes). Concentra las tesis de maestría de investigación y de doctorado, con una proporción muy superior al promedio; su persona representativa dirigió 3 tesis, 2 de ellas de este tipo.
 \end{itemize}
 
-\section{Análisis de Costos}
-    En el análisis de costos realizado para este proyecto, se observa que no se incurrieron en gastos adicionales debido a que el proyecto ya había sido previamente ejecutado. La única actividad realizada fue la modificación de un módulo específico, en este caso, el módulo de ademanes. Esta tarea se llevó a cabo utilizando los recursos y herramientas ya disponibles, sin necesidad de adquirir nuevos materiales o servicios externos. Por lo tanto, el proyecto no generó costos adicionales, ya que la intervención se realizó en el contexto de una infraestructura ya establecida y operativa.
+P4 es el patrón más pequeño, pero el que tiene la mayor parte de personal vigente (71 de 82 personas), lo que lo vuelve un punto de partida para tareas como la conformación de tribunales de posgrado. P2 y P4 representan dos perfiles de dirección distintos, por volumen y por nivel de las tesis, que un conteo total de tesis no separaría.
+
+% ---------------------------------------------------------------------------------------------
+% Contenido anterior de la sección 3.2 (intensidad, temas y tabla de patrones de todas las
+% dimensiones). Queda fuera de la compilación mientras se reestructuran las demás dimensiones.
+% ---------------------------------------------------------------------------------------------
+\iffalse
+\subsection{Intensidad por dimensión}
+
+La Figura \ref{fig:nivel} resume, para cada dimensión y ámbito, el porcentaje de personas sin registros y la distribución del nivel entre quienes sí los tienen. Idiomas no aparece porque se describe por idioma y nivel declarado, sin un nivel numérico.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Estado de registros y nivel por dimensión y ámbito. El nivel es el percentil entre quienes tienen registros; con menos de 40 personas con registros no se calcula. Los números indican el porcentaje sin registros.}
+    \includegraphics[width=\linewidth]{figuras/cap03_nivel_dimensiones.pdf}
+    \label{fig:nivel}
+\end{figure}
+
+Como el nivel es un percentil calculado solo entre quienes tienen registros, sus tres tramos ocupan partes parecidas en casi todas las dimensiones; la información que diferencia a las dimensiones está en la porción sin registros y en los empates. La porción sin registros fue de 0\,\% en Trayectoria en ESPOL y Formación entre docentes, llegó al 82\,\% en Ponencias del mismo ámbito y al 99\,\% en Vinculación del personal administrativo. En consecuencia, un nivel superior a 66 en Ponencias señala a cerca del 6\,\% del personal docente, mientras que en Capacitación corresponde a una cuarta parte.
+
+Los empates explican las barras irregulares. En Formación del personal administrativo, el 45,0\,\% de quienes tienen registros comparte el mismo valor del índice, y el tramo intermedio quedó casi vacío (6,2\,\% del ámbito). En Ponencias, entre el 32\,\% y el 37\,\% comparte un mismo valor, que coincide con quienes tienen una sola ponencia nacional, y en Reconocimientos del personal administrativo, el 44,8\,\%. En estas dimensiones el nivel diferencia poco a las personas con registros, y su lectura debe acompañarse del detalle de las evidencias.
+
+\subsection{Temas identificados}
+\label{sec:res_temas}
+
+En el ámbito de todo el personal se identificaron 524 temas en 11 dimensiones; en Idiomas, el propio idioma hace de tema. La Tabla \ref{tab:temas} presenta el número de temas por dimensión, la proporción de textos asignados por cercanía y dos temas de ejemplo, descritos por sus términos más distintivos según c-TF-IDF.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Temas identificados por dimensión en el ámbito de todo el personal.}
+    \label{tab:temas}
+    \footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{3.1cm} r r >{\raggedright\arraybackslash}p{7.6cm}}
+        \toprule
+        \textbf{Dimensión} & \textbf{Temas} & \textbf{Cercanía (\%)} & \textbf{Temas de ejemplo (términos distintivos)} \\
+        \midrule
+        Investigación & 44 & 38,3 & detection, learning, image, deep; power, energy, control, system \\
+        Ponencias & 30 & 16,7 & internacional, innovacion, conocimiento, sociedad; biotecnologia, biodiversidad, banano, foro \\
+        Vinculación & 13 & 18,6 & educacion, sostenible, renovables, energias; tecnologias, pensamiento, ninos, aprendizaje \\
+        Tesis dirigidas & 43 & 29,8 & proceso, linea, produccion, planta; control, controlador, diseno, temperatura \\
+        Docencia & 73 & 25,2 & procesos, naval, estructuras, buques; sistemas, datos, redes, analisis \\
+        Formación & 69 & 17,2 & ingeniera, civil, ingeniero, naval; computacion, sistemas, computacionales, ingeniero \\
+        Capacitación & 34 & 33,8 & analisis, introduccion, data, sistemas; liderazgo, comunicacion, habilidades, equipo \\
+        Certificaciones & 62 & 23,8 & prevencion, riesgos, laborales, seguridad; fundamentos, sistema, operador, contratacion \\
+        Reconocimientos & 68 & 21,1 & honor, diploma, merito, aprovechamiento; award, scholarship, graduate, research \\
+        Trayectoria en ESPOL & 35 & 17,1 & tecnico, investigacion, laboratorio; profesionales, servicios, centro, gerencia \\
+        Experiencia externa & 53 & 28,3 & analista, zonal, estadistico, financiero; ingeniero, engineer, ingeniera, junior \\
+        \midrule
+        \textbf{Total} & \textbf{524} & & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Los temas corresponden a áreas reconocibles del quehacer institucional, como la ingeniería naval en Docencia, el aprendizaje profundo y la energía en Investigación, las energías renovables y el pensamiento computacional en Vinculación o la prevención de riesgos laborales en Certificaciones. Los términos mezclan español e inglés (por ejemplo, ``ingeniero, engineer'') porque los textos equivalentes en ambos idiomas quedaron en el mismo tema, lo que indica que la representación multilingüe cumplió su propósito.
+
+La proporción asignada por cercanía varió entre 16,7\,\% (Ponencias) y 38,3\,\% (Investigación). En Investigación y Capacitación, más de un tercio de los textos no perteneció con claridad a ningún tema y se asignó al más cercano; en esas dimensiones el tema de una evidencia debe leerse como aproximado, y la ficha de la persona lo marca así. El número de temas creció con la diversidad de los textos: Docencia (73), Formación (69) y Reconocimientos (68) reunieron la mayor variedad, mientras que Vinculación, con 365 textos, produjo 13.
+
+\subsection{Patrones de actividad}
+\label{sec:res_patrones}
+
+Los patrones de actividad describen cómo participa cada persona en una dimensión, con independencia del tema. La Tabla \ref{tab:patrones} reúne, por dimensión y ámbito, el número de patrones ($k$), su estabilidad (ARI) y su silueta, junto con un ejemplo de los nombres asignados entre docentes.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Patrones de actividad por dimensión y ámbito: número de patrones ($k$), estabilidad (ARI), silueta y ejemplo de nombre en el ámbito docente.}
+    \label{tab:patrones}
+    \footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{2.7cm} c c c c c c >{\raggedright\arraybackslash}p{5.0cm}}
+        \toprule
+        & \multicolumn{3}{c}{\textbf{Docentes}} & \multicolumn{3}{c}{\textbf{Administrativos}} & \\
+        \cmidrule(lr){2-4} \cmidrule(lr){5-7}
+        \textbf{Dimensión} & $k$ & \textbf{ARI} & \textbf{Sil.} & $k$ & \textbf{ARI} & \textbf{Sil.} & \textbf{Ejemplo de nombre (docentes)} \\
+        \midrule
+        Investigación & 4 & 0,921 & 0,278 & 3 & 0,925 & 0,455 & 2 o más proyectos dirigidos · 2 o más publicaciones Q1--Q2 \\
+        Ponencias & 5 & 0,984 & 0,708 & 6 & 0,969 & 0,731 & todas en el exterior · hasta 2 ponencias \\
+        Vinculación & 6 & 0,987 & 0,516 & -- & -- & -- & 8 o más proyectos · hasta 5 proyectos dirigidos \\
+        Tesis dirigidas & 4 & 0,975 & 0,463 & -- & -- & -- & de 1 a 7 tesis de investigación o doctorado \\
+        Docencia & 3 & 0,984 & 0,414 & 5 & 0,941 & 0,438 & sin materias \\
+        Formación & 6 & 1,000 & 0,762 & 5 & 1,000 & 0,892 & doctorado \\
+        Capacitación & 6 & 0,967 & 0,286 & 3 & 0,970 & 0,343 & 5 o más capacitaciones en el exterior \\
+        Certificaciones & 6 & 0,961 & 0,452 & 3 & 0,963 & 0,411 & 1 certificación vigente \\
+        Idiomas & 5 & 0,958 & 0,946 & 4 & 1,000 & 0,901 & nivel avanzado · 1 idioma extranjero \\
+        Reconocimientos & 5 & 0,977 & 0,568 & 3 & 0,999 & 0,669 & 4 o más menciones del exterior \\
+        Trayectoria en ESPOL & 3 & 0,992 & 0,481 & 6 & 0,996 & 0,555 & al menos 1 función adicional \\
+        Experiencia externa & 3 & 0,993 & 0,454 & 3 & 0,919 & 0,671 & al menos 1 experiencia académica \\
+        \midrule
+        \textbf{Total} & \textbf{56} & & & \textbf{41} & & & \\
+        \bottomrule
+    \end{tabular}
+    \par\smallskip
+    \raggedright\footnotesize Nota: -- indica que la dimensión no se subdividió por tener menos de 40 personas con registros.
+\end{table}
+
+Se obtuvieron 56 patrones en el ámbito docente y 41 en el administrativo. Todos superaron el umbral de estabilidad de 0,9, con un ARI entre 0,919 y 1,000; es decir, la misma partición reapareció en las submuestras. La silueta varió más. Fue alta en dimensiones con pocas variables discretas, como Idiomas (0,946 en docentes) o Formación (0,762), donde los grupos coinciden con valores exactos, y baja en Investigación (0,278) y Capacitación (0,286), donde la actividad se distribuye de forma continua.
+
+Investigación entre docentes ilustra cómo se leen los patrones. Con $k = 4$, el patrón más grande (471 personas, 47\,\%) se nombró ``hasta 2 publicaciones Q1--Q2 · hasta 2 proyectos dirigidos'' y agrupa a quienes tienen poca actividad en todos los componentes. El segundo (246 personas, 25\,\%), ``al menos 1 publicación Q1--Q2 · hasta 3 proyectos dirigidos'', reúne perfiles orientados a la publicación: en promedio, el 53\,\% de sus publicaciones está en Q1--Q2, pero dirigen solo el 17\,\% de sus proyectos. El tercero (147 personas, 15\,\%), ``2 o más proyectos dirigidos · 2 o más publicaciones Q1--Q2'', corresponde a quienes destacan en ambas facetas, con una media de 6,8 proyectos dirigidos y 10,8 publicaciones Q1--Q2. El cuarto (135 personas, 14\,\%) dirige el 46\,\% de sus proyectos, aunque solo el 27\,\% de sus publicaciones está en Q1--Q2. Su nombre, ``hasta 10 publicaciones Q1--Q2'', es verdadero para todos sus integrantes, pero también lo cumple el 91\,\% del resto de la dimensión; en estos casos, la descripción promedio del grupo complementa al nombre. Así, los patrones separan roles de dirección y de publicación que un conteo agregado no distinguía.
+\fi
+
+\subsection{Perfil completo}
+\label{sec:res_perfil_completo}
+
+El perfil completo reúne las 12 dimensiones y el contenido de las evidencias de cada persona. La Tabla \ref{tab:perfil_completo} resume, por ámbito, los perfiles amplios, su estabilidad y los microarquetipos obtenidos al subdividirlos.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Perfiles amplios y microarquetipos del perfil completo por ámbito.}
+    \label{tab:perfil_completo}
+    \footnotesize
+    \begin{tabular}{p{2.6cm} r c c c c c c}
+        \toprule
+        & & \multicolumn{3}{c}{\textbf{Perfiles amplios}} & \multicolumn{3}{c}{\textbf{Microarquetipos}} \\
+        \cmidrule(lr){3-5} \cmidrule(lr){6-8}
+        \textbf{Ámbito} & \textbf{Personas} & $k$ & \textbf{ARI} & \textbf{Mayor (\%)} & \textbf{N.º} & \textbf{Estables} & \textbf{ARI} \\
+        \midrule
+        Todo el personal & 3\,164 & 7 & 0,888 & 39,4 & 16 & 2 de 7 & 0,672--0,996 \\
+        Administrativos & 1\,299 & 5 & 0,891 & 51,3 & 11 & 1 de 4 & 0,749--0,960 \\
+        Docentes & 1\,883 & 6 & 0,622 & 32,7 & 14 & 2 de 6 & 0,865--1,000 \\
+        \bottomrule
+    \end{tabular}
+    \par\smallskip
+    \raggedright\footnotesize Nota: ``Mayor'' es el porcentaje del ámbito en el perfil amplio más grande. ``Estables'' cuenta las subdivisiones con ARI de al menos 0,9 sobre el total de perfiles subdivididos.
+\end{table}
+
+Los resultados muestran un continuo más que grupos separados. En los tres ámbitos, entre el 23\,\% y el 26\,\% de las personas tiene un perfil mixto, cuya segunda afinidad alcanza al menos el 80\,\% de la primera. La silueta de los perfiles amplios fue cercana a cero en todos los $k$ evaluados (entre 0,003 y 0,005 para el $k$ elegido). La estabilidad fue moderada en todo el personal (0,888) y en administrativos (0,891) y baja en docentes (0,622), el único ámbito en que las fronteras entre perfiles cambiaron de forma apreciable entre submuestras. De las 17 subdivisiones en microarquetipos, solo 5 alcanzaron una estabilidad de 0,9, y las demás se marcan como orientativas.
+
+La Figura \ref{fig:mapas} muestra el mapa del perfil completo con cada perfil amplio resaltado. Los perfiles ocupan regiones contiguas, sin espacios vacíos entre ellas, y junto a perfiles extensos aparecen nichos pequeños y compactos.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Mapa t-SNE del perfil completo. Cada panel resalta en azul a las personas de un perfil amplio sobre el resto del ámbito, en gris.}
+    \begin{subfigure}{\linewidth}
+        \centering
+        \caption{Personal docente}
+        \includegraphics[width=0.92\linewidth]{figuras/cap03_mapa_docentes.pdf}
+    \end{subfigure}
+    \par\medskip
+    \begin{subfigure}{\linewidth}
+        \centering
+        \caption{Personal administrativo}
+        \includegraphics[width=0.92\linewidth]{figuras/cap03_mapa_administrativos.pdf}
+    \end{subfigure}
+    \label{fig:mapas}
+\end{figure}
+
+Los perfiles amplios se describen por las dimensiones en que su intensidad media se aleja de la del ámbito y por sus temas distintivos. Entre docentes, el perfil más grande (616 personas, 32,7\,\%) destaca en Vinculación, Docencia y Reconocimientos; otro (315 personas) destaca en Investigación, Ponencias y Capacitación, con temas distintivos de biología y nutrición. Entre administrativos, el 51,3\,\% del ámbito forma un perfil cercano al promedio en todas las dimensiones, y el segundo (407 personas) se distingue por una mayor intensidad en Trayectoria en ESPOL y por temas de contratación pública y contabilidad.
+
+Estos resultados indican que el personal no se divide en tipos cerrados. Los perfiles amplios funcionan como zonas de orientación y los microarquetipos como referencias de detalle, por lo que los grupos deben leerse como orientativos y la comparación entre personas debe apoyarse en las personas parecidas y en la evidencia individual.
+
+\section{Búsqueda semántica de personas}
+\label{sec:res_busqueda}
+
+La búsqueda se evaluó con 80 consultas de tipo \textit{known-item}, en las que se conoce a la persona dueña de la evidencia buscada: 40 parafraseadas a partir de títulos de publicaciones y 40 a partir de nombres de materias\footnote{La evaluación se ejecutó el 1 de octubre de 2026, con la versión de evidencias vigente en esa fecha.}. La Tabla \ref{tab:busqueda} compara cinco configuraciones, desde la búsqueda densa global hasta la configuración final con cross-encoder.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Evaluación \textit{known-item} de la búsqueda semántica (80 consultas).}
+    \label{tab:busqueda}
+    \small
+    \begin{tabular}{>{\raggedright\arraybackslash}p{9.6cm} c c c}
+        \toprule
+        \textbf{Configuración} & \textbf{Recall@1} & \textbf{Recall@10} & \textbf{MRR} \\
+        \midrule
+        Densa global (línea base) & 0,13 & 0,34 & 0,20 \\
+        Híbrida global (densa + BM25) & 0,08 & 0,35 & 0,16 \\
+        Interpretación de la consulta y búsqueda por tipo, juez por percentil & 0,04 & 0,41 & 0,16 \\
+        Por tipo, juez por fusión de rangos entre recuperación y reranker & 0,28 & 0,56 & 0,37 \\
+        \textbf{Por tipo, cross-encoder como juez (configuración final)} & \textbf{0,41} & \textbf{0,65} & \textbf{0,49} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+La búsqueda densa sobre todas las evidencias ubicó a la persona correcta entre las diez primeras en el 34\,\% de las consultas. Añadir BM25 a esa búsqueda global no la mejoró (recall@10 de 0,35 y MRR de 0,16). Interpretar la consulta y buscar por tipo de evidencia elevó el recall@10 a 0,41, pero la persona correcta casi nunca quedó primera (recall@1 de 0,04), porque el percentil dentro de cada tipo siempre marca alguna evidencia como relevante y ordena mal. La fusión de rangos con el reranker alcanzó 0,56 y 0,37, y la configuración final, en la que el cross-encoder decide la relevancia de cada evidencia, obtuvo los mejores valores: recall@10 de 0,65, MRR de 0,49 y la persona correcta en primer lugar en el 41\,\% de las consultas. El mayor aporte provino, por tanto, de juzgar la relevancia evidencia por evidencia, no de ampliar la recuperación.
+
+El desempeño difirió por tipo de consulta. Con la configuración final, las consultas derivadas de publicaciones alcanzaron un recall@10 de 0,90 y un MRR de 0,78; las de materias, 0,40 y 0,20. Los nombres de materias son cortos y muchas personas dictan materias equivalentes, de modo que esas consultas tienen varias respuestas legítimas además de la buscada y la métrica subestima su utilidad real. El umbral de relevancia influyó poco: entre 0,05 y 0,7, el recall@10 se mantuvo entre 0,65 y 0,66.
+
+En la evaluación, la configuración final tardó en promedio 2,2\,s por consulta, con los modelos cargados y la interpretación en caché. En uso normal, una búsqueda tomó entre 2,7 y 5\,s; una consulta nueva sumó entre 2 y 20\,s por la interpretación con el modelo de lenguaje, y la primera búsqueda tras iniciar el servicio, unos 30\,s por la carga de los modelos. La Figura \ref{fig:busqueda} muestra una búsqueda en el prototipo.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Resultado de una búsqueda en el prototipo: interpretación de la consulta, candidatos y evidencias que respaldan cada capacidad (datos anonimizados).}
+    \figpendiente{Captura de la pestaña Búsqueda con la interpretación (``Entendí'') y los primeros candidatos, con nombres reemplazados por ``Persona A'', ``Persona B''.}{Usuario: captura del dashboard}
+    \label{fig:busqueda}
+\end{figure}
+
+\section{Interpretabilidad de los resultados}
+\label{sec:res_interpretabilidad}
+
+Cada resultado del sistema se acompañó de la información que lo justifica, sin etiquetas opacas. Se obtuvieron cinco mecanismos de explicación:
+
+\begin{itemize}
+    \item \textbf{Nombres de patrón verificables.} Cada patrón por dimensión lleva un nombre que cumple el 100\,\% de sus integrantes, como ``doctorado'' o ``al menos 1 función adicional''. La mediana de la proporción del resto de la dimensión que no cumple el nombre fue de 0,94 en docentes y 0,97 en administrativos, de modo que los nombres, además de ser ciertos, distinguen. En 8 de los 97 patrones esa proporción fue menor que 0,5, y el nombre se complementa con la descripción promedio del grupo.
+    \item \textbf{Temas distintivos.} Los perfiles amplios y los microarquetipos se describen por los temas que aparecen en ellos con más frecuencia que en el ámbito.
+    \item \textbf{Evidencia concreta por persona.} La ficha muestra las evidencias que sostienen el nivel de cada dimensión y la fecha de la más reciente.
+    \item \textbf{Razones de las personas parecidas.} Cada persona parecida se presenta con las vistas o dimensiones en que se parece, los temas compartidos y el par de evidencias más similar.
+    \item \textbf{Evidencia de cada resultado de búsqueda.} Cada candidato indica qué capacidades cubre, con relevancia alta, media o baja, y las evidencias que las sustentan, con su tipo y sus fechas.
+\end{itemize}
+
+La Figura \ref{fig:ficha} muestra cómo se presentan estas explicaciones en la ficha de una persona.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Ficha de una persona en el prototipo: nivel, patrón y temas por dimensión, con la evidencia que los respalda (datos anonimizados).}
+    \figpendiente{Captura de la ficha (pestaña Dimensiones con una dimensión desplegada, o pestaña Perfil completo), con el nombre reemplazado por ``Persona A'' y sin cargo ni unidad identificables.}{Usuario: captura del dashboard}
+    \label{fig:ficha}
+\end{figure}
+
+La estabilidad sirvió como validación interna. Todos los patrones por dimensión superaron un ARI de 0,9; los perfiles amplios quedaron entre 0,62 y 0,89, y la mayoría de los microarquetipos, por debajo de 0,9. La confianza en los grupos disminuye, por tanto, con el nivel de detalle, y la interfaz lo comunica marcando como orientativos los grupos inestables. Una silueta baja no invalida los grupos, porque mide la separación entre ellos y, en datos que forman un continuo, quienes están en la frontera siempre quedan cerca del grupo vecino; el ARI, en cambio, comprueba si la misma partición reaparece al cambiar la muestra.
+
+\pendiente{resultados de la validación con Talento Humano y el comité docente}
+
+\section{Prototipo de apoyo a la decisión}
+\label{sec:res_prototipo}
+
+El prototipo reunió los resultados anteriores en una aplicación web con cinco módulos. La Tabla \ref{tab:modulos} relaciona cada módulo con la decisión que apoya.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Módulos del prototipo y decisión que apoya cada uno.}
+    \label{tab:modulos}
+    \footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{6.2cm} >{\raggedright\arraybackslash}p{5.6cm}}
+        \toprule
+        \textbf{Módulo} & \textbf{Qué muestra} & \textbf{Decisión que apoya} \\
+        \midrule
+        Perfiles por dimensión & Patrones con nombre, temas, mapa y lista de personas ordenada por nivel, por ámbito y vigencia & Identificar a quienes concentran actividad en un área para asignar tareas \\
+        Perfil completo & Perfiles amplios, microarquetipos, mapa y comparación de cada grupo con su ámbito & Conocer la composición del personal para la planificación académica y administrativa \\
+        Ficha de persona & Trayectoria, dimensiones, perfil completo, evidencias y personas parecidas & Verificar a un candidato con su evidencia y encontrar alternativas \\
+        Búsqueda & Candidatos para una consulta en lenguaje natural, con la evidencia de cada capacidad & Formar una lista inicial de candidatos para una tarea o comisión \\
+        Comparar & Dos personas lado a lado en las vistas del perfil completo & Elegir entre candidatos o equilibrar un equipo \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Los módulos quedaron conectados entre sí: desde la ficha se navega a los patrones, temas, perfiles amplios y personas parecidas de cada persona, y desde la búsqueda a la ficha de cada candidato. Todas las vistas comparten dos filtros, el ámbito y la vigencia, de modo que una misma consulta puede limitarse al personal vigente sin perder el historial de quienes ya no lo están. Los enlaces que se comparten no incluyen identificadores de personas. Las Figuras \ref{fig:vista_dimension} y \ref{fig:vista_perfil} muestran las dos vistas de perfiles.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Vista de perfiles por dimensión en el prototipo.}
+    \figpendiente{Captura de Perfiles, vista por dimensión (por ejemplo, Investigación, ámbito docentes, solo vigentes) con los patrones, los temas y el mapa; la lista de personas recortada u ocultando nombres.}{Usuario: captura del dashboard}
+    \label{fig:vista_dimension}
+\end{figure}
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Vista del perfil completo en el prototipo.}
+    \figpendiente{Captura de Perfiles, vista Perfil completo (ámbito docentes) con la lista de perfiles amplios, el mapa y el panel de un perfil seleccionado; sin nombres de representantes.}{Usuario: captura del dashboard}
+    \label{fig:vista_perfil}
+\end{figure}
+
+Para el caso de uso de conformar una comisión, se recorrieron los módulos en cuatro pasos, que ilustra la Figura \ref{fig:caso_uso}. Primero, se escribió en la búsqueda la necesidad, por ejemplo docentes vigentes con experiencia en proyectos de vinculación sobre energías renovables, y el sistema mostró cómo la interpretó, separando capacidades obligatorias y deseables. Segundo, se revisó la lista de candidatos, cada uno con las capacidades que cubre y las evidencias que lo respaldan. Tercero, se abrió la ficha de cada candidato para revisar su trayectoria, su nivel y patrón en Vinculación y sus personas parecidas, que amplían la lista con perfiles cercanos que la consulta no recuperó. Cuarto, se compararon dos candidatos lado a lado para equilibrar la comisión, por ejemplo entre experiencia en dirección de proyectos y producción académica. La selección final quedó en manos de la persona responsable, que contrasta esta información con criterios institucionales que el sistema no contiene.
+
+\begin{figure}[!htbp]
+    \centering
+    \caption{Flujo del caso de uso para conformar una comisión: de la consulta a la comparación de candidatos (datos anonimizados).}
+    \begin{subfigure}{\linewidth}
+        \centering
+        \caption{Consulta y candidatos}
+        \figpendiente{Captura de la pestaña Búsqueda con la consulta del caso de uso y la lista de candidatos (nombres como ``Persona A'', ``Persona B'').}{Usuario: captura del dashboard}
+    \end{subfigure}
+    \par\medskip
+    \begin{subfigure}{\linewidth}
+        \centering
+        \caption{Comparación de dos candidatos}
+        \figpendiente{Captura de la pestaña Comparar con dos candidatos del caso de uso, rotulados ``Persona A'' y ``Persona B''.}{Usuario: captura del dashboard}
+    \end{subfigure}
+    \label{fig:caso_uso}
+\end{figure}
+
+El prototipo cumplió así su propósito de apoyo a la decisión: concentró en una consulta y una ficha información que antes estaba dispersa en varios extractos y, en cada paso, mostró la evidencia en que se basa, sin emitir recomendaciones automáticas sobre las personas.
