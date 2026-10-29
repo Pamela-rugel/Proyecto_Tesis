@@ -2,41 +2,28 @@
 %\thispagestyle{empty}
 \label{chapter:metodologia}
 
-El capítulo actual describe los pasos que atravesó el proyecto para convertir datos institucionales dispersos en información útil para la creación de un sistema de exploración de perfiles. En la metodología se incorporaron cambios respectos a la propuesta inicial. Desde las técnicas para agrupar al personal hasta la forma en que se trató a los datos no estructurados con el fin de obtener una perspectiva 
-no estructurada de la información. A continuación , se presenta el proceso por el que pasaron los datos, la limpieza, transformación y el uso de técnicas de aprendizaje automático para obtener un perfil del personal que pueda ser consultado y explorado por los usuarios. 
+El capítulo actual describe los pasos que atravesó el proyecto para convertir datos institucionales dispersos en información útil para la creación de un sistema de exploración de perfiles. En la metodología se incorporaron cambios respecto a la propuesta inicial, tanto en las técnicas para agrupar al personal como en la forma de tratar los datos no estructurados. A continuación se presenta el recorrido de los datos: su limpieza y transformación, su integración en una representación común y el uso de técnicas de aprendizaje automático para obtener un perfil del personal que pueda ser consultado y explorado por los usuarios.
 
 \section{Enfoque del trabajo}
+\label{sec:met_enfoque}
 
-La propuesta del proyecto tiene como producto final un sistema de gestión de perfiles, el sistema esta constituido de dos partes principales, la exploración de perfiles y la búsqueda semántica de personas.La exploración de perfiles consiste en un conjunto de visualizaciones que permiten la comparación entre personal de institución, conocer el porcentaje de pertenencia a grupos descubiertos y su similitud a otro grupos.La búsqueda semántica de personas permite a un usuario encontrar personas que cumplan con ciertos criterios, por ejemplo, que tengan experiencia en un tema específico, que hayan participado en proyectos de investigación o que tengan un cierto nivel de formación académica.
+La propuesta del proyecto tiene como producto final un sistema de exploración de perfiles, constituido por dos partes principales: la exploración de perfiles y la búsqueda semántica de personas. La exploración de perfiles consiste en un conjunto de visualizaciones que describen a cada persona por dimensiones (cuánta evidencia registra en cada área, sobre qué temas y con qué forma de participación), la ubican dentro de perfiles amplios del personal y permiten compararla con las personas que más se le parecen. La búsqueda semántica permite encontrar personas que cumplan ciertos criterios expresados en lenguaje natural, por ejemplo, que tengan experiencia en un tema específico, que hayan participado en proyectos de investigación o que tengan un determinado nivel de formación académica.
 
-Para llegar a este producto final, el proyecto consistió en las siguientes etapas:
-
-\begin{enumerate}
-    \item Extracción, limpieza e integración de los datos institucionales.
-    \item Creación de variables estructuradas derivadas de las fuentes institucionales, relacionadas a su trayectoria laboral, formación y experiencia.
-    \item Construcción de datasets denominados "evidencias", cada registro representa una evidencia de la formación, experiencia o capacidades del personal.
-    \item Representación textual de cada evidencia mediante técnicas de procesamiento del lenguaje natural (plantillas, concatenación de campos, limpieza de caracteres, etc.)
-    \item Generación de embeddings semánticos de los textos representativos.
-    \item Modelado no supervisado para descubrir perfiles y construcción de un motor de búsqueda semántica de personas.
-    \item Validación, interpretación de los resultados e implementación del prototipo.
-\end{enumerate}
-
-
-La Figura \ref{fig:flujo_general} representa el flujo, la información con la que se trabaja en cada etapa y como sirve como entrada para la siguiente etapa.
+Para llegar a este producto final, el proyecto pasó por las etapas de la Figura \ref{fig:flujo_general}, que muestra la información con la que se trabaja en cada una y cómo sirve de entrada para la siguiente.
 
 \begin{figure}[!htbp]
     \centering
     \caption{Flujo general de la metodología, desde la extracción de datos hasta generar el prototipo.}
     \begin{tikzpicture}[
-        caja/.style={draw, rounded corners=3pt, align=center, text width=12.5cm, minimum height=1.05cm, font=\small, fill=gray!6},
+        caja/.style={draw, rounded corners=3pt, align=center, text width=12.5cm, minimum height=0.9cm, inner sep=3pt, font=\small, fill=gray!6},
         flecha/.style={->, thick, gray!70!black}]
         \node[caja] (f1) at (0,0)     {\textbf{Datos institucionales}\\ historial laboral, cargos de autoridades, formación académica, investigación, vinculación, docencia, capacitación, idiomas, menciones de honor};
-        \node[caja] (f2) at (0,-1.9)  {\textbf{Limpieza y generación de variables}\\ población, trayectoria por tramos, vigencia, depuración de fechas y registros};
-        \node[caja] (f3) at (0,-3.8)  {\textbf{Construcción de dataset de evidencias}\\ 126\,070 registros de 17 tipos (información de diferentes fuentes) para 3\,164 personas (texto + atributos)};
-        \node[caja] (f4) at (0,-5.7)  {\textbf{Representación semántica}\\ embeddings multilingües de cada texto único, calculados de forma local};
-        \node[caja] (f5) at (0,-7.6)  {\textbf{Perfil por dimensiones}\\ intensidad, temas y patrones de actividad por dimensión; perfil completo y patrones globales};
-        \node[caja] (f6) at (0,-9.5)  {\textbf{Búsqueda semántica de personas}\\ Interpretación de la consulta, recuperación por tipo de evidencia y ranking de resultados};
-        \node[caja] (f7) at (0,-11.4) {\textbf{Validación y prototipo}\\ estabilidad, evaluación de la búsqueda, revisión de casos y aplicación web};
+        \node[caja] (f2) at (0,-1.65) {\textbf{Limpieza y generación de variables}\\ población, trayectoria por tramos, vigencia, depuración de fechas y registros};
+        \node[caja] (f3) at (0,-3.15) {\textbf{Construcción de dataset de evidencias}\\ 126\,012 evidencias de 17 tipos para 3\,164 personas (texto y atributos)};
+        \node[caja] (f4) at (0,-4.65) {\textbf{Representación semántica}\\ embeddings multilingües de cada texto único, calculados de forma local};
+        \node[caja] (f5) at (0,-6.15) {\textbf{Perfil por dimensiones y perfil completo}\\ intensidad, temas y patrones por dimensión; red multivista y perfiles amplios};
+        \node[caja] (f6) at (0,-7.65) {\textbf{Búsqueda semántica de personas}\\ interpretación de la consulta, recuperación por tipo de evidencia y ranking};
+        \node[caja] (f7) at (0,-9.15) {\textbf{Validación y prototipo}\\ estabilidad, evaluación de la búsqueda, revisión de casos y aplicación web};
         \draw[flecha] (f1.south) -- (f2.north);
         \draw[flecha] (f2.south) -- (f3.north);
         \draw[flecha] (f3.south) -- (f4.north);
@@ -47,12 +34,16 @@ La Figura \ref{fig:flujo_general} representa el flujo, la información con la qu
     \label{fig:flujo_general}
 \end{figure}
 
-Durante todo el proyecto se trabajó cuidadosamente para dejar constancia de cada decisión tomada con los datos, ya que presentaban incosistencias y casos particulares (como personal jubilado o fallecido) que requerían reglas de negocio para ser tratados. Las reglas fueron documentadas y la justificación de las decisiones fueron validadas con personal involucrado en el proyecto (Director de Talento Humano y miembro del comité docente).
+Las etapas de perfilamiento y de búsqueda parten de las mismas evidencias y de los mismos embeddings, pero son independientes entre sí: la búsqueda no se restringe a los grupos descubiertos, y los grupos no dependen de ninguna consulta.
+
+Durante todo el proyecto se dejó constancia de cada decisión tomada con los datos, ya que presentaban inconsistencias y casos particulares (como personal jubilado o fallecido) que requerían reglas de negocio para ser tratados. Las reglas fueron documentadas y su justificación fue validada con personal involucrado en el proyecto (Director de Talento Humano y miembro del comité docente).
+
 \section{Fuentes de datos}
+\label{sec:met_fuentes}
 
 \subsection{Datos institucionales}
 
-La información se obtuvo de las bases de datos de los sistemas de Talento Humano, postgrados, académico y de investigación de ESPOL. La Tabla \ref{tab:fuentes} resume qué aporta cada uno. La información se exportó en formato csv para este prototipo y su limpieza, procesamiento y unión se realizó con herramientas de programación en Python. La información de cada extracto se mantiene en archivos separados, de manera que se pueda reprocesar cada fuente de dato si es necesario.
+La información se obtuvo de las bases de datos de los sistemas de Talento Humano, postgrados, académico y de investigación de ESPOL. La Tabla \ref{tab:fuentes} resume qué aporta cada uno. La información se exportó en formato csv para este prototipo y su limpieza, procesamiento y unión se realizó con herramientas de programación en Python. La información de cada extracto se mantiene en archivos separados, de manera que se pueda reprocesar cada fuente de datos si es necesario.
 
 \begin{table}[!htbp]
     \centering
@@ -68,53 +59,35 @@ La información se obtuvo de las bases de datos de los sistemas de Talento Human
         Registro de autoridades & Designaciones de autoridades, coordinaciones y subrogaciones, con las siglas oficiales de cada unidad. \\
         Experiencia externa & Cargos e instituciones fuera de ESPOL, con país y fechas. \\
         Titulaciones & Títulos obtenidos y en curso, institución, país y áreas de conocimiento (CINE y Frascati). \\
-        Proyectos de investigación & Proyectos, rol de cada participante, unidad, financiamiento y áreas. \\
-        Proyectos de vinculación & Proyectos y programas con la comunidad y el rol en cada uno. \\
+        Proyectos de investigación y de vinculación & Proyectos y programas, rol de cada participante, unidad, financiamiento y áreas. \\
         Publicaciones & Artículos y otras publicaciones, medio, indexación y cuartil. \\
         Proyectos de grado & Tesis dirigidas, con nivel, programa y estudiantes. \\
         Ponentes & Participación como ponente en eventos académicos. \\
         Capacitaciones y certificados & Cursos, talleres, seminarios y certificaciones profesionales, con horas, modalidad y entidad. \\
         Idiomas & Idiomas declarados y su nivel, junto con el catálogo de idiomas. \\
         Menciones de honor & Premios y menciones recibidos. \\
-        Carga académica & Materias dictadas entre 1999 y 2026. \\
-        Carga politécnica & Horas asignadas a docencia, investigación, vinculación y gestión desde 2013, con su catálogo de actividades. \\
+        Carga académica y politécnica & Materias dictadas entre 1999 y 2026, y horas asignadas a docencia, investigación, vinculación y gestión desde 2013. \\
         \bottomrule
     \end{tabular}
 \end{table}
 
 \subsection{Población de estudio}
+\label{sec:met_poblacion}
 
-La población se define como el personal docente, administrativo y auxiliar que estuvo contratado o vigente en algún momento de los últimos cinco años. Esa ventana delimita a quiénes se estudia, pero no recorta su historia: si una persona tiene registros anteriores, como materias dictadas en 2005 o un cargo de 2010, se conservan. De lo contrario, quien lleva veinte años en la institución aparecería con un perfil igual de corto como un recién contratado. Además, se excluyó a personal que no tiene ningún registro de trayectoria y a también a quienes aparecen en defunción. 
+La población se define como el personal docente, administrativo y auxiliar que estuvo contratado o vigente en algún momento de los últimos cinco años. Esa ventana delimita a quiénes se estudia, pero no recorta su historia: si una persona tiene registros anteriores, como materias dictadas en 2005 o un cargo de 2010, se conservan. De lo contrario, quien lleva veinte años en la institución aparecería con un perfil tan corto como el de un recién contratado. Además, se excluyó al personal que no tiene ningún registro de trayectoria y a quienes aparecen en defunción.
 
-La Tabla \ref{tab:poblacion} muestra cómo se llegó a la población final. 
+De las 3\,195 personas contratadas o vigentes en los últimos cinco años se excluyeron 24 identificadas en defunción y 7 sin ningún registro de trayectoria, con lo que la población de trabajo quedó en 3\,164 personas.
 
-\begin{table}[!htbp]
-    \centering
-    \caption{Definición de la población de estudio.}
-    \label{tab:poblacion}
-    \small
-    \begin{tabular}{p{10cm} r}
-        \toprule
-        \textbf{Criterio} & \textbf{N.º de personas} \\
-        \midrule
-        Contratadas o vigentes en los últimos cinco años & 3\,195 \\
-        Identificadas en defunción (excluidas) & $-24$ \\
-        Sin ningún registro de trayectoria (excluidas) & $-7$ \\
-        \midrule
-        \textbf{Población de trabajo} & \textbf{3\,164} \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-La población final se puede definir como: todo el personal (3\,164 personas), el personal administrativo (1\,299) y el personal docente (1\,881).
+Los análisis se realizan por separado en tres ámbitos: todo el personal (3\,164 personas), el personal administrativo (1\,299) y el personal docente (1\,883). El tipo de empleado se toma de los contratos activos a la fecha de corte o, si la persona no tiene ninguno, de su último registro. Quien mantiene a la vez un contrato administrativo y uno docente activos, por ejemplo una autoridad que también dicta clases, entra en ambos ámbitos; por eso la suma de los dos ámbitos (3\,182) supera a la población en 18 personas. Cada ámbito tiene sus propias escalas, percentiles y grupos, de modo que un resultado de un ámbito no se compara directamente con el de otro.
 
 \subsection{Tratamiento de la información personal}
 
-Debido a que los extractos contienen datos personales, se consideró la Ley Orgánica de Protección de Datos Personales (LOPDP) y se implementaron medidas para garantizar la privacidad y seguridad de la información del personal. El procesamiento se efectúa dentro de un servidor local de la institución, sin tranferencia de datos a plataformas externas. La única herramienta externa utilizada es un modelo de lenguaje para interpretar las consultas del buscador, pero este modelo solo recibe únicamente el texto ingresado por el usuario y un catálogo de tipos de evidencia con ejemplos ficticios, sin acceso a información personal.
+Debido a que los extractos contienen datos personales, se consideró la Ley Orgánica de Protección de Datos Personales \parencite{LOPDP2021} y se implementaron medidas para garantizar la privacidad y seguridad de la información del personal. El procesamiento se efectúa dentro de un servidor local de la institución, sin transferencia de datos a plataformas externas. La única herramienta externa utilizada es un modelo de lenguaje para interpretar las consultas del buscador, pero este modelo solo recibe el texto ingresado por el usuario y un catálogo de tipos de evidencia con ejemplos ficticios, sin acceso a información personal.
 
-Por otra parte, el sexo y la edad no son consideradas variables de entrada en los modelos ni se ofrecen como criterios de búsqueda dentor del dashboard. Los identifcadores internos no son mostrados en la interfaz ni en los enlaces de consulta de información. 
+Por otra parte, el sexo y la edad no se consideran variables de entrada en los modelos ni se ofrecen como criterios de búsqueda dentro del dashboard. Los identificadores internos no se muestran en la interfaz ni en los enlaces de consulta de información, y los nombres de las personas no se copian a los archivos de resultados: el prototipo los lee del extracto original en el momento de mostrarlos.
 
 \section{Preprocesamiento y reglas de negocio}
+\label{sec:met_preprocesamiento}
 
 \subsection{Limpieza de cada fuente}
 
@@ -124,7 +97,7 @@ En la experiencia externa se eliminaron registros sin cargo, con textos de relle
 
 \subsection{Construcción del historial laboral}
 
-En la construcción del historial laboral y la determinación del estado de vigencia se requirieron depurar los registros de contratos para representar de forma más fiel a trayectoria de cada persona en ESPOL. Como el historial contiene múltiples contratos para un mismo cargo, períodos superpuestos y movimientos administrativos temporales se construyeron tramos de continuidad para según el cargo y la unidad, tolerando recesos entre periodos. Los cargos se clasificaron en categorías según el texto del nombre del cargo y el tipo (docente o administrtivo). Además, se unificaron los cargos anteriores a la reforma de la LOES con sus equivalentes actuales y se trataron aparte contratos puntuales, roles simultáneos y subrogaciones dentro de la institución para evitar cambios de cargo inexistentes.
+En la construcción del historial laboral y la determinación del estado de vigencia fue necesario depurar los registros de contratos para representar de forma más fiel la trayectoria de cada persona en ESPOL. Como el historial contiene múltiples contratos para un mismo cargo, períodos superpuestos y movimientos administrativos temporales, se construyeron tramos de continuidad según el cargo y la unidad, tolerando recesos de hasta 90 días entre periodos. Los cargos se clasificaron en categorías según el texto del nombre del cargo y el tipo (docente o administrativo). Además, se unificaron los cargos anteriores a la reforma de la LOES con sus equivalentes actuales y se trataron aparte los contratos puntuales, los roles simultáneos y las subrogaciones dentro de la institución para evitar cambios de cargo inexistentes.
 
 Para determinar la vigencia laboral, se establecieron las siguientes reglas:
 \begin{itemize}
@@ -134,67 +107,230 @@ Para determinar la vigencia laboral, se establecieron las siguientes reglas:
 \item Contratos sin fecha de fin: cuando no existe una fecha de fin, se requiere que la persona tenga al menos un registro en los últimos doce meses, para evitar considerar vigentes nombramientos antiguos que no fueron cerrados en el sistema.
 \end{itemize}
 
-La vigencia laboral se utiliza para filtrar la población de estudio. Con estas reglas, se identificaron 1,737 personas con contrato vigente en ESPOL, equivalentes al 55,% de la población de estudio.
+Con estas reglas, 1\,389 personas de la población de estudio tienen un contrato vigente, el 43,9\,\% de sus 3\,164 personas.
 
-\section{Modelado de perfiles profesionales}
+La vigencia no interviene en el cálculo de los perfiles. Se usa para filtrar las vistas del prototipo, para elegir a las personas representativas de cada grupo y para restringir la búsqueda cuando el usuario lo indica.
+
+\section{Integración de la información en evidencias}
+\label{sec:met_evidencias}
 
 \subsection{La evidencia como unidad de información}
 
-En una primera iteración se intentó representar a cada persona con un vector de variables agregadas, como años de servicio, número de publicaciones, número de cargos, número de proyectos y otras variables similares. Representar los datos de esta manera hacia perdía información de interés, porque no se lograba distinguir entre personas con la misma cantidad de proyectos o publicaciones pero en áreas distintas, enfocadas en temas diferentes. Por ejemplo, una persona con 12 publicaciones en desarrollo de software y otra con 12 publicaciones en estadística tendrían el mismo vector de variables agregadas, pero su experiencia es muy diferente.
+En una primera iteración se intentó representar a cada persona con un vector de variables agregadas, como años de servicio, número de publicaciones, número de cargos, número de proyectos y otras variables similares. Representar los datos de esta manera hacía perder información de interés, porque no se lograba distinguir entre personas con la misma cantidad de proyectos o publicaciones pero en áreas distintas, enfocadas en temas diferentes. Por ejemplo, una persona con 12 publicaciones en desarrollo de software y otra con 12 publicaciones en estadística tendrían el mismo vector de variables agregadas, pero su experiencia es muy diferente.
 
-Por eso se adoptó como unidad la \textit{evidencia}: un elemento concreto y verificable del perfil, como un cargo, un título, una publicación, un proyecto, una materia dictada, una certificación, entre otros. Todas las evidencias comparten el mismo esquemaa, compuesto por un identificador, la persona, el tipo de evidencia, un texto y un conjunto de atributos. El texto es una descripción breve, generado a partir de la información de la evidencia, pensada para el análisis semántico. No incluye verbos como ``ocupó'' o ``fue'', fechas, identificadores ni el nombre de la institución. Los atributos guardan en formato estructurado lo que no debe influir en la semántica como fechas, roles, niveles, cuartiles, horas o país.
+Por eso se adoptó como unidad la \textit{evidencia}: un elemento concreto y verificable del perfil, como un cargo, un título, una publicación, un proyecto, una materia dictada o una certificación. Todas las evidencias comparten el mismo esquema, compuesto por un identificador, la persona, el tipo de evidencia, un texto y un conjunto de atributos. El texto es una descripción breve, generada a partir de la información de la evidencia y pensada para el análisis semántico. No incluye verbos como ``ocupó'' o ``fue'', fechas, identificadores ni el nombre de la institución. Los atributos guardan en formato estructurado lo que no debe influir en la semántica, como fechas, roles, niveles, cuartiles, horas o país.
 
-Cada evidencia tiene un identificador único, se obtiene de un \textit{hash} de su contenido, por lo que no cambia entre ejecuciones. Las evidencias conservan la referencia a su origen, de manera que cualquier dato mostrado pueda rastrearse hasta el extracto.
+Cada evidencia tiene un identificador único que se obtiene de un \textit{hash} de su contenido, por lo que no cambia entre ejecuciones. Las evidencias conservan la referencia a su origen, de manera que cualquier dato mostrado pueda rastrearse hasta el extracto. Cada constructor de evidencias genera, además, un reporte con el número de registros descartados por cada filtro y un archivo con los registros no considerados y su motivo.
 
 \subsection{Tipos de evidencia}
 
-Se definieron 17 tipos de evidencia agrupados en siete secciones. La Tabla \ref{tab:evidencias} presenta el número de evidencias y de personas de cada tipo en la versión actual. En total existen 126\,070 evidencias.
+Se definieron 17 tipos de evidencia. La Tabla \ref{tab:evidencias} los agrupa según la dimensión del perfil a la que aportan (Sección \ref{sec:met_dimensiones}) y presenta el número de evidencias y de personas de cada tipo. En total existen 126\,012 evidencias.
 
 \begin{table}[!htbp]
     \centering
-    \caption{Tipos de evidencia, número de evidencias y personas con al menos una.}
+    \caption{Tipos de evidencia por dimensión, con el número de evidencias y de personas con al menos una.}
     \label{tab:evidencias}
     \small
-    \begin{tabular}{p{3.2cm} p{6.6cm} r r}
+    \begin{tabular}{p{3.4cm} p{6.4cm} r r}
         \toprule
-        \textbf{Sección} & \textbf{Tipo de evidencia} & \textbf{Evidencias} & \textbf{Personas} \\
+        \textbf{Dimensión} & \textbf{Tipo de evidencia} & \textbf{Evidencias} & \textbf{Personas} \\
         \midrule
-        \multirow{4}{*}{Trayectoria} & Cargo estructural en ESPOL & 5\,384 & 2\,454 \\
-         & Contrato puntual en ESPOL & 3\,759 & 1\,932 \\
-         & Función adicional o subrogación & 1\,214 & 601 \\
-         & Experiencia externa & 7\,994 & 2\,481 \\
-        \midrule
+        \multirow{2}{*}{Investigación} & Proyecto de investigación & 6\,373 & 1\,186 \\
+         & Publicación & 7\,797 & 923 \\
+        Ponencias & Ponencia & 909 & 392 \\
+        Vinculación & Proyecto de vinculación & 2\,479 & 418 \\
+        Tesis dirigidas & Tesis dirigida & 4\,626 & 549 \\
+        \multirow{2}{*}{Docencia} & Materia dictada & 10\,236 & 1\,257 \\
+         & Actividad de carga politécnica$^{a}$ & 16\,744 & 1\,621 \\
         \multirow{2}{*}{Formación} & Título obtenido & 6\,181 & 3\,138 \\
          & Formación en curso & 408 & 388 \\
-        \midrule
-        \multirow{5}{*}{Investigación} & Proyecto de investigación & 6\,373 & 1\,186 \\
-         & Proyecto de vinculación & 2\,479 & 418 \\
-         & Publicación & 7\,797 & 923 \\
-         & Tesis dirigida & 4\,626 & 549 \\
-         & Ponencia & 909 & 392 \\
-        \midrule
-        \multirow{2}{*}{Capacitación} & Capacitación & 42\,348 & 2\,566 \\
-         & Certificación & 3\,733 & 1\,359 \\
-        \midrule
+        Capacitación & Capacitación & 42\,348 & 2\,566 \\
+        Certificaciones & Certificación & 3\,733 & 1\,359 \\
         Idiomas & Idioma & 2\,594 & 2\,002 \\
         Reconocimientos & Mención de honor & 3\,291 & 1\,067 \\
+        \multirow{3}{*}{Trayectoria en ESPOL} & Cargo estructural & 5\,326 & 2\,454 \\
+         & Contrato puntual & 3\,759 & 1\,932 \\
+         & Función adicional o subrogación & 1\,214 & 601 \\
+        Experiencia externa & Experiencia externa & 7\,994 & 2\,481 \\
         \midrule
-        \multirow{2}{*}{Docencia} & Materia dictada & 10\,236 & 1\,257 \\
-         & Actividad de carga politécnica & 16\,744 & 1\,621 \\
-        \midrule
-        \multicolumn{2}{l}{\textbf{Total}} & \textbf{126\,070} & \textbf{3\,164} \\
+        \multicolumn{2}{l}{\textbf{Total}} & \textbf{126\,012} & \textbf{3\,164} \\
         \bottomrule
     \end{tabular}
+    \par\smallskip
+    \raggedright\footnotesize $^{a}$ Solo cuentan para Docencia las actividades con horas de docencia.
 \end{table}
 
 
 \section{Representación semántica del texto}
+\label{sec:met_embeddings}
 
-Para comparar las evidencias según su contenido, se convirtió cada texto en un vector numérico (\textit{embedding}) utilizando el modelo BGE-M3 \parencite{Chen2024}. Se escogió este modelo porque permite trabajar con varios idiomas, considerado que algunos nombres de títulos académicos, títulos de publicaciones y proyectos están en inglés, mientras que el resto del perfil está en español. Además, puede ejecutarse localmente con una GPU, lo que permite trabajar con la información institucional sin tener que enviarla a servicios externos. Cada texto se representa mediante un vector de 1\,024 dimensiones, cuyos valores se normalizan para facilitar la comparación entre ellos mediante la similitud coseno.
+Para comparar las evidencias según su contenido, se convirtió cada texto en un vector numérico (\textit{embedding}) utilizando el modelo BGE-M3 \parencite{Chen2024}. Se escogió este modelo porque permite trabajar con varios idiomas, considerando que algunos nombres de títulos académicos, títulos de publicaciones y proyectos están en inglés, mientras que el resto del perfil está en español. Además, puede ejecutarse localmente con una GPU, lo que permite trabajar con la información institucional sin tener que enviarla a servicios externos. Cada texto se representa mediante un vector de 1\,024 dimensiones, cuyos valores se normalizan a norma unitaria para facilitar la comparación entre ellos mediante la similitud coseno. El modelo lee como máximo 256 \textit{tokens} por texto, un límite holgado si se considera que el percentil 95 de los textos ronda los 360 caracteres.
 
-Como muchas evidencias se repiten entre personas (un proyecto con 32 participantes produce 32 evidencias con el mismo texto), solo se procesan los textos únicos, que son 87\,166. Los vectores se almacenan identificados por un \textit{hash} del texto, así que una ejecución posterior solo calcula los textos nuevos.
+Como muchas evidencias se repiten entre personas (un proyecto con 32 participantes produce 32 evidencias con el mismo texto), solo se procesan los textos únicos, que son 87\,160. Los vectores se almacenan identificados por un \textit{hash} del texto, así que una ejecución posterior solo calcula los textos nuevos.
 
-Se generaron dos versiones del texto. La completa se usa en la búsqueda y combina el contenido con su contexto, por ejemplo la unidad o el país. La versión \textit{de tema} conserva solo el título o nombre del ítem y se usa para descubrir temas.
+Se generaron dos versiones del texto. La completa se usa en la búsqueda y combina el contenido con su contexto, por ejemplo la unidad o el país. La versión \textit{de tema} conserva solo el título o nombre del ítem (el título de la publicación, el nombre del proyecto, la materia o el cargo) y se usa para descubrir temas y para describir el contenido del perfil completo. La separación se hizo porque, con el texto completo, los metadatos y el idioma dividían temas que en realidad eran el mismo: ``banano'' y ``banana'' quedaban en grupos distintos.
 
-Una limitación del modelo es que no conoce las siglas institucionales. Por ejemplo, la similitud entre ``GTSI'' y el nombre completo de esa unidad era igual a la que se obtiene entre textos sin relación. La solución fue escribir en el texto la sigla y el nombre completo juntos sin esperar que el modelo la infiriera.
+Una limitación del modelo es que no conoce las siglas institucionales. Por ejemplo, la similitud entre ``GTSI'' y el nombre completo de esa unidad era igual a la que se obtiene entre textos sin relación. La solución fue escribir en el texto la sigla y el nombre completo juntos, tomados del registro de autoridades, sin esperar que el modelo infiriera la equivalencia.
 
+\section{Perfil por dimensiones}
+\label{sec:met_dimensiones}
+
+El perfil de una persona se construye en dos capas. La primera la describe por separado en cada área de su actividad; la segunda, presentada en la Sección \ref{sec:met_perfil_completo}, la mira en conjunto. Las áreas, llamadas \textit{dimensiones}, no se descubren con un algoritmo: se definen por el tipo de evidencia, porque así cada valor del perfil puede explicarse con las evidencias que lo producen. Lo que sí se descubre en los datos es lo que ocurre dentro de cada dimensión, es decir, los temas y las formas de participar, sin categorías ni roles definidos de antemano.
+
+\subsection{Dimensiones del perfil}
+
+Los 17 tipos de evidencia se agruparon en 12 dimensiones, como muestra la Tabla \ref{tab:evidencias}. Investigación reúne proyectos y publicaciones porque ambos describen la producción científica, y Docencia reúne las materias dictadas y las horas de carga politécnica dedicadas a docencia. La trayectoria se dividió en dos dimensiones, una dentro de ESPOL y otra fuera, porque responden a preguntas distintas sobre la experiencia de la persona. Cada dimensión se mide con los componentes de la Tabla \ref{tab:dimensiones}.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Componentes con los que se mide cada dimensión.}
+    \label{tab:dimensiones}
+    \footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{11.2cm}}
+        \toprule
+        \textbf{Dimensión} & \textbf{Componentes} \\
+        \midrule
+        Investigación & Proyectos, proyectos dirigidos o codirigidos, publicaciones, publicaciones Q1--Q2 \\
+        Ponencias & Ponencias, ponencias en el exterior \\
+        Vinculación & Proyectos, proyectos dirigidos, años en proyectos \\
+        Tesis dirigidas & Tesis, estudiantes, tesis de maestría de investigación o doctorado \\
+        Docencia & Materias, semestres, estudiantes atendidos, horas de carga en docencia \\
+        Formación & Nivel máximo (peso 2), posgrados, título del exterior, posgrado en curso (peso 0,5) \\
+        Capacitación & Cursos, horas, cursos en el exterior \\
+        Certificaciones & Certificaciones, certificaciones vigentes, horas \\
+        Idiomas & Idiomas distintos del español, nivel máximo en un idioma extranjero \\
+        Reconocimientos & Menciones recibidas, menciones del exterior \\
+        Trayectoria en ESPOL & Años en cargos estructurales, cargos y contratos, funciones adicionales \\
+        Experiencia externa & Años, experiencias, experiencias en el exterior, experiencias académicas \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Los componentes se calculan a partir de los atributos de las evidencias. Los conteos y las cantidades (años, horas, estudiantes) se transforman con $\log(1+x)$, de modo que pasar de 0 a 5 publicaciones pese más que pasar de 100 a 105. El nivel de formación se codifica en una escala ordinal (bachiller 1, técnico 1,5, tercer nivel 2, otro cuarto nivel 2,5, maestría 3, doctorado 4) y el nivel de idioma, entre básico (1) y avanzado (3), equiparando los niveles del Marco Común Europeo de Referencia (A, B y C) con esa escala. Ambos se usan sin transformación logarítmica.
+
+\subsection{Intensidad y nivel}
+\label{sec:met_intensidad}
+
+La intensidad resume cuánta evidencia registra una persona en una dimensión. Para la persona $i$ y la dimensión $d$ se calcula primero un índice
+\begin{equation}
+    I_{id} = \sum_{c \in d} w_c \, \frac{x_{ic}}{\max_j x_{jc}}, \qquad \sum_{c \in d} w_c = 1,
+    \label{eq:indice}
+\end{equation}
+donde $x_{ic}$ es el componente $c$ de la persona y el máximo se toma dentro del ámbito. Los pesos $w_c$ son iguales en todas las dimensiones excepto en Formación, donde el nivel máximo pesa el doble y el posgrado en curso la mitad, para que un programa sin terminar no equivalga a un título. Como cada término está normalizado por el máximo del ámbito, el índice queda entre 0 y 1 y se puede descomponer en el aporte de cada componente; ese desglose se guarda para explicar el valor.
+
+La intensidad es el percentil del índice dentro del ámbito, es decir, el porcentaje de personas del ámbito con un índice menor o igual; quien no tiene evidencias en la dimensión recibe 0. Las dimensiones son independientes y no suman 100: una persona puede tener intensidad alta en varias a la vez. Esta escala tiene un inconveniente al presentarla, porque en dimensiones poco frecuentes el porcentaje sin registros actúa como suelo. En Ponencias, por ejemplo, la mayoría del personal no registra ninguna, de modo que quien tiene una sola queda por encima del percentil 90. Para la lectura en el prototipo se separó entonces el \textit{estado de registros} (si la persona tiene o no evidencias en la dimensión) del \textit{nivel}, que es el percentil del índice calculado solo entre quienes tienen registros:
+\begin{equation}
+    N_{id} = 100 \cdot \frac{r_{id} - 0{,}5}{n_d},
+    \label{eq:nivel}
+\end{equation}
+donde $n_d$ es el número de personas del ámbito con registros en $d$ y $r_{id}$ es el rango de la persona entre ellas, con rango medio en caso de empate. El nivel no se calcula cuando una dimensión tiene menos de 40 personas con registros en el ámbito, porque con tan pocas personas un percentil cambia mucho al agregar o quitar una. La intensidad se conserva para el perfil completo y el nivel se usa en la interfaz. En la ficha de una persona, Idiomas se presenta por el idioma y el nivel declarados, sin un nivel numérico, para no ponderar un idioma frente a otro.
+
+Ambos valores se describen como intensidad de evidencia \textit{registrada}. Un nivel bajo puede deberse a que la actividad no se registró en los sistemas, no necesariamente a que no exista.
+
+\subsection{Temas por dimensión}
+\label{sec:met_temas}
+
+Los temas responden a la pregunta de qué trata la evidencia de una persona. Se agrupan las evidencias y no las personas, porque una persona suele trabajar en varios temas y, al promediar sus evidencias en un solo vector, los temas se diluían en términos genéricos como ``ecuador, desarrollo, estudio''. El procedimiento sigue la lógica de BERTopic \parencite{Grootendorst2022} y se aplica en cada ámbito y dimensión sobre los textos de tema únicos:
+
+\begin{enumerate}
+    \item Los embeddings se reducen a cinco dimensiones con UMAP \parencite{McInnes2018} (distancia coseno, 15 vecinos, distancia mínima 0), ya que los algoritmos basados en densidad pierden eficacia en 1\,024 dimensiones.
+    \item HDBSCAN \parencite{Campello2013} agrupa el espacio reducido y decide cuántos temas hay. El tamaño mínimo de un tema es el 0,5\,\% de los textos de la dimensión, con un mínimo de 10, y el parámetro de muestras mínimas es 5.
+    \item Los textos que HDBSCAN deja sin tema se asignan al tema de centroide más similar (coseno en el espacio original) y quedan marcados como asignados ``por cercanía''.
+    \item Cada tema se describe con sus términos más distintivos según c-TF-IDF, que pondera la frecuencia de un término en el tema frente a su frecuencia en todos los temas.
+\end{enumerate}
+
+Cada persona recibe la proporción de sus evidencias de la dimensión que cae en cada tema. Una dimensión no se divide en temas si tiene menos de 40 personas o menos de 60 textos únicos en el ámbito. En Idiomas no hay temas descubiertos: el propio idioma registrado cumple esa función.
+
+\subsection{Patrones de actividad por dimensión}
+\label{sec:met_patrones}
+
+Los patrones de actividad describen cómo participa una persona en una dimensión, con independencia del tema. Dos personas con el mismo número de proyectos pueden participar de forma muy distinta si una dirige la mayoría y la otra ninguno; por eso, a los componentes de la intensidad se añadieron proporciones que no dependen del volumen, como la parte de sus proyectos que dirige, la de sus publicaciones en Q1--Q2, la de sus ponencias en el exterior o el número de estudiantes por tesis. Formación e Idiomas no tienen proporciones.
+
+Las proporciones plantean dos problemas. El primero es el denominador cero: quien no tiene publicaciones no tiene una proporción de publicaciones en Q1--Q2, y asignarle 0 lo confundía con quien publica en revistas de bajo cuartil; en una versión inicial, las 324 personas sin publicaciones dentro de Investigación (26\,\%) formaban un patrón propio definido por ese valor ficticio. El segundo es el tamaño de muestra: una sola publicación en Q1 da una proporción de 100\,\%, que no debería pesar igual que 20 de 20. Ambos se resolvieron con una contracción bayesiana empírica \parencite{Casella1985}. Para la proporción de $k_i$ casos sobre $n_i$ intentos se usa
+\begin{equation}
+    \hat{p}_i = \frac{k_i + a}{n_i + a + b},
+    \label{eq:betabinomial}
+\end{equation}
+donde $a$ y $b$ son los parámetros de una distribución Beta ajustada por máxima verosimilitud beta-binomial con las personas del ámbito que sí tienen denominador. Quien no tiene denominador queda en la media del grupo, $a/(a+b)$, y quien tiene pocos casos queda más cerca de esa media que quien tiene muchos. Las tasas, como los estudiantes por tesis, se transforman con $\log(1+x)$ y, sin denominador, toman la media de quienes sí lo tienen.
+
+El agrupamiento se aplica en cada ámbito y dimensión solo a las personas con al menos una evidencia en ella. Las variables se estandarizan (puntaje $z$) y se agrupan con $k$-means, con 10 inicializaciones y semilla fija. Se evaluaron valores de $k$ entre 3 y 6, descartando los que producían algún grupo con menos del 3\,\% de las personas (o menos de 10), y se eligió el $k$ con mayor silueta entre los que alcanzaron una estabilidad de al menos 0,9 (Sección \ref{sec:met_validacion_interna}); si ninguno la alcanzaba, se tomaba el más estable. Una dimensión con menos de 40 personas con registros en el ámbito no se divide en patrones. Se descartó el agrupamiento espectral, que dejaba un grupo ``típico'' con cerca del 75\,\% de las personas, y se excluyó la antigüedad de la última evidencia, porque dominaba los grupos y separaba a las personas por cuándo participaron y no por cómo.
+
+Cada persona recibe una afinidad con cada patrón, igual al inverso del cuadrado de su distancia al centroide, normalizada para que las afinidades sumen 1; no es una probabilidad, sino una medida relativa de cercanía que se usa en el perfil completo. La persona representativa de cada patrón es la persona vigente más cercana a su centroide.
+
+Cada patrón se nombra con condiciones sobre los valores reales que cumplen todos sus integrantes, como ``doctorado'', ``9 o más estudiantes'' o ``todas nacionales''. Entre las condiciones que cumple el patrón completo se elige la que menos cumple el resto de la dimensión y, si aporta al menos cinco puntos porcentuales más de especificidad, una segunda sobre otra variable. Se guarda también la parte del resto de la dimensión que no cumple el nombre, como indicador de cuánto lo distingue. Para visualizar patrones y temas se usan mapas t-SNE, que no intervienen en el agrupamiento.
+
+\section{Perfil completo}
+\label{sec:met_perfil_completo}
+
+El perfil completo mira a la persona en todas sus dimensiones a la vez y combina cómo participa con de qué trata su evidencia. Se probó primero \textit{Similarity Network Fusion} (SNF) \parencite{Wang2014}, que exige que todas las personas tengan todas las vistas y obligaba a rellenar con un vector promedio a quien no tenía evidencias en alguna. Por eso se adoptó NEMO \parencite{Rappoport2019}, que compara cada par de personas solo en las vistas que ambas tienen. En las pruebas, todas las variantes evaluadas mostraron que el personal forma un continuo con pocos perfiles amplios y nichos pequeños, más que grupos separados.
+
+\subsection{Vistas y red de similitud}
+
+Se construyeron cinco vistas por persona. La de \textit{actividad} une las 12 dimensiones: por cada dimensión, las afinidades con sus patrones multiplicadas por la intensidad dividida entre 100 (o solo la intensidad, si la dimensión no tiene patrones). Así, cada bloque expresa cuánto y cómo participa la persona, y las 12 dimensiones pesan lo mismo. Las otras cuatro describen el \textit{contenido} con el promedio normalizado de los embeddings de tema de la persona en un bloque de dimensiones: contenido académico (Investigación, Ponencias, Tesis dirigidas, Vinculación y Reconocimientos), materias que dicta (Docencia), formación y desarrollo (Formación, Capacitación y Certificaciones) y trayectoria laboral (Trayectoria en ESPOL y Experiencia externa). Todas las personas tienen la vista de actividad; quien no tiene evidencias en un bloque carece de esa vista de contenido.
+
+En cada vista $v$, la distancia euclidiana $d_{ij}$ entre dos personas se transforma en una afinidad con un núcleo gaussiano de escala local, la formulación usada por SNF:
+\begin{equation}
+    W^{(v)}_{ij} = \frac{1}{\sigma_{ij}\sqrt{2\pi}} \exp\left(-\frac{d_{ij}^2}{2\sigma_{ij}^2}\right), \qquad
+    \sigma_{ij} = \mu \cdot \frac{\bar{d}_i + \bar{d}_j + d_{ij}}{3},
+    \label{eq:afinidad}
+\end{equation}
+donde $\bar{d}_i$ es la distancia media de $i$ a sus $K$ vecinos más cercanos, con $K = 20$ y $\mu = 0{,}5$. La escala local permite tratar con la misma vara relativa zonas densas y dispersas. Siguiendo a NEMO, en cada fila se conservan solo los $K$ vecinos más cercanos, la fila se normaliza para sumar 1 y la matriz se simetriza. La similitud fusionada de un par es el promedio de sus afinidades en las vistas que ambas personas tienen:
+\begin{equation}
+    S_{ij} = \frac{1}{|V_{ij}|} \sum_{v \in V_{ij}} \tilde{W}^{(v)}_{ij},
+    \label{eq:nemo}
+\end{equation}
+donde $V_{ij}$ es el conjunto de vistas comunes, que siempre incluye la de actividad.
+
+\subsection{Personas parecidas}
+
+Las personas parecidas de cada persona son las 15 con mayor similitud en la red fusionada, acompañadas de las vistas en que ambas son vecinas, para explicar si se parecen por su forma de participar, por su contenido académico o por su trayectoria. Dentro de cada dimensión se calculan además dos listas: una por actividad, con la distancia en el espacio de los patrones, y otra por temas, con la similitud coseno de los embeddings de tema promedio. Ninguna lista muestra puntajes, solo el orden y su justificación.
+
+\subsection{Perfiles amplios y microarquetipos}
+\label{sec:met_perfiles_amplios}
+
+Los perfiles amplios se obtienen con agrupamiento espectral sobre la red fusionada \parencite{vonLuxburg2007}. El número de perfiles se eligió con el criterio del \textit{eigengap}: entre 4 y 8 (sin superar la décima parte de las personas del ámbito), el $k$ con mayor salto $\lambda_{k+1} - \lambda_k$ entre valores propios consecutivos del laplaciano normalizado de la red. Cada persona recibe una pertenencia con cada perfil, igual a su afinidad media con sus integrantes normalizada para sumar 1, y tiene un \textit{perfil mixto} cuando la segunda pertenencia alcanza al menos el 80\,\% de la primera.
+
+Los perfiles con 60 personas o más se subdividen en microarquetipos, recalculando la red NEMO solo con sus integrantes y agrupando de nuevo con $k$ entre 2 y 5. Entre los $k$ con estabilidad de al menos 0,9 se elige el de mayor eigengap; si ninguno alcanza ese umbral, se elige el más estable y sus microarquetipos se marcan como orientativos.
+
+La persona representativa de cada grupo es su medoide, el integrante con mayor afinidad total con el resto, elegido solo entre las personas vigentes. Los grupos llevan códigos neutros (por ejemplo, G1.2) y se describen frente a una referencia (el ámbito o, para los microarquetipos, su perfil padre) por las dimensiones cuya intensidad media se aleja al menos 15 puntos, los patrones mucho más frecuentes que en la referencia y los temas distintivos, presentes en al menos el 15\,\% del grupo con un \textit{lift} de al menos 1,5. El mapa del perfil completo es una proyección t-SNE de la red y solo se usa para visualizar.
+
+\section{Búsqueda semántica de personas}
+\label{sec:met_busqueda}
+
+La búsqueda recibe una necesidad escrita en lenguaje natural y devuelve personas junto con las evidencias que respaldan cada parte de la consulta. Parte de una observación: cada capacidad se acredita con tipos de evidencia distintos (la docencia en estadística, con materias dictadas; la experiencia en una unidad, con cargos), y comparar la consulta con todas las evidencias a la vez mezcla esos tipos. Por eso la consulta se divide en capacidades y cada una se busca solo en los tipos donde podría acreditarse. La búsqueda es independiente del agrupamiento.
+
+\subsection{Interpretación de la consulta}
+
+Un modelo de lenguaje, gpt-oss-120b, servido por Groq, transforma la consulta en una estructura JSON validada contra un esquema. Para cada capacidad, la estructura indica su \textit{tema} (el área de conocimiento sin las palabras del tipo de actividad), si es obligatoria o deseable, los tipos de evidencia pertinentes y una reformulación en el formato de cada tipo. Recoge también los requisitos de la persona (nivel de formación, idiomas, años de experiencia) y la vigencia, si la consulta la menciona. El modelo recibe solo la consulta y un catálogo de los 17 tipos con ejemplos ficticios, nunca datos de personas, y se usa con temperatura 0.
+
+\subsection{Recuperación y juicio de relevancia}
+
+Después de filtrar a las personas por vigencia y requisitos, cada capacidad se busca en cada tipo de evidencia elegido combinando dos recuperaciones: la densa, por similitud coseno entre los embeddings de las evidencias y los del tema y la reformulación, y la léxica, con BM25 ($k_1 = 1{,}5$, $b = 0{,}75$), que recupera coincidencias literales como siglas o nombres propios. Ambas listas se combinan con \textit{Reciprocal Rank Fusion}, con constante 60, y los 40 mejores textos de cada tipo pasan a la etapa siguiente.
+La relevancia de cada candidata la decide un \textit{cross-encoder}, un modelo que lee consulta y documento juntos y estima la probabilidad de que el documento responda a la consulta. Se usó bge-reranker-v2-m3, que compara el tema de la capacidad con el texto de la evidencia. Se usa el tema y no la descripción completa porque las palabras del tipo de actividad producían falsos positivos: con ``proyectos de investigación en aprendizaje automático'', un proyecto sobre aprendizaje \textit{autónomo} obtenía 0,97; con el tema, 0,08. Una evidencia cubre la capacidad con una probabilidad de al menos 0,3, umbral elegido con la evaluación de la Sección \ref{sec:met_validacion_busqueda}.
+
+El puntaje de una persona en una capacidad es el de su mejor evidencia, para que acumular evidencias parecidas no favorezca a quien tiene más registros. Los años de experiencia se calculan uniendo los intervalos de las evidencias relevantes, sin contar dos veces los periodos simultáneos. Las personas se ordenan por el número de capacidades obligatorias que cubren, luego por la media geométrica de sus puntajes en ellas, para que una capacidad débil reduzca el total, y finalmente por las capacidades deseables.
+
+\section{Validación e interpretabilidad}
+\label{sec:met_validacion}
+
+Ninguno de los modelos tiene una variable objetivo contra la cual compararse, de modo que las métricas internas indican si un resultado es consistente, pero no si es útil. Por eso la validación combina la estabilidad de los grupos, una evaluación automática de la búsqueda y la revisión con responsables institucionales.
+
+\subsection{Validación interna del agrupamiento}
+\label{sec:met_validacion_interna}
+
+El criterio principal es la estabilidad ante cambios en la muestra. Se extraen 10 submuestras aleatorias del 90\,\% de las personas, se repite el agrupamiento con el mismo $k$ y se compara cada partición con la de la muestra completa mediante el índice de Rand ajustado (ARI) \parencite{Hubert1985}, que vale 1 cuando coinciden y cerca de 0 cuando coinciden lo que se esperaría por azar. Se reporta el promedio y se toma 0,9 como umbral de estabilidad. La silueta se usa para elegir $k$ en los patrones de actividad y se reporta como referencia en el perfil completo, donde resulta baja por construcción: casi todos los pares de la red tienen similitud cero y, en datos que forman un continuo, quienes están en la frontera de un grupo quedan cerca del vecino.
+
+\subsection{Evaluación de la búsqueda}
+\label{sec:met_validacion_busqueda}
+
+Se usó una evaluación de tipo \textit{known-item}, en la que se conoce de antemano a la persona que debería aparecer. Se seleccionaron 80 evidencias cuyo texto pertenece a entre una y tres personas, 40 títulos de publicaciones y 40 nombres de materias, y el modelo de lenguaje parafraseó cada una como la escribiría alguien que busca a esa persona. Con la posición de la persona dueña de la evidencia se calcularon el recall@$k$, la proporción de consultas en que aparece entre las $k$ primeras, y el \textit{Mean Reciprocal Rank} (MRR), el promedio del inverso de esa posición. Se compararon cinco configuraciones, desde la búsqueda densa global hasta la configuración final, y una grilla de umbrales de relevancia entre 0,05 y 0,7. Esta evaluación mide sobre todo la recuperación de consultas con una sola capacidad y subestima las que tienen muchas respuestas legítimas.
+
+\subsection{Interpretabilidad}
+...
+
+\subsection{Validación cualitativa}
+...
+
+\section{Prototipo}
+\label{sec:met_prototipo}
+...
